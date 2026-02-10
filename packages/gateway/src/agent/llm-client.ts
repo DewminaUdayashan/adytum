@@ -247,7 +247,7 @@ export class LLMClient {
     // Build an OpenAI-compatible message object
     const message: OpenAI.ChatCompletionMessage = {
       role: 'assistant',
-      content: textBlocks.map((b: any) => b.text).join('\n') || null,
+      content: textBlocks.map((b: any) => b.text).join('\n') || '',
       refusal: null,
     };
 
@@ -280,9 +280,19 @@ export class LLMClient {
     endpoint: ProviderEndpoint,
     options: LLMChatOptions,
   ): Promise<LLMChatResult> {
+    // Sanitize messages: some providers (Google Gemini) reject null content
+    const sanitizedMessages = options.messages.map((msg) => {
+      const m = { ...msg } as any;
+      // Ensure content is always a string, never null/undefined
+      if (m.content === null || m.content === undefined) {
+        m.content = '';
+      }
+      return m;
+    });
+
     const body: Record<string, unknown> = {
       model,
-      messages: options.messages,
+      messages: sanitizedMessages,
       stream: false,
     };
 
@@ -322,7 +332,7 @@ export class LLMClient {
     return {
       message: {
         role: 'assistant',
-        content: choice.message.content || null,
+        content: choice.message.content || '',
         tool_calls: choice.message.tool_calls,
         refusal: null,
       },

@@ -105,7 +105,12 @@ export class AgentRuntime extends EventEmitter {
         // Check for tool calls
         if (message.tool_calls && message.tool_calls.length > 0) {
           // Add assistant message with tool calls to context
-          this.context.addMessage(message as OpenAI.ChatCompletionMessageParam);
+          // Ensure content is never null (some providers like Google Gemini reject it)
+          const sanitizedMessage = {
+            ...message,
+            content: message.content || '',
+          };
+          this.context.addMessage(sanitizedMessage as OpenAI.ChatCompletionMessageParam);
 
           // Execute each tool call
           for (const tc of message.tool_calls) {
