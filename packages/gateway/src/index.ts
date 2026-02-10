@@ -1,0 +1,206 @@
+import { v4 as uuid } from 'uuid';
+import chalk from 'chalk';
+import { createInterface } from 'node:readline';
+import { loadConfig } from './config.js';
+import { GatewayServer } from './server.js';
+import { AgentRuntime } from './agent/runtime.js';
+import { ModelRouter } from './agent/model-router.js';
+import { SoulEngine } from './agent/soul-engine.js';
+import { SkillLoader } from './agent/skill-loader.js';
+import { ToolRegistry } from './tools/registry.js';
+import { createShellTool } from './tools/shell.js';
+import { createFileSystemTools } from './tools/filesystem.js';
+import { createWebFetchTool } from './tools/web-fetch.js';
+import { PermissionManager } from './security/permission-manager.js';
+import { tokenTracker } from './agent/token-tracker.js';
+import { auditLogger } from './security/audit-logger.js';
+import { autoProvisionStorage } from './storage/provision.js';
+import type { AdytumConfig } from '@adytum/shared';
+
+/** Start the full Adytum gateway with terminal CLI. */
+export async function startGateway(projectRoot: string): Promise<void> {
+  const config = loadConfig(projectRoot);
+
+  console.log(chalk.dim(`\n  Starting ${config.agentName}...\n`));
+
+  // ── Storage Auto-Provisioning ─────────────────────────────
+  const dbResult = await autoProvisionStorage(config);
+  console.log(chalk.green('  ✓ ') + chalk.white(`Storage: ${dbResult.type}`));
+
+  // ── Security Layer ────────────────────────────────────────
+  const permissionManager = new PermissionManager(config.workspacePath, config.dataPath);
+  permissionManager.startWatching();
+
+  // ── Tool Registry ─────────────────────────────────────────
+  const toolRegistry = new ToolRegistry();
+
+  const shellTool = createShellTool(async (command) => {
+    const rl = createInterface({ input: process.stdin, output: process.stdout });
+    return new Promise((resolve) => {
+      rl.question(
+        chalk.yellow(`\n  ⚠  Approve command? ${chalk.bold(command)}\n  [y/N]: `),
+        (answer) => {
+          rl.close();
+          resolve(answer.toLowerCase() === 'y');
+        },
+      );
+    });
+  });
+  toolRegistry.register(shellTool);
+
+  for (const fsTool of createFileSystemTools(permissionManager)) {
+    toolRegistry.register(fsTool);
+  }
+
+  toolRegistry.register(createWebFetchTool());
+
+  console.log(chalk.green('  ✓ ') + chalk.white(`Tools: ${toolRegistry.getAll().length} registered`));
+
+  // ── Agent Runtime ─────────────────────────────────────────
+  const modelRouter = new ModelRouter({
+    litellmBaseUrl: `http://localhost:${config.litellmPort}/v1`,
+    models: config.models,
+  });
+
+  const soulEngine = new SoulEngine(config.workspacePath);
+  const skillLoader = new SkillLoader(config.workspacePath);
+
+  const agent = new AgentRuntime({
+    modelRouter,
+    toolRegistry,
+    soulEngine,
+    skillLoader,
+    contextSoftLimit: config.contextSoftLimit,
+    maxIterations: 20,
+    defaultModelRole: 'thinking',
+    agentName: config.agentName,
+    onApprovalRequired: async (description) => {
+      const rl = createInterface({ input: process.stdin, output: process.stdout });
+      return new Promise((resolve) => {
+        rl.question(
+          chalk.yellow(`\n  ⚠  ${description}\n  Approve? [y/N]: `),
+          (answer) => {
+            rl.close();
+            resolve(answer.toLowerCase() === 'y');
+          },
+        );
+      });
+    },
+  });
+
+  console.log(chalk.green('  ✓ ') + chalk.white(`Agent: ${config.agentName} loaded`));
+
+  // ── Gateway Server ────────────────────────────────────────
+  const server = new GatewayServer({
+    port: config.gatewayPort,
+    host: '127.0.0.1',
+    permissionManager,
+    workspacePath: config.workspacePath,
+  });
+
+  // Route WebSocket messages to agent
+  server.on('frame', async ({ sessionId, frame }) => {
+    if (frame.type === 'message') {
+      const result = await agent.run(frame.content, sessionId);
+      server.sendToSession(sessionId, {
+        type: 'message',
+        sessionId,
+        content: result.response,
+      });
+    }
+  });
+
+  // Stream agent events to WebSocket clients
+  agent.on('stream', (event) => {
+    server.broadcastToAll({
+      type: 'stream',
+      ...event,
+    });
+  });
+
+  await server.start();
+  console.log(chalk.green('  ✓ ') + chalk.white(`Gateway: http://localhost:${config.gatewayPort}`));
+
+  console.log(chalk.dim('\n  ─────────────────────────────────────'));
+  console.log(chalk.cyan(`  ${config.agentName} is awake. Type your message below.`));
+  console.log(chalk.dim(`  Type "exit" to stop. Type "/clear" to reset context.`));
+  console.log(chalk.dim('  ─────────────────────────────────────\n'));
+
+  // ── Terminal REPL ─────────────────────────────────────────
+  const sessionId = uuid();
+  const rl = createInterface({
+    input: process.stdin,
+    output: process.stdout,
+    prompt: chalk.blue(`  ${config.agentName} > `),
+  });
+
+  rl.prompt();
+
+  rl.on('line', async (line) => {
+    const input = line.trim();
+
+    if (!input) {
+      rl.prompt();
+      return;
+    }
+
+    if (input.toLowerCase() === 'exit') {
+      console.log(chalk.dim(`\n  ${config.agentName} is resting. Goodbye.\n`));
+      permissionManager.stopWatching();
+      await server.stop();
+      process.exit(0);
+    }
+
+    if (input === '/clear') {
+      agent.resetContext();
+      console.log(chalk.dim('  Context cleared.\n'));
+      rl.prompt();
+      return;
+    }
+
+    if (input === '/status') {
+      const usage = tokenTracker.getTotalUsage();
+      console.log(chalk.dim(`  Tokens: ${usage.tokens} | Cost: $${usage.cost.toFixed(4)} | Connections: ${server.getConnectionCount()}`));
+      rl.prompt();
+      return;
+    }
+
+    if (input === '/reload') {
+      agent.refreshSystemPrompt();
+      console.log(chalk.dim('  SOUL.md and skills reloaded.\n'));
+      rl.prompt();
+      return;
+    }
+
+    try {
+      // Show thinking indicator
+      process.stdout.write(chalk.dim('  thinking...\r'));
+
+      const result = await agent.run(input, sessionId);
+
+      // Clear thinking indicator and show response
+      process.stdout.write('               \r');
+      console.log();
+      console.log(chalk.white('  ' + result.response.split('\n').join('\n  ')));
+      console.log();
+
+      if (result.toolCalls.length > 0) {
+        console.log(chalk.dim(`  [${result.toolCalls.length} tool calls | trace: ${result.trace.id.slice(0, 8)}]`));
+      }
+
+      const usage = tokenTracker.getSessionUsage(sessionId);
+      console.log(chalk.dim(`  [tokens: ${usage.tokens} | cost: $${usage.cost.toFixed(4)}]`));
+      console.log();
+    } catch (error: any) {
+      console.log(chalk.red(`  Error: ${error.message}\n`));
+    }
+
+    rl.prompt();
+  });
+
+  rl.on('close', async () => {
+    permissionManager.stopWatching();
+    await server.stop();
+    process.exit(0);
+  });
+}

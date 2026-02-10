@@ -1,0 +1,185 @@
+import { z } from 'zod';
+
+// ─── Core Message Types ───────────────────────────────────────
+
+export const MessageRoleSchema = z.enum(['user', 'assistant', 'system', 'tool']);
+export type MessageRole = z.infer<typeof MessageRoleSchema>;
+
+export const AdytumMessageSchema = z.object({
+  id: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  role: MessageRoleSchema,
+  content: z.string(),
+  channel: z.string().default('terminal'),
+  timestamp: z.number(),
+  metadata: z.record(z.unknown()).optional(),
+  attachments: z.array(z.object({
+    type: z.enum(['image', 'file', 'audio', 'video']),
+    url: z.string(),
+    name: z.string().optional(),
+    mimeType: z.string().optional(),
+  })).optional(),
+});
+export type AdytumMessage = z.infer<typeof AdytumMessageSchema>;
+
+// ─── Tool Types ───────────────────────────────────────────────
+
+export const ToolCallSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  arguments: z.record(z.unknown()),
+});
+export type ToolCall = z.infer<typeof ToolCallSchema>;
+
+export const ToolResultSchema = z.object({
+  toolCallId: z.string(),
+  name: z.string(),
+  result: z.unknown(),
+  isError: z.boolean().default(false),
+});
+export type ToolResult = z.infer<typeof ToolResultSchema>;
+
+// ─── Model Roles ──────────────────────────────────────────────
+
+export const ModelRoleSchema = z.enum(['thinking', 'fast', 'local']);
+export type ModelRole = z.infer<typeof ModelRoleSchema>;
+
+export const ModelConfigSchema = z.object({
+  role: ModelRoleSchema,
+  provider: z.string(),
+  model: z.string(),
+  apiKey: z.string().optional(),
+  baseUrl: z.string().optional(),
+  maxTokens: z.number().optional(),
+  temperature: z.number().min(0).max(2).optional(),
+});
+export type ModelConfig = z.infer<typeof ModelConfigSchema>;
+
+// ─── Token Usage ──────────────────────────────────────────────
+
+export const TokenUsageSchema = z.object({
+  model: z.string(),
+  role: ModelRoleSchema,
+  promptTokens: z.number(),
+  completionTokens: z.number(),
+  totalTokens: z.number(),
+  estimatedCost: z.number().optional(),
+});
+export type TokenUsage = z.infer<typeof TokenUsageSchema>;
+
+// ─── Session ──────────────────────────────────────────────────
+
+export const SessionSchema = z.object({
+  id: z.string().uuid(),
+  agentName: z.string(),
+  channel: z.string(),
+  createdAt: z.number(),
+  lastActiveAt: z.number(),
+  isActive: z.boolean().default(true),
+  metadata: z.record(z.unknown()).optional(),
+});
+export type Session = z.infer<typeof SessionSchema>;
+
+// ─── Trace / Log ──────────────────────────────────────────────
+
+export const TraceSchema = z.object({
+  id: z.string().uuid(),
+  sessionId: z.string().uuid(),
+  parentTraceId: z.string().uuid().optional(),
+  startTime: z.number(),
+  endTime: z.number().optional(),
+  initialGoal: z.string(),
+  outcome: z.string().optional(),
+  modelUsed: z.string().optional(),
+  status: z.enum(['running', 'completed', 'failed', 'cancelled']),
+});
+export type Trace = z.infer<typeof TraceSchema>;
+
+export const AgentLogSchema = z.object({
+  id: z.string().uuid(),
+  traceId: z.string().uuid(),
+  timestamp: z.number(),
+  actionType: z.enum([
+    'model_call', 'model_response', 'tool_call', 'tool_result',
+    'thinking', 'message_sent', 'message_received',
+    'security_event', 'error', 'sub_agent_spawn',
+  ]),
+  payload: z.record(z.unknown()),
+  status: z.enum(['success', 'error', 'blocked', 'pending']),
+  tokenUsage: TokenUsageSchema.optional(),
+});
+export type AgentLog = z.infer<typeof AgentLogSchema>;
+
+// ─── Feedback ─────────────────────────────────────────────────
+
+export const FeedbackReasonSchema = z.enum([
+  'inaccurate', 'too_verbose', 'wrong_tone',
+  'security_overreach', 'slow', 'perfect', 'other',
+]);
+export type FeedbackReason = z.infer<typeof FeedbackReasonSchema>;
+
+export const UserFeedbackSchema = z.object({
+  id: z.string().uuid(),
+  traceId: z.string().uuid(),
+  rating: z.enum(['up', 'down']),
+  reasonCode: FeedbackReasonSchema.optional(),
+  comment: z.string().optional(),
+  timestamp: z.number(),
+});
+export type UserFeedback = z.infer<typeof UserFeedbackSchema>;
+
+// ─── Security ─────────────────────────────────────────────────
+
+export const AccessModeSchema = z.enum([
+  'workspace_only', 'read_only', 'full_access', 'just_in_time',
+]);
+export type AccessMode = z.infer<typeof AccessModeSchema>;
+
+export const PermissionEntrySchema = z.object({
+  path: z.string(),
+  mode: AccessModeSchema,
+  grantedAt: z.number(),
+  expiresAt: z.number().optional(),
+});
+export type PermissionEntry = z.infer<typeof PermissionEntrySchema>;
+
+export const SecurityEventSchema = z.object({
+  id: z.string().uuid(),
+  action: z.string(),
+  blockedPath: z.string().optional(),
+  reason: z.string(),
+  agentId: z.string(),
+  timestamp: z.number(),
+});
+export type SecurityEvent = z.infer<typeof SecurityEventSchema>;
+
+// ─── Skill ────────────────────────────────────────────────────
+
+export const SkillMetadataSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  version: z.string().optional(),
+  requires: z.object({
+    bins: z.array(z.string()).optional(),
+    env: z.array(z.string()).optional(),
+  }).optional(),
+});
+export type SkillMetadata = z.infer<typeof SkillMetadataSchema>;
+
+// ─── Agent Config ─────────────────────────────────────────────
+
+export const AdytumConfigSchema = z.object({
+  agentName: z.string().default('Adytum'),
+  userName: z.string().optional(),
+  userRole: z.string().optional(),
+  userPreferences: z.string().optional(),
+  workspacePath: z.string(),
+  dataPath: z.string(),
+  models: z.array(ModelConfigSchema),
+  litellmPort: z.number().default(4000),
+  gatewayPort: z.number().default(3001),
+  dashboardPort: z.number().default(3000),
+  contextSoftLimit: z.number().default(40000),
+  heartbeatIntervalMinutes: z.number().default(30),
+});
+export type AdytumConfig = z.infer<typeof AdytumConfigSchema>;
