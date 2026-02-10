@@ -2,20 +2,20 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useGatewaySocket, type StreamEvent } from '@/hooks/use-gateway-socket';
-import { PageHeader, Badge, EmptyState, Button } from '@/components/ui';
-import { Terminal, Trash2, Pause, Play, Circle } from 'lucide-react';
+import { Badge, Button } from '@/components/ui';
+import { Terminal, Trash2, Pause, Play } from 'lucide-react';
 import { clsx } from 'clsx';
 
 const TYPE_COLORS: Record<string, string> = {
-  thinking: 'text-yellow-400',
-  response: 'text-green-400',
-  tool_call: 'text-cyan-400',
-  tool_result: 'text-blue-400',
-  status: 'text-adytum-text-muted',
-  token_update: 'text-purple-400',
-  error: 'text-red-400',
-  connect: 'text-emerald-400',
-  message: 'text-adytum-text',
+  thinking: 'text-warning',
+  response: 'text-success',
+  tool_call: 'text-accent-primary',
+  tool_result: 'text-accent-secondary',
+  status: 'text-text-muted',
+  token_update: 'text-accent-secondary',
+  error: 'text-error',
+  connect: 'text-success',
+  message: 'text-text-primary',
 };
 
 const TYPE_PREFIXES: Record<string, string> = {
@@ -48,44 +48,35 @@ export default function ConsolePage() {
   }, [displayEvents.length, paused]);
 
   return (
-    <div className="flex flex-col h-full">
-      <PageHeader title="Live Console" subtitle="Real-time stream of agent reasoning and tool execution">
-        <div className="flex items-center gap-2">
-          <Badge variant={connected ? 'success' : 'error'}>
-            <Circle className={clsx('h-2 w-2 mr-1', connected ? 'fill-adytum-success' : 'fill-adytum-error')} />
-            {connected ? 'Connected' : 'Disconnected'}
-          </Badge>
-          <Button size="sm" variant="ghost" onClick={() => setPaused(!paused)}>
-            {paused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
-            {paused ? 'Resume' : 'Pause'}
-          </Button>
-          <Button size="sm" variant="ghost" onClick={clearEvents}>
-            <Trash2 className="h-3 w-3" />
-            Clear
-          </Button>
+    <div className="flex flex-col h-full animate-fade-in">
+      {/* Header */}
+      <div className="px-8 pt-8 pb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted font-medium">Live Stream</p>
+            <h1 className="text-2xl font-semibold text-text-primary tracking-tight mt-1">Console</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant={connected ? 'success' : 'error'}>
+              {connected ? 'Connected' : 'Offline'}
+            </Badge>
+            <Button size="sm" variant="ghost" onClick={() => setPaused(!paused)}>
+              {paused ? <Play className="h-3.5 w-3.5" /> : <Pause className="h-3.5 w-3.5" />}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={clearEvents}>
+              <Trash2 className="h-3.5 w-3.5" />
+            </Button>
+          </div>
         </div>
-      </PageHeader>
-
-      {/* Filter bar */}
-      <div className="flex items-center gap-1 border-b border-adytum-border px-6 py-2 overflow-x-auto">
-        <Button size="sm" variant={typeFilter === null ? 'primary' : 'ghost'} onClick={() => setTypeFilter(null)}>
-          All
-        </Button>
-        {['thinking', 'response', 'tool_call', 'tool_result', 'status', 'token_update'].map((t) => (
-          <Button key={t} size="sm" variant={typeFilter === t ? 'primary' : 'ghost'} onClick={() => setTypeFilter(t)}>
-            {TYPE_PREFIXES[t]?.split(' ')[1] || t}
-          </Button>
-        ))}
       </div>
 
       {/* Console output */}
-      <div ref={scrollRef} className="flex-1 overflow-auto bg-adytum-bg font-mono text-xs p-4 space-y-0.5">
+      <div ref={scrollRef} className="flex-1 overflow-auto font-mono text-xs px-8 py-4 space-y-px">
         {displayEvents.length === 0 ? (
-          <EmptyState
-            icon={Terminal}
-            title="Console is empty"
-            description="Events will stream here in real-time as the agent processes requests."
-          />
+          <div className="flex flex-col items-center justify-center h-full text-center py-16">
+            <Terminal className="h-8 w-8 text-text-muted mb-3" />
+            <p className="text-sm text-text-tertiary">Waiting for events…</p>
+          </div>
         ) : (
           displayEvents.map((event, i) => (
             <ConsoleEntry key={i} event={event} />
@@ -94,9 +85,9 @@ export default function ConsolePage() {
       </div>
 
       {/* Status bar */}
-      <div className="flex items-center gap-4 border-t border-adytum-border px-6 py-2 text-xs text-adytum-text-muted">
+      <div className="flex items-center gap-4 border-t border-border-primary px-8 py-2 text-[11px] text-text-muted">
         <span>{events.length} events</span>
-        {paused && <span className="text-adytum-warning">⏸ Paused</span>}
+        {paused && <span className="text-warning">⏸ Paused</span>}
       </div>
     </div>
   );
@@ -104,7 +95,7 @@ export default function ConsolePage() {
 
 function ConsoleEntry({ event }: { event: StreamEvent }) {
   const type = event.streamType || event.type || 'unknown';
-  const color = TYPE_COLORS[type] || 'text-adytum-text-dim';
+  const color = TYPE_COLORS[type] || 'text-text-secondary';
   const prefix = TYPE_PREFIXES[type] || type.toUpperCase();
   const time = new Date().toLocaleTimeString('en-US', { hour12: false });
 
@@ -122,10 +113,10 @@ function ConsoleEntry({ event }: { event: StreamEvent }) {
   }
 
   return (
-    <div className="flex gap-2 hover:bg-adytum-surface/50 px-2 py-0.5 rounded">
-      <span className="text-adytum-text-muted shrink-0">{time}</span>
-      <span className={clsx('shrink-0 font-bold w-18', color)}>[{prefix}]</span>
-      <span className="text-adytum-text-dim break-all">{content}</span>
+    <div className="flex gap-3 hover:bg-bg-secondary/40 px-3 py-1 rounded-md transition-colors">
+      <span className="text-text-muted shrink-0">{time}</span>
+      <span className={clsx('shrink-0 font-semibold w-20', color)}>[{prefix}]</span>
+      <span className="text-text-secondary break-all">{content}</span>
     </div>
   );
 }

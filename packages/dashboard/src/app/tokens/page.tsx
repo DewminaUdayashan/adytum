@@ -1,7 +1,7 @@
 'use client';
 
 import { usePolling } from '@/hooks/use-polling';
-import { PageHeader, Card, Badge, Spinner, EmptyState } from '@/components/ui';
+import { Card, Badge, Spinner, EmptyState } from '@/components/ui';
 import { Coins, TrendingUp, Cpu, Clock } from 'lucide-react';
 
 interface TokenRecord {
@@ -54,41 +54,25 @@ export default function TokensPage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <PageHeader title="Token Analytics" subtitle="Per-model usage tracking, cost breakdown, and trends" />
+    <div className="flex flex-col h-full animate-fade-in">
+      {/* Header */}
+      <div className="px-8 pt-8 pb-2">
+        <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted font-medium">Analytics</p>
+        <h1 className="text-2xl font-semibold text-text-primary tracking-tight mt-1">Token Usage</h1>
+      </div>
 
-      <div className="flex-1 overflow-auto p-6 space-y-6">
+      <div className="flex-1 overflow-auto px-8 py-6 space-y-6">
         {/* Summary cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <StatCard
-            icon={Coins}
-            label="Total Tokens"
-            value={total.tokens.toLocaleString()}
-            sub="all time"
-          />
-          <StatCard
-            icon={TrendingUp}
-            label="Total Cost"
-            value={`$${total.cost.toFixed(4)}`}
-            sub="estimated"
-          />
-          <StatCard
-            icon={Cpu}
-            label="Models Used"
-            value={String(modelMap.size)}
-            sub="unique models"
-          />
-          <StatCard
-            icon={Clock}
-            label="Recent Calls"
-            value={String(recent.length)}
-            sub="last session"
-          />
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <MiniStat icon={Coins} label="Total Tokens" value={total.tokens.toLocaleString()} />
+          <MiniStat icon={TrendingUp} label="Total Cost" value={`$${total.cost.toFixed(4)}`} />
+          <MiniStat icon={Cpu} label="Models" value={String(modelMap.size)} />
+          <MiniStat icon={Clock} label="Recent Calls" value={String(recent.length)} />
         </div>
 
         {/* Model breakdown */}
         <div>
-          <h2 className="text-sm font-semibold text-adytum-text mb-3">Usage by Model</h2>
+          <h2 className="text-sm font-semibold text-text-primary mb-3">Usage by Model</h2>
           {modelMap.size === 0 ? (
             <EmptyState
               icon={Coins}
@@ -100,10 +84,10 @@ export default function TokensPage() {
               {Array.from(modelMap.entries()).map(([model, stats]) => (
                 <Card key={model}>
                   <div className="flex items-center justify-between mb-3">
-                    <span className="text-sm font-medium text-adytum-text">{model}</span>
+                    <span className="text-sm font-medium text-text-primary">{model}</span>
                     <Badge variant="info">{stats.calls} calls</Badge>
                   </div>
-                  <div className="space-y-2">
+                  <div className="space-y-2.5">
                     <UsageBar
                       label="Tokens"
                       value={stats.tokens}
@@ -126,30 +110,28 @@ export default function TokensPage() {
         {/* Daily breakdown */}
         {daily.length > 0 && (
           <div>
-            <h2 className="text-sm font-semibold text-adytum-text mb-3">Daily Usage</h2>
-            <Card>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-adytum-border">
-                      <th className="text-left py-2 text-adytum-text-muted font-medium">Date</th>
-                      <th className="text-left py-2 text-adytum-text-muted font-medium">Model</th>
-                      <th className="text-right py-2 text-adytum-text-muted font-medium">Tokens</th>
-                      <th className="text-right py-2 text-adytum-text-muted font-medium">Cost</th>
+            <h2 className="text-sm font-semibold text-text-primary mb-3">Daily Usage</h2>
+            <Card className="p-0 overflow-hidden">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-border-primary bg-bg-tertiary/30">
+                    <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Date</th>
+                    <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Model</th>
+                    <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Tokens</th>
+                    <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Cost</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {daily.map((d, i) => (
+                    <tr key={i} className="border-b border-border-primary/50 hover:bg-bg-secondary/30 transition-colors">
+                      <td className="px-4 py-2.5 text-text-primary text-[13px]">{d.date}</td>
+                      <td className="px-4 py-2.5 text-text-secondary text-[13px]">{d.model}</td>
+                      <td className="px-4 py-2.5 text-right text-text-primary text-[13px]">{d.tokens.toLocaleString()}</td>
+                      <td className="px-4 py-2.5 text-right text-success text-[13px] font-medium">${d.cost.toFixed(4)}</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {daily.map((d, i) => (
-                      <tr key={i} className="border-b border-adytum-border/50">
-                        <td className="py-2 text-adytum-text">{d.date}</td>
-                        <td className="py-2 text-adytum-text-dim">{d.model}</td>
-                        <td className="py-2 text-right text-adytum-text">{d.tokens.toLocaleString()}</td>
-                        <td className="py-2 text-right text-adytum-accent">${d.cost.toFixed(4)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
             </Card>
           </div>
         )}
@@ -157,35 +139,33 @@ export default function TokensPage() {
         {/* Recent records */}
         {recent.length > 0 && (
           <div>
-            <h2 className="text-sm font-semibold text-adytum-text mb-3">Recent Requests</h2>
-            <Card>
+            <h2 className="text-sm font-semibold text-text-primary mb-3">Recent Requests</h2>
+            <Card className="p-0 overflow-hidden">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
-                    <tr className="border-b border-adytum-border">
-                      <th className="text-left py-2 text-adytum-text-muted font-medium">Time</th>
-                      <th className="text-left py-2 text-adytum-text-muted font-medium">Model</th>
-                      <th className="text-left py-2 text-adytum-text-muted font-medium">Role</th>
-                      <th className="text-right py-2 text-adytum-text-muted font-medium">Prompt</th>
-                      <th className="text-right py-2 text-adytum-text-muted font-medium">Completion</th>
-                      <th className="text-right py-2 text-adytum-text-muted font-medium">Total</th>
-                      <th className="text-right py-2 text-adytum-text-muted font-medium">Cost</th>
+                    <tr className="border-b border-border-primary bg-bg-tertiary/30">
+                      <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Time</th>
+                      <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Model</th>
+                      <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Role</th>
+                      <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Prompt</th>
+                      <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Completion</th>
+                      <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Total</th>
+                      <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Cost</th>
                     </tr>
                   </thead>
                   <tbody>
                     {recent.slice().reverse().map((r, i) => (
-                      <tr key={i} className="border-b border-adytum-border/50">
-                        <td className="py-2 text-adytum-text-dim text-xs">
+                      <tr key={i} className="border-b border-border-primary/50 hover:bg-bg-secondary/30 transition-colors">
+                        <td className="px-4 py-2.5 text-text-muted text-[11px] font-mono">
                           {new Date(r.timestamp).toLocaleTimeString()}
                         </td>
-                        <td className="py-2 text-adytum-text">{r.model}</td>
-                        <td className="py-2">
-                          <Badge>{r.role}</Badge>
-                        </td>
-                        <td className="py-2 text-right text-adytum-text-dim">{r.promptTokens.toLocaleString()}</td>
-                        <td className="py-2 text-right text-adytum-text-dim">{r.completionTokens.toLocaleString()}</td>
-                        <td className="py-2 text-right text-adytum-text font-medium">{r.totalTokens.toLocaleString()}</td>
-                        <td className="py-2 text-right text-adytum-accent">${r.estimatedCost.toFixed(4)}</td>
+                        <td className="px-4 py-2.5 text-text-primary text-[13px]">{r.model}</td>
+                        <td className="px-4 py-2.5"><Badge>{r.role}</Badge></td>
+                        <td className="px-4 py-2.5 text-right text-text-secondary text-[13px]">{r.promptTokens.toLocaleString()}</td>
+                        <td className="px-4 py-2.5 text-right text-text-secondary text-[13px]">{r.completionTokens.toLocaleString()}</td>
+                        <td className="px-4 py-2.5 text-right text-text-primary text-[13px] font-medium">{r.totalTokens.toLocaleString()}</td>
+                        <td className="px-4 py-2.5 text-right text-success text-[13px] font-medium">${r.estimatedCost.toFixed(4)}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -199,30 +179,27 @@ export default function TokensPage() {
   );
 }
 
-function StatCard({
+function MiniStat({
   icon: Icon,
   label,
   value,
-  sub,
 }: {
   icon: React.ComponentType<{ className?: string }>;
   label: string;
   value: string;
-  sub: string;
 }) {
   return (
-    <Card>
+    <div className="rounded-xl border border-border-primary bg-bg-secondary/50 p-4">
       <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-adytum-accent/10">
-          <Icon className="h-5 w-5 text-adytum-accent" />
+        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-accent-primary/10 text-accent-primary">
+          <Icon className="h-[18px] w-[18px]" />
         </div>
         <div>
-          <p className="text-xs text-adytum-text-muted">{label}</p>
-          <p className="text-xl font-bold text-adytum-text">{value}</p>
-          <p className="text-xs text-adytum-text-muted">{sub}</p>
+          <p className="text-[11px] text-text-muted font-medium uppercase tracking-wider">{label}</p>
+          <p className="text-lg font-semibold text-text-primary leading-tight">{value}</p>
         </div>
       </div>
-    </Card>
+    </div>
   );
 }
 
@@ -240,13 +217,13 @@ function UsageBar({
   const pct = Math.min((value / max) * 100, 100);
   return (
     <div>
-      <div className="flex items-center justify-between text-xs mb-1">
-        <span className="text-adytum-text-muted">{label}</span>
-        <span className="text-adytum-text">{display}</span>
+      <div className="flex items-center justify-between text-[11px] mb-1.5">
+        <span className="text-text-muted">{label}</span>
+        <span className="text-text-primary font-medium">{display}</span>
       </div>
-      <div className="h-1.5 w-full rounded-full bg-adytum-surface-2 overflow-hidden">
+      <div className="h-1.5 w-full rounded-full bg-bg-tertiary overflow-hidden">
         <div
-          className="h-full rounded-full bg-adytum-accent transition-all duration-500"
+          className="h-full rounded-full bg-accent-primary transition-all duration-500"
           style={{ width: `${pct}%` }}
         />
       </div>

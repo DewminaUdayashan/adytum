@@ -17,6 +17,7 @@ export function useGatewaySocket() {
   const socketRef = useRef<WebSocket | null>(null);
   const [connected, setConnected] = useState(false);
   const [events, setEvents] = useState<StreamEvent[]>([]);
+  const sessionIdRef = useRef<string>(crypto.randomUUID());
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const connect = useCallback(() => {
@@ -31,13 +32,16 @@ export function useGatewaySocket() {
       ws.send(JSON.stringify({
         type: 'connect',
         channel: 'dashboard',
-        sessionId: crypto.randomUUID(),
+        sessionId: sessionIdRef.current,
       }));
     };
 
     ws.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data) as StreamEvent;
+        if (data.type === 'connect' && data.sessionId) {
+          sessionIdRef.current = data.sessionId;
+        }
         setEvents((prev) => [...prev.slice(-500), data]); // Keep last 500
       } catch {
         // Ignore malformed messages
@@ -75,5 +79,5 @@ export function useGatewaySocket() {
     };
   }, [connect]);
 
-  return { connected, events, sendMessage, clearEvents };
+  return { connected, events, sendMessage, clearEvents, sessionId: sessionIdRef.current };
 }

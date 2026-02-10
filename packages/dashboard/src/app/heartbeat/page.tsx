@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { gatewayFetch } from '@/lib/api';
-import { PageHeader, Card, Button, Spinner, Badge, EmptyState } from '@/components/ui';
+import { Card, Button, Spinner, Badge, EmptyState } from '@/components/ui';
 import { Heart, Save, RotateCcw, Plus, Trash2, Target, Calendar } from 'lucide-react';
 
 interface Goal {
@@ -91,48 +91,55 @@ export default function HeartbeatPage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <PageHeader title="Heartbeat" subtitle="HEARTBEAT.md — agent goals, schedule, and proactive behavior">
-        <div className="flex items-center gap-2">
-          {hasChanges && <Badge variant="warning">Unsaved changes</Badge>}
-          <Button
-            size="sm"
-            variant={view === 'goals' ? 'primary' : 'ghost'}
-            onClick={() => setView('goals')}
-          >
-            <Target className="h-3 w-3" />
-            Goals
-          </Button>
-          <Button
-            size="sm"
-            variant={view === 'editor' ? 'primary' : 'ghost'}
-            onClick={() => setView('editor')}
-          >
-            <Calendar className="h-3 w-3" />
-            Raw
-          </Button>
-          <Button size="sm" variant="ghost" onClick={loadHeartbeat} disabled={!hasChanges}>
-            <RotateCcw className="h-3 w-3" />
-            Reset
-          </Button>
-          <Button size="sm" variant="primary" onClick={handleSave} disabled={!hasChanges || saving}>
-            <Save className="h-3 w-3" />
-            {saving ? 'Saving...' : 'Save'}
-          </Button>
+    <div className="flex flex-col h-full animate-fade-in">
+      {/* Header */}
+      <div className="px-8 pt-8 pb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted font-medium">Monitoring</p>
+            <h1 className="text-2xl font-semibold text-text-primary tracking-tight mt-1">Heartbeat</h1>
+          </div>
+          <div className="flex items-center gap-2">
+            {hasChanges && <Badge variant="warning">Unsaved</Badge>}
+            <Button
+              size="sm"
+              variant={view === 'goals' ? 'primary' : 'ghost'}
+              onClick={() => setView('goals')}
+            >
+              <Target className="h-3 w-3" />
+              Goals
+            </Button>
+            <Button
+              size="sm"
+              variant={view === 'editor' ? 'primary' : 'ghost'}
+              onClick={() => setView('editor')}
+            >
+              <Calendar className="h-3 w-3" />
+              Raw
+            </Button>
+            <Button size="sm" variant="ghost" onClick={loadHeartbeat} disabled={!hasChanges}>
+              <RotateCcw className="h-3 w-3" />
+              Reset
+            </Button>
+            <Button size="sm" variant="primary" onClick={handleSave} disabled={!hasChanges || saving}>
+              <Save className="h-3 w-3" />
+              {saving ? 'Saving…' : 'Save'}
+            </Button>
+          </div>
         </div>
-      </PageHeader>
+      </div>
 
       {error && (
-        <div className="mx-6 mt-4 rounded-lg bg-adytum-error/10 border border-adytum-error/30 px-4 py-2 text-sm text-adytum-error">
+        <div className="mx-8 mb-2 rounded-lg bg-error/10 border border-error/20 px-4 py-2 text-sm text-error">
           {error}
         </div>
       )}
 
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto px-8 pb-8">
         {view === 'goals' ? (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <h2 className="text-sm font-semibold text-adytum-text">Active Goals</h2>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between mb-1">
+              <h2 className="text-sm font-semibold text-text-primary">Active Goals</h2>
               <Button size="sm" variant="default" onClick={addGoal}>
                 <Plus className="h-3 w-3" />
                 Add Goal
@@ -158,17 +165,19 @@ export default function HeartbeatPage() {
           </div>
         ) : (
           <Card className="h-full">
-            <div className="flex items-center gap-2 mb-3 pb-3 border-b border-adytum-border">
-              <Heart className="h-4 w-4 text-adytum-error" />
-              <span className="text-sm font-medium text-adytum-text">HEARTBEAT.md</span>
+            <div className="flex flex-col h-full">
+              <div className="flex items-center gap-2 mb-3 pb-3 border-b border-border-primary">
+                <Heart className="h-4 w-4 text-error" />
+                <span className="text-sm font-medium text-text-primary">HEARTBEAT.md</span>
+              </div>
+              <textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                className="flex-1 w-full bg-transparent text-sm text-text-primary font-mono leading-relaxed resize-none focus:outline-none"
+                placeholder="# Heartbeat Configuration..."
+                spellCheck={false}
+              />
             </div>
-            <textarea
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-              className="w-full h-[calc(100%-3rem)] bg-transparent text-sm text-adytum-text font-mono leading-relaxed resize-none focus:outline-none"
-              placeholder="# Heartbeat Configuration..."
-              spellCheck={false}
-            />
           </Card>
         )}
       </div>
@@ -186,15 +195,15 @@ function GoalCard({
   onRemove: () => void;
 }) {
   const priorityColors = {
-    high: 'text-adytum-error',
-    medium: 'text-adytum-warning',
-    low: 'text-adytum-info',
+    high: 'text-error',
+    medium: 'text-warning',
+    low: 'text-accent-secondary',
   };
 
   return (
     <Card className="animate-slide-up">
       <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-adytum-surface-2">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-bg-tertiary">
           <Target className={`h-4 w-4 ${priorityColors[goal.priority]}`} />
         </div>
         <div className="flex-1 min-w-0 space-y-2">
@@ -202,19 +211,19 @@ function GoalCard({
             type="text"
             value={goal.title}
             onChange={(e) => onChange({ title: e.target.value })}
-            className="w-full bg-transparent text-sm font-medium text-adytum-text focus:outline-none border-b border-transparent focus:border-adytum-border"
+            className="w-full bg-transparent text-sm font-medium text-text-primary focus:outline-none border-b border-transparent focus:border-border-primary transition-colors"
           />
           <textarea
             value={goal.description}
             onChange={(e) => onChange({ description: e.target.value })}
-            className="w-full bg-transparent text-xs text-adytum-text-dim focus:outline-none resize-none"
+            className="w-full bg-transparent text-xs text-text-tertiary focus:outline-none resize-none"
             rows={2}
           />
           <div className="flex items-center gap-2">
             <select
               value={goal.status}
               onChange={(e) => onChange({ status: e.target.value as Goal['status'] })}
-              className="rounded bg-adytum-bg border border-adytum-border px-2 py-1 text-xs text-adytum-text focus:outline-none"
+              className="rounded-md bg-bg-tertiary border border-border-primary px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-primary/50 transition-colors"
             >
               <option value="active">Active</option>
               <option value="completed">Completed</option>
@@ -223,7 +232,7 @@ function GoalCard({
             <select
               value={goal.priority}
               onChange={(e) => onChange({ priority: e.target.value as Goal['priority'] })}
-              className="rounded bg-adytum-bg border border-adytum-border px-2 py-1 text-xs text-adytum-text focus:outline-none"
+              className="rounded-md bg-bg-tertiary border border-border-primary px-2 py-1 text-xs text-text-primary focus:outline-none focus:border-accent-primary/50 transition-colors"
             >
               <option value="high">High Priority</option>
               <option value="medium">Medium Priority</option>
@@ -232,7 +241,7 @@ function GoalCard({
           </div>
         </div>
         <Button variant="ghost" size="sm" onClick={onRemove}>
-          <Trash2 className="h-3 w-3 text-adytum-text-muted" />
+          <Trash2 className="h-3 w-3 text-text-muted" />
         </Button>
       </div>
     </Card>

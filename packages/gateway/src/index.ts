@@ -12,10 +12,17 @@ import { ToolRegistry } from './tools/registry.js';
 import { createShellTool, createShellToolWithApproval } from './tools/shell.js';
 import { createFileSystemTools } from './tools/filesystem.js';
 import { createWebFetchTool } from './tools/web-fetch.js';
+import { createMemoryTools } from './tools/memory.js';
+import { createPersonalityTools } from './tools/personality.js';
 import { PermissionManager } from './security/permission-manager.js';
 import { tokenTracker } from './agent/token-tracker.js';
 import { auditLogger } from './security/audit-logger.js';
 import { autoProvisionStorage } from './storage/provision.js';
+import { MemoryStore } from './agent/memory-store.js';
+import { MemoryDB } from './agent/memory-db.js';
+import { Dreamer } from './agent/dreamer.js';
+import { InnerMonologue } from './agent/inner-monologue.js';
+import cron from 'node-cron';
 import type { AdytumConfig } from '@adytum/shared';
 
 // ─── Direct Execution Detection ─────────────────────────────
@@ -64,6 +71,17 @@ export async function startGateway(projectRoot: string): Promise<void> {
 
   toolRegistry.register(createWebFetchTool());
 
+  // ── Memory Store & Tools ───────────────────────────────────
+  const memoryDb = new MemoryDB(config.dataPath);
+  const memoryStore = new MemoryStore(memoryDb);
+  for (const memTool of createMemoryTools(memoryStore)) {
+    toolRegistry.register(memTool);
+  }
+
+  for (const pTool of createPersonalityTools(memoryDb)) {
+    toolRegistry.register(pTool);
+  }
+
   console.log(chalk.green('  ✓ ') + chalk.white(`Tools: ${toolRegistry.getAll().length} registered`));
 
   // ── Agent Runtime ─────────────────────────────────────────
@@ -89,6 +107,33 @@ export async function startGateway(projectRoot: string): Promise<void> {
     defaultModelRole: 'thinking',
     agentName: config.agentName,
     workspacePath: config.workspacePath,
+    memoryStore,
+    memoryTopK: 3,
+    memoryDb,
+  });
+
+  // Seed context with recent persisted messages to restore short-term memory
+  const recentMessages = memoryDb.getRecentMessages(40);
+  agent.seedContext(recentMessages.map((m) => ({ role: m.role as any, content: m.content })));
+
+  // ── Dreamer & Inner Monologue (Phase 3/4) ─────────────────
+  const dreamer = new Dreamer(modelRouter, memoryDb, memoryStore, config.dataPath, config.workspacePath);
+  const monologue = new InnerMonologue(modelRouter, memoryDb, memoryStore);
+
+  cron.schedule('*/30 * * * *', async () => {
+    try {
+      await dreamer.run();
+    } catch (err) {
+      if (process.env.DEBUG) console.error(err);
+    }
+  });
+
+  cron.schedule('*/15 * * * *', async () => {
+    try {
+      await monologue.run();
+    } catch (err) {
+      if (process.env.DEBUG) console.error(err);
+    }
   });
 
   console.log(chalk.green('  ✓ ') + chalk.white(`Agent: ${config.agentName} loaded`));

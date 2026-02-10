@@ -1,99 +1,85 @@
-@import "tailwindcss";
+@import 'tailwindcss';
 
 @theme {
-  --color-adytum-bg: #0a0a0f;
-  --color-adytum-surface: #12121a;
-  --color-adytum-surface-2: #1a1a28;
-  --color-adytum-border: #2a2a3c;
-  --color-adytum-border-light: #3a3a50;
-  --color-adytum-text: #e4e4ef;
-  --color-adytum-text-dim: #8888a0;
-  --color-adytum-text-muted: #5a5a72;
-  --color-adytum-accent: #7c5cfc;
-  --color-adytum-accent-light: #9b7eff;
-  --color-adytum-success: #22c55e;
-  --color-adytum-warning: #f59e0b;
-  --color-adytum-error: #ef4444;
-  --color-adytum-info: #3b82f6;
-  --color-adytum-glow: rgba(124, 92, 252, 0.15);
+  --font-display: 'Inter', system-ui, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+
+  --color-bg-primary: #06080f;
+  --color-bg-secondary: #0a0d16;
+  --color-bg-tertiary: #111422;
+  --color-bg-hover: #161b2e;
+  
+  --color-border-primary: #1e2439;
+  --color-border-secondary: #2a314d;
+  
+  --color-text-primary: #ecf0f9;
+  --color-text-secondary: #94a3b8;
+  --color-text-tertiary: #64748b;
+  --color-text-muted: #475569;
+  
+  --color-accent-primary: #8b5cf6;
+  --color-accent-secondary: #7c3aed;
+  --color-accent-glow: rgba(139, 92, 246, 0.4);
+
+  --color-success: #10b981;
+  --color-warning: #f59e0b;
+  --color-error: #ef4444;
+  --color-info: #3b82f6;
+  
+  --animate-fade-in: fade-in 0.3s ease-out;
+  
+  @keyframes fade-in {
+    0% { opacity: 0; transform: translateY(5px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
 }
 
-* {
-  box-sizing: border-box;
-  margin: 0;
-  padding: 0;
+@layer base {
+  html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+  }
+
+  body {
+    background-color: var(--color-bg-primary);
+    color: var(--color-text-primary);
+    font-family: var(--font-display);
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: -0.01em;
+  }
+  
+  /* Custom Scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: var(--color-border-secondary);
+    border-radius: 3px;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--color-text-tertiary);
+  }
 }
 
-html {
-  color-scheme: dark;
-}
-
-body {
-  background: var(--color-adytum-bg);
-  color: var(--color-adytum-text);
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-/* Glassmorphism card */
-.glass-card {
-  background: rgba(18, 18, 26, 0.7);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid var(--color-adytum-border);
-  border-radius: 12px;
-}
-
-.glass-card-hover:hover {
-  background: rgba(26, 26, 40, 0.8);
-  border-color: var(--color-adytum-border-light);
-  box-shadow: 0 0 20px var(--color-adytum-glow);
-}
-
-/* Scrollbar */
-::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-::-webkit-scrollbar-track {
-  background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-  background: var(--color-adytum-border);
-  border-radius: 3px;
-}
-
-::-webkit-scrollbar-thumb:hover {
-  background: var(--color-adytum-border-light);
-}
-
-/* Animations */
-@keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 5px var(--color-adytum-glow); }
-  50% { box-shadow: 0 0 20px var(--color-adytum-glow); }
-}
-
-@keyframes slide-up {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-
-@keyframes fade-in {
-  from { opacity: 0; }
-  to { opacity: 1; }
-}
-
-.animate-slide-up {
-  animation: slide-up 0.3s ease-out;
-}
-
-.animate-fade-in {
-  animation: fade-in 0.4s ease-out;
-}
-
-.animate-pulse-glow {
-  animation: pulse-glow 2s ease-in-out infinite;
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  
+  .no-scrollbar {
+    -ms-overflow-style: none; 
+    scrollbar-width: none; 
+  }
+  
+  .glass-panel {
+    @apply bg-bg-secondary/60 backdrop-blur-xl border border-border-primary shadow-2xl;
+  }
 }

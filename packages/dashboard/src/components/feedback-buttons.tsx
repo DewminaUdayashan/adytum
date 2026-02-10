@@ -40,13 +40,13 @@ export function FeedbackButtons({ traceId }: { traceId: string }) {
 
   if (submitted) {
     return (
-      <span className="flex items-center gap-1 text-xs text-adytum-text-muted ml-auto">
+      <span className="flex items-center gap-1 text-[11px] text-text-muted ml-auto">
         {submitted === 'up' ? (
-          <ThumbsUp className="h-3 w-3 text-adytum-success" />
+          <ThumbsUp className="h-3 w-3 text-success" />
         ) : (
-          <ThumbsDown className="h-3 w-3 text-adytum-error" />
+          <ThumbsDown className="h-3 w-3 text-error" />
         )}
-        Feedback sent
+        Sent
       </span>
     );
   }
@@ -55,28 +55,28 @@ export function FeedbackButtons({ traceId }: { traceId: string }) {
     <div className="relative ml-auto flex items-center gap-1">
       <button
         onClick={() => submit('up')}
-        className="rounded p-1 text-adytum-text-muted hover:text-adytum-success hover:bg-adytum-success/10 transition-colors"
+        className="rounded p-1 text-text-muted hover:text-success hover:bg-success/10 transition-colors"
         title="Good response"
       >
         <ThumbsUp className="h-3 w-3" />
       </button>
       <button
         onClick={() => setShowReason(!showReason)}
-        className="rounded p-1 text-adytum-text-muted hover:text-adytum-error hover:bg-adytum-error/10 transition-colors"
+        className="rounded p-1 text-text-muted hover:text-error hover:bg-error/10 transition-colors"
         title="Bad response"
       >
         <ThumbsDown className="h-3 w-3" />
       </button>
 
       {showReason && (
-        <div className="absolute right-0 top-6 z-50 w-64 glass-card p-3 animate-slide-up shadow-xl">
-          <p className="text-xs font-medium text-adytum-text mb-2">What went wrong?</p>
+        <div className="absolute right-0 top-6 z-50 w-56 rounded-xl border border-border-primary bg-bg-secondary p-3 animate-slide-up shadow-xl">
+          <p className="text-[11px] font-medium text-text-primary mb-2">What went wrong?</p>
           <div className="flex flex-wrap gap-1 mb-2">
             {REASON_CODES.map(({ code, label }) => (
               <button
                 key={code}
                 onClick={() => submit('down', code)}
-                className="rounded-md bg-adytum-surface-2 px-2 py-1 text-xs text-adytum-text-dim hover:bg-adytum-border hover:text-adytum-text transition-colors"
+                className="rounded-md bg-bg-tertiary px-2 py-1 text-[11px] text-text-tertiary hover:bg-bg-hover hover:text-text-primary transition-colors"
               >
                 {label}
               </button>
@@ -85,12 +85,12 @@ export function FeedbackButtons({ traceId }: { traceId: string }) {
           <textarea
             value={comment}
             onChange={(e) => setComment(e.target.value)}
-            placeholder="Optional comment..."
-            className="w-full rounded-md bg-adytum-bg border border-adytum-border p-2 text-xs text-adytum-text resize-none h-16 focus:outline-none focus:border-adytum-accent"
+            placeholder="Optional comment…"
+            className="w-full rounded-md bg-bg-primary border border-border-primary p-2 text-xs text-text-primary placeholder:text-text-muted resize-none h-14 focus:outline-none focus:border-accent-primary/50 transition-colors"
           />
           <button
             onClick={() => submit('down', 'other')}
-            className="mt-1 w-full rounded-md bg-adytum-error/15 px-2 py-1 text-xs text-adytum-error hover:bg-adytum-error/25 transition-colors"
+            className="mt-1.5 w-full rounded-md bg-error/10 px-2 py-1 text-xs text-error hover:bg-error/20 transition-colors"
           >
             Submit
           </button>

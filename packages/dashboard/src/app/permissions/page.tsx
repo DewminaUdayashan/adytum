@@ -3,8 +3,8 @@
 import { useState } from 'react';
 import { usePolling } from '@/hooks/use-polling';
 import { gatewayFetch } from '@/lib/api';
-import { PageHeader, Card, Badge, Spinner, EmptyState, Button } from '@/components/ui';
-import { Shield, FolderOpen, Plus, Trash2, Clock, Lock, Unlock } from 'lucide-react';
+import { Card, Badge, Spinner, EmptyState, Button } from '@/components/ui';
+import { Shield, Plus, Trash2, Clock, Lock, Unlock } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
 interface Permission {
@@ -83,36 +83,43 @@ export default function PermissionsPage() {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <PageHeader title="Permissions" subtitle="File and folder access control for the agent">
-        <Button variant="primary" size="sm" onClick={() => setShowGrant(!showGrant)}>
-          <Plus className="h-3 w-3" />
-          Grant Access
-        </Button>
-      </PageHeader>
+    <div className="flex flex-col h-full animate-fade-in">
+      {/* Header */}
+      <div className="px-8 pt-8 pb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted font-medium">Security</p>
+            <h1 className="text-2xl font-semibold text-text-primary tracking-tight mt-1">Permissions</h1>
+          </div>
+          <Button variant="primary" size="sm" onClick={() => setShowGrant(!showGrant)}>
+            <Plus className="h-3.5 w-3.5" />
+            Grant Access
+          </Button>
+        </div>
+      </div>
 
-      <div className="flex-1 overflow-auto p-6 space-y-4">
+      <div className="flex-1 overflow-auto px-8 py-4 space-y-4">
         {/* Grant form */}
         {showGrant && (
           <Card className="animate-slide-up">
-            <h3 className="text-sm font-semibold text-adytum-text mb-3">Grant New Permission</h3>
+            <h3 className="text-sm font-semibold text-text-primary mb-4">Grant New Permission</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
-                <label className="block text-xs text-adytum-text-muted mb-1">Path</label>
+                <label className="block text-[11px] text-text-muted mb-1.5 font-medium uppercase tracking-wider">Path</label>
                 <input
                   type="text"
                   value={grantPath}
                   onChange={(e) => setGrantPath(e.target.value)}
                   placeholder="/path/to/folder"
-                  className="w-full rounded-lg bg-adytum-bg border border-adytum-border px-3 py-2 text-sm text-adytum-text focus:outline-none focus:border-adytum-accent"
+                  className="w-full rounded-lg bg-bg-tertiary border border-border-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-primary/50 transition-colors"
                 />
               </div>
               <div>
-                <label className="block text-xs text-adytum-text-muted mb-1">Mode</label>
+                <label className="block text-[11px] text-text-muted mb-1.5 font-medium uppercase tracking-wider">Mode</label>
                 <select
                   value={grantMode}
                   onChange={(e) => setGrantMode(e.target.value)}
-                  className="w-full rounded-lg bg-adytum-bg border border-adytum-border px-3 py-2 text-sm text-adytum-text focus:outline-none focus:border-adytum-accent"
+                  className="w-full rounded-lg bg-bg-tertiary border border-border-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-primary/50 transition-colors"
                 >
                   <option value="read_only">Read Only</option>
                   <option value="full_access">Full Access</option>
@@ -120,17 +127,17 @@ export default function PermissionsPage() {
                 </select>
               </div>
               <div>
-                <label className="block text-xs text-adytum-text-muted mb-1">Duration (minutes, optional)</label>
+                <label className="block text-[11px] text-text-muted mb-1.5 font-medium uppercase tracking-wider">Duration (mins)</label>
                 <input
                   type="number"
                   value={grantDuration}
                   onChange={(e) => setGrantDuration(e.target.value)}
-                  placeholder="Permanent if empty"
-                  className="w-full rounded-lg bg-adytum-bg border border-adytum-border px-3 py-2 text-sm text-adytum-text focus:outline-none focus:border-adytum-accent"
+                  placeholder="Permanent"
+                  className="w-full rounded-lg bg-bg-tertiary border border-border-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-accent-primary/50 transition-colors"
                 />
               </div>
             </div>
-            <div className="flex gap-2 mt-3">
+            <div className="flex gap-2 mt-4">
               <Button variant="primary" size="sm" onClick={handleGrant}>Grant</Button>
               <Button variant="ghost" size="sm" onClick={() => setShowGrant(false)}>Cancel</Button>
             </div>
@@ -142,45 +149,41 @@ export default function PermissionsPage() {
           <EmptyState
             icon={Shield}
             title="Default permissions active"
-            description="The agent can only access the workspace directory. Grant additional permissions above."
+            description="Agent can only access the workspace directory."
           />
         ) : (
           <div className="space-y-2">
             {permissions.map((perm, i) => (
               <Card key={i} hover>
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-adytum-surface-2">
-                    {perm.mode === 'full_access' ? (
-                      <Unlock className="h-4 w-4 text-adytum-success" />
-                    ) : (
-                      <Lock className="h-4 w-4 text-adytum-warning" />
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <FolderOpen className="h-3.5 w-3.5 text-adytum-text-muted" />
-                      <span className="text-sm font-medium text-adytum-text font-mono truncate">
-                        {perm.path}
-                      </span>
-                      <Badge variant={MODE_VARIANTS[perm.mode] || 'default'}>
-                        {MODE_LABELS[perm.mode] || perm.mode}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-adytum-text-muted">
-                      <span>
-                        Granted {formatDistanceToNow(perm.grantedAt, { addSuffix: true })}
-                      </span>
-                      {perm.expiresAt && (
-                        <span className="flex items-center gap-1">
-                          <Clock className="h-3 w-3" />
-                          Expires {formatDistanceToNow(perm.expiresAt, { addSuffix: true })}
-                        </span>
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-bg-tertiary">
+                      {perm.mode === 'full_access' ? (
+                        <Unlock className="h-4 w-4 text-success" />
+                      ) : (
+                        <Lock className="h-4 w-4 text-text-tertiary" />
                       )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-sm font-medium text-text-primary font-mono">{perm.path}</span>
+                        <Badge variant={MODE_VARIANTS[perm.mode] || 'default'}>
+                          {MODE_LABELS[perm.mode] || perm.mode}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-3 mt-1 text-[11px] text-text-muted">
+                        <span>Granted {formatDistanceToNow(perm.grantedAt, { addSuffix: true })}</span>
+                        {perm.expiresAt && (
+                          <span className="flex items-center gap-1">
+                            <Clock className="h-3 w-3" />
+                            {formatDistanceToNow(perm.expiresAt, { addSuffix: true })}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   </div>
                   <Button variant="danger" size="sm" onClick={() => handleRevoke(perm.path)}>
-                    <Trash2 className="h-3 w-3" />
-                    Revoke
+                    <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               </Card>

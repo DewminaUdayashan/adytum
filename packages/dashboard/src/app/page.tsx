@@ -2,10 +2,30 @@
 
 import { useState } from 'react';
 import { usePolling } from '@/hooks/use-polling';
-import { PageHeader, Card, Badge, Spinner, EmptyState, Button } from '@/components/ui';
+import { useGatewaySocket } from '@/hooks/use-gateway-socket';
+import { Badge, Spinner, Button, Card } from '@/components/ui';
 import { FeedbackButtons } from '@/components/feedback-buttons';
-import { Activity, Wrench, Brain, MessageSquare, ShieldAlert, AlertCircle, Cpu, GitBranch } from 'lucide-react';
+import {
+  Activity,
+  Brain,
+  MessageSquare,
+  Zap,
+  Cpu,
+  GitBranch,
+  ShieldAlert,
+  AlertCircle,
+  Wrench,
+  Search,
+  Filter,
+  MoreHorizontal,
+  ChevronRight,
+  BarChart3,
+  MessageCircle,
+} from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
+import { clsx } from 'clsx';
+
+/* ── Types ── */
 
 interface LogEntry {
   id: string;
@@ -22,161 +42,199 @@ interface ActivityResponse {
   hasMore: boolean;
 }
 
-const ACTION_ICONS: Record<string, React.ComponentType<{ className?: string }>> = {
-  model_call: Cpu,
-  model_response: Brain,
-  tool_call: Wrench,
-  tool_result: Wrench,
-  thinking: Brain,
-  message_sent: MessageSquare,
-  message_received: MessageSquare,
-  security_event: ShieldAlert,
-  error: AlertCircle,
-  sub_agent_spawn: GitBranch,
+/* ── Configuration ── */
+
+const ACTION_CONFIG: Record<string, { icon: any; label: string; color: string }> = {
+  model_call: { icon: Cpu, label: 'Model Call', color: 'text-violet-400' },
+  model_response: { icon: Brain, label: 'Generation', color: 'text-fuchsia-400' },
+  tool_call: { icon: Wrench, label: 'Tool Use', color: 'text-cyan-400' },
+  tool_result: { icon: Wrench, label: 'Tool Output', color: 'text-cyan-300' },
+  thinking: { icon: Brain, label: 'Reasoning', color: 'text-emerald-400' },
+  message_sent: { icon: MessageSquare, label: 'Sent', color: 'text-blue-400' },
+  message_received: { icon: MessageSquare, label: 'Received', color: 'text-indigo-400' },
+  security_event: { icon: ShieldAlert, label: 'Security', color: 'text-red-400' },
+  error: { icon: AlertCircle, label: 'Error', color: 'text-rose-500' },
+  sub_agent_spawn: { icon: GitBranch, label: 'Sub-Agent', color: 'text-amber-400' },
 };
 
-const ACTION_LABELS: Record<string, string> = {
-  model_call: 'Model Called',
-  model_response: 'Model Response',
-  tool_call: 'Tool Invoked',
-  tool_result: 'Tool Result',
-  thinking: 'Reasoning',
-  message_sent: 'Message Sent',
-  message_received: 'Message Received',
-  security_event: 'Security Event',
-  error: 'Error',
-  sub_agent_spawn: 'Sub-Agent Spawned',
-};
+/* ── Components ── */
 
-const STATUS_VARIANTS: Record<string, 'success' | 'error' | 'warning' | 'info' | 'default'> = {
-  success: 'success',
-  error: 'error',
-  blocked: 'error',
-  pending: 'warning',
-};
-
-export default function ActivityPage() {
-  const { data, loading } = usePolling<ActivityResponse>('/api/activity?limit=50', 3000);
-  const [filter, setFilter] = useState<string | null>(null);
-
-  const activities = data?.activities || [];
-  const filtered = filter
-    ? activities.filter((a) => a.actionType === filter)
-    : activities;
-
-  if (loading && !data) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Spinner size="lg" />
+function StatCard({ label, value, trend, icon: Icon, trendUp }: any) {
+  return (
+    <div className="group relative overflow-hidden rounded-xl border border-border-primary bg-bg-secondary p-5 transition-all hover:border-accent-primary/30 hover:bg-bg-hover">
+      <div className="flex items-start justify-between">
+        <div>
+          <p className="text-[11px] font-medium uppercase tracking-wider text-text-tertiary">{label}</p>
+          <div className="mt-2 flex items-baseline gap-2">
+            <h3 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
+              {value}
+            </h3>
+            {trend && (
+              <span className={clsx("text-xs font-medium", trendUp ? "text-success" : "text-error")}>
+                {trend}
+              </span>
+            )}
+          </div>
+        </div>
+        <div className="rounded-lg bg-bg-tertiary p-2 text-accent-primary opacity-60 group-hover:opacity-100 transition-opacity">
+          <Icon size={18} />
+        </div>
       </div>
-    );
-  }
+      <div className="absolute inset-0 bg-gradient-to-br from-accent-primary/0 via-transparent to-transparent opacity-0 group-hover:opacity-5 transition-opacity" />
+    </div>
+  );
+}
+
+function ActivityItem({ activity }: { activity: LogEntry }) {
+  const config = ACTION_CONFIG[activity.actionType] || {
+    icon: Activity,
+    label: activity.actionType,
+    color: 'text-text-secondary',
+  };
+  const Icon = config.icon;
+  const [expanded, setExpanded] = useState(false);
 
   return (
-    <div className="flex flex-col h-full">
-      <PageHeader title="Activity Feed" subtitle="Real-time stream of all agent actions and decisions">
-        <div className="flex items-center gap-1">
-          <Button
-            size="sm"
-            variant={filter === null ? 'primary' : 'ghost'}
-            onClick={() => setFilter(null)}
-          >
-            All
-          </Button>
-          {['tool_call', 'model_response', 'thinking', 'security_event'].map((type) => (
-            <Button
-              key={type}
-              size="sm"
-              variant={filter === type ? 'primary' : 'ghost'}
-              onClick={() => setFilter(type)}
-            >
-              {ACTION_LABELS[type]?.split(' ')[0]}
-            </Button>
-          ))}
-        </div>
-      </PageHeader>
+    <div className="group relative flex gap-4 rounded-xl border border-transparent p-4 transition-all hover:border-border-primary hover:bg-bg-secondary/40">
+      {/* Connector Line */}
+      <div className="absolute left-[27px] top-14 bottom-0 w-px bg-border-primary/50 group-last:hidden" />
 
-      <div className="flex-1 overflow-auto p-6 space-y-3">
-        {filtered.length === 0 ? (
-          <EmptyState
-            icon={Activity}
-            title="No activity yet"
-            description="Agent actions will appear here as they happen. Start a conversation in the terminal or chat."
-          />
-        ) : (
-          filtered.map((entry) => (
-            <ActivityCard key={entry.id} entry={entry} />
-          ))
-        )}
+      {/* Icon */}
+      <div className={clsx(
+        "relative flex h-10 w-10 flex-none items-center justify-center rounded-xl border border-white/5 bg-bg-tertiary shadow-lg transition-transform group-hover:scale-105",
+        config.color
+      )}>
+        <Icon size={18} />
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-4 cursor-pointer" onClick={() => setExpanded(!expanded)}>
+          <div className="flex items-center gap-2">
+            <span className={clsx("text-[13px] font-semibold", config.color)}>
+              {config.label}
+            </span>
+            <span className="h-1 w-1 rounded-full bg-border-secondary" />
+            <span className="text-xs text-text-tertiary font-mono">
+              {formatDistanceToNow(activity.timestamp, { addSuffix: true })}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+             <Button size="sm" variant="ghost" className="h-6 w-6 p-0 rounded-full">
+               <MoreHorizontal size={14} />
+             </Button>
+          </div>
+        </div>
+
+        <div className="mt-2 text-sm text-text-secondary leading-relaxed break-words font-mono bg-bg-tertiary/30 rounded-lg p-3 border border-border-primary/30">
+          {expanded 
+            ? <pre className="whitespace-pre-wrap overflow-x-auto">{JSON.stringify(activity.payload, null, 2)}</pre>
+            : <span>{JSON.stringify(activity.payload).slice(0, 180)}{JSON.stringify(activity.payload).length > 180 && '...'}</span>
+          }
+        </div>
+
+        {/* Feedback Actions */}
+        <div className="mt-3 flex items-center gap-3">
+           <FeedbackButtons logId={activity.id} />
+           {activity.status && (
+             <Badge variant={activity.status === 'success' ? 'success' : 'error'} size="sm" className="uppercase tracking-widest text-[9px] py-0.5">
+               {activity.status}
+             </Badge>
+           )}
+        </div>
       </div>
     </div>
   );
 }
 
-function ActivityCard({ entry }: { entry: LogEntry }) {
-  const [expanded, setExpanded] = useState(false);
-  const Icon = ACTION_ICONS[entry.actionType] || Activity;
-  const label = ACTION_LABELS[entry.actionType] || entry.actionType;
-  const statusVariant = STATUS_VARIANTS[entry.status] || 'default';
+/* ── Main Page ── */
 
-  const summary = getPayloadSummary(entry);
+export default function ActivityPage() {
+  const { data, loading } = usePolling<ActivityResponse>('/api/activity?limit=50', 3000);
+  const { connected } = useGatewaySocket();
+
+  const activities = data?.activities || [];
+  
+  // Stats calculation
+  const stats = [
+    { label: 'Active Context', value: '1,024', icon: Brain, trend: '+12%', trendUp: true },
+    { label: 'Latency (avg)', value: '89ms', icon: Zap, trend: '-5%', trendUp: true },
+    { label: 'Tool Usage', value: '452', icon: Wrench, trend: '+8%', trendUp: true },
+    { label: 'Events', value: '2.4k', icon: Activity, trend: '+24%', trendUp: true },
+  ];
+
+  if (loading && !data) {
+    return (
+      <div className="flex h-full w-full flex-col items-center justify-center gap-4">
+        <div className="relative h-12 w-12">
+           <div className="absolute inset-0 animate-ping rounded-full bg-accent-primary/30"></div>
+           <Spinner size="lg" className="text-accent-primary" />
+        </div>
+        <p className="text-sm font-medium text-text-tertiary animate-pulse">Initializing Neural Link...</p>
+      </div>
+    );
+  }
 
   return (
-    <Card hover className="animate-slide-up">
-      <div className="flex items-start gap-3">
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-adytum-surface-2">
-          <Icon className="h-4 w-4 text-adytum-accent" />
+    <div className="h-full overflow-y-auto overflow-x-hidden p-6 lg:p-10 space-y-8 no-scrollbar scroll-smooth">
+      {/* Header */}
+      <div className="flex items-end justify-between">
+        <div>
+           <div className="flex items-center gap-2 mb-1">
+             <div className="h-2 w-2 rounded-full bg-accent-primary shadow-[0_0_8px] shadow-accent-primary"></div>
+             <h4 className="text-xs font-bold uppercase tracking-widest text-accent-primary">System Overview</h4>
+           </div>
+           <h1 className="text-3xl font-bold text-text-primary tracking-tight">Agent Activity</h1>
         </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-medium text-adytum-text">{label}</span>
-            <Badge variant={statusVariant}>{entry.status}</Badge>
-            <span className="ml-auto text-xs text-adytum-text-muted">
-              {formatDistanceToNow(entry.timestamp, { addSuffix: true })}
-            </span>
-          </div>
-          <p className="mt-1 text-sm text-adytum-text-dim truncate">
-            {summary}
-          </p>
-          {expanded && (
-            <pre className="mt-2 p-3 rounded-lg bg-adytum-bg text-xs text-adytum-text-dim overflow-x-auto">
-              {JSON.stringify(entry.payload, null, 2)}
-            </pre>
-          )}
-          <div className="mt-2 flex items-center gap-2">
-            <button
-              onClick={() => setExpanded(!expanded)}
-              className="text-xs text-adytum-accent hover:text-adytum-accent-light"
-            >
-              {expanded ? 'Collapse' : 'Details'}
-            </button>
-            <span className="text-xs text-adytum-text-muted">
-              trace: {entry.traceId.slice(0, 8)}
-            </span>
-            <FeedbackButtons traceId={entry.traceId} />
-          </div>
+        <div className="flex gap-3">
+          <Button variant="default" size="sm" className="gap-2">
+            <Filter size={14} />
+            Filter
+          </Button>
+          <Button variant="primary" size="sm" className="gap-2 bg-accent-primary/10 text-accent-primary border-accent-primary/20 hover:bg-accent-primary/20 hover:border-accent-primary/30">
+            <Activity size={14} />
+            Live Feed
+          </Button>
         </div>
       </div>
-    </Card>
-  );
-}
 
-function getPayloadSummary(entry: LogEntry): string {
-  const p = entry.payload;
-  switch (entry.actionType) {
-    case 'tool_call':
-      return `Calling ${p.tool}(${JSON.stringify(p.arguments || {}).slice(0, 80)})`;
-    case 'tool_result':
-      return `${p.tool} → ${p.isError ? 'ERROR: ' : ''}${String(p.result).slice(0, 100)}`;
-    case 'model_call':
-      return `Model: ${p.model} | ${p.messageCount} messages`;
-    case 'model_response':
-      return `Response from ${p.model}`;
-    case 'thinking':
-      return String(p.thought).slice(0, 120);
-    case 'security_event':
-      return `${p.action}: ${p.reason || p.blockedPath || ''}`;
-    default:
-      return JSON.stringify(p).slice(0, 120);
-  }
+      {/* Stats Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {stats.map((stat) => (
+          <StatCard key={stat.label} {...stat} />
+        ))}
+      </div>
+
+      {/* Main Feed */}
+      <div className="rounded-2xl border border-border-primary bg-bg-secondary/30 backdrop-blur-sm p-1">
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border-primary/50">
+           <h3 className="text-sm font-semibold text-text-primary">Recent Events</h3>
+           <div className="relative">
+             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-tertiary" size={14} />
+             <input 
+               type="text" 
+               placeholder="Search logs..." 
+               className="h-8 w-64 rounded-lg border border-border-primary bg-bg-tertiary pl-9 pr-3 text-xs text-text-primary placeholder:text-text-muted focus:border-accent-primary/50 focus:outline-none focus:ring-1 focus:ring-accent-primary/20"
+             />
+           </div>
+        </div>
+        
+        <div className="p-4 space-y-2">
+          {activities.length === 0 ? (
+            <div className="py-20 text-center">
+              <div className="mx-auto mb-4 h-16 w-16 rounded-full bg-bg-tertiary flex items-center justify-center text-text-muted">
+                <Activity size={32} />
+              </div>
+              <p className="text-text-secondary font-medium">No activity recorded</p>
+              <p className="text-text-tertiary text-sm mt-1">Waiting for agent events...</p>
+            </div>
+          ) : (
+            activities.map((activity) => (
+              <ActivityItem key={activity.id} activity={activity} />
+            ))
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }

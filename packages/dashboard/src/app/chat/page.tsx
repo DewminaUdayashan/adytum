@@ -2,8 +2,8 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useGatewaySocket } from '@/hooks/use-gateway-socket';
-import { PageHeader, Badge, Spinner } from '@/components/ui';
-import { Send, Bot, User, Circle } from 'lucide-react';
+import { Spinner } from '@/components/ui';
+import { Send, Bot, User, Zap, Sparkles } from 'lucide-react';
 import { clsx } from 'clsx';
 
 interface ChatMessage {
@@ -15,20 +15,43 @@ interface ChatMessage {
 }
 
 export default function ChatPage() {
-  const { connected, events, sendMessage } = useGatewaySocket();
+  const { connected, events, sendMessage, sessionId } = useGatewaySocket();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
-  const sessionIdRef = useRef(crypto.randomUUID());
+  const [pendingTools, setPendingTools] = useState<string[]>([]);
+  const [hasRestored, setHasRestored] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Handle incoming WebSocket events and turn them into chat messages
+  // Restore chat history from localStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const raw = window.localStorage.getItem('adytum.chat.messages');
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as ChatMessage[];
+        if (Array.isArray(parsed)) setMessages(parsed);
+      } catch {
+        // ignore corrupt data
+      }
+    }
+    setHasRestored(true);
+  }, []);
+
+  // Persist chat history
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!hasRestored) return;
+    window.localStorage.setItem('adytum.chat.messages', JSON.stringify(messages));
+  }, [messages, hasRestored]);
+
+  // Handle incoming WebSocket events
   useEffect(() => {
     if (events.length === 0) return;
     const latest = events[events.length - 1];
 
-    if (latest.type === 'message' && latest.sessionId === sessionIdRef.current) {
+    if (latest.type === 'message' && latest.sessionId === sessionId) {
       setMessages((prev) => [
         ...prev,
         {
@@ -36,13 +59,17 @@ export default function ChatPage() {
           role: 'assistant',
           content: String(latest.content || ''),
           timestamp: Date.now(),
+          toolCalls: pendingTools.length > 0 ? pendingTools : undefined,
         },
       ]);
+      setPendingTools([]);
       setIsThinking(false);
     }
 
-    if (latest.type === 'stream' && latest.streamType === 'status') {
-      // Could show streaming status
+    if (latest.type === 'stream' && latest.streamType === 'tool_call' && latest.sessionId === sessionId) {
+      const toolName = (latest as any).metadata?.tool
+        || String(latest.delta || '').replace(/^Calling tool:\s*/i, '').trim();
+      if (toolName) setPendingTools((prev) => [...prev, toolName]);
     }
   }, [events]);
 
@@ -63,28 +90,40 @@ export default function ChatPage() {
     };
 
     setMessages((prev) => [...prev, msg]);
-    sendMessage(text, sessionIdRef.current);
+    sendMessage(text, sessionId);
     setInput('');
     setIsThinking(true);
-  }, [input, connected, sendMessage]);
+  }, [input, connected, sendMessage, sessionId]);
 
   return (
-    <div className="flex flex-col h-full">
-      <PageHeader title="Chat" subtitle="Full chat interface — like the terminal, but in your browser">
-        <Badge variant={connected ? 'success' : 'error'}>
-          <Circle className={clsx('h-2 w-2 mr-1', connected ? 'fill-adytum-success' : 'fill-adytum-error')} />
-          {connected ? 'Connected' : 'Disconnected'}
-        </Badge>
-      </PageHeader>
+    <div className="flex flex-col h-full animate-fade-in">
+      {/* Header */}
+      <div className="px-8 pt-8 pb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted font-medium">Conversation</p>
+            <h1 className="text-2xl font-semibold text-text-primary tracking-tight mt-1">Chat</h1>
+          </div>
+          <div className="flex items-center gap-2 text-xs font-medium">
+            <span className="relative flex h-2 w-2">
+              <span className={`absolute inline-flex h-full w-full rounded-full ${connected ? 'bg-success animate-ping' : 'bg-text-muted'} opacity-75`} />
+              <span className={`relative inline-flex h-2 w-2 rounded-full ${connected ? 'bg-success' : 'bg-text-muted'}`} />
+            </span>
+            <span className={connected ? 'text-success' : 'text-text-muted'}>{connected ? 'Connected' : 'Offline'}</span>
+          </div>
+        </div>
+      </div>
 
       {/* Messages */}
-      <div ref={scrollRef} className="flex-1 overflow-auto p-6 space-y-4">
+      <div ref={scrollRef} className="flex-1 overflow-auto px-8 py-4 space-y-4">
         {messages.length === 0 && (
-          <div className="flex flex-col items-center justify-center h-full text-center">
-            <Bot className="h-16 w-16 text-adytum-text-muted mb-4" />
-            <h2 className="text-lg font-medium text-adytum-text-dim">Start a conversation</h2>
-            <p className="text-sm text-adytum-text-muted mt-1 max-w-md">
-              Type a message below to chat with your agent. All tool calls and reasoning will be visible in the console.
+          <div className="flex flex-col items-center justify-center h-full text-center animate-fade-in">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-bg-tertiary mb-5">
+              <Sparkles className="h-7 w-7 text-text-muted" />
+            </div>
+            <h2 className="text-lg font-semibold text-text-primary mb-1">Start a conversation</h2>
+            <p className="text-sm text-text-tertiary max-w-sm">
+              Type a message to interact with your agent.
             </p>
           </div>
         )}
@@ -93,39 +132,53 @@ export default function ChatPage() {
           <MessageBubble key={msg.id} message={msg} />
         ))}
 
-        {isThinking && (
-          <div className="flex items-start gap-3 animate-fade-in">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-adytum-accent/15">
-              <Bot className="h-4 w-4 text-adytum-accent" />
-            </div>
-            <div className="glass-card px-4 py-3 flex items-center gap-2">
-              <Spinner size="sm" />
-              <span className="text-sm text-adytum-text-muted">Thinking...</span>
-            </div>
-          </div>
-        )}
+        {isThinking && <ThinkingIndicator pendingTools={pendingTools} />}
       </div>
 
       {/* Input */}
-      <div className="border-t border-adytum-border p-4">
-        <div className="flex items-center gap-2 rounded-xl bg-adytum-surface border border-adytum-border px-4 py-2 focus-within:border-adytum-accent transition-colors">
-          <input
-            ref={inputRef}
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-            placeholder={connected ? 'Type a message...' : 'Connecting to gateway...'}
-            disabled={!connected}
-            className="flex-1 bg-transparent text-sm text-adytum-text placeholder:text-adytum-text-muted focus:outline-none disabled:opacity-50"
-          />
+      <div className="border-t border-border-primary px-8 py-5">
+        <div className="flex items-center gap-3">
+          <div className="flex-1 flex items-center rounded-xl bg-bg-secondary border border-border-primary px-4 py-2.5 focus-within:border-accent-primary/50 transition-colors duration-150">
+            <input
+              ref={inputRef}
+              type="text"
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleSend()}
+              placeholder={connected ? 'Message your agent…' : 'Connecting…'}
+              disabled={!connected}
+              className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-muted focus:outline-none disabled:opacity-40"
+            />
+          </div>
           <button
             onClick={handleSend}
             disabled={!input.trim() || !connected}
-            className="flex h-8 w-8 items-center justify-center rounded-lg bg-adytum-accent text-white transition-colors hover:bg-adytum-accent-light disabled:opacity-30 disabled:cursor-not-allowed"
+            className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-primary text-white transition-all hover:bg-accent-primary/80 disabled:opacity-30 disabled:pointer-events-none"
           >
             <Send className="h-4 w-4" />
           </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ThinkingIndicator({ pendingTools }: { pendingTools: string[] }) {
+  return (
+    <div className="flex items-start gap-3 animate-fade-in">
+      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-bg-tertiary">
+        <Bot className="h-4 w-4 text-text-tertiary" />
+      </div>
+      <div className="rounded-xl border border-border-primary bg-bg-secondary/60 px-4 py-3">
+        <div className="flex items-center gap-3">
+          <Spinner size="sm" />
+          <span className="text-sm text-text-secondary">Thinking…</span>
+          {pendingTools.length > 0 && (
+            <div className="flex items-center gap-1.5 text-[11px] text-text-muted">
+              <Zap className="h-3 w-3 text-warning" />
+              <span className="font-mono">{pendingTools.join(', ')}</span>
+            </div>
+          )}
         </div>
       </div>
     </div>
@@ -136,36 +189,41 @@ function MessageBubble({ message }: { message: ChatMessage }) {
   const isUser = message.role === 'user';
 
   return (
-    <div className={clsx('flex items-start gap-3', isUser && 'flex-row-reverse')}>
+    <div className={clsx('flex items-end gap-3', isUser && 'flex-row-reverse')}>
       <div
         className={clsx(
-          'flex h-8 w-8 shrink-0 items-center justify-center rounded-full',
-          isUser ? 'bg-adytum-info/15' : 'bg-adytum-accent/15',
-        )}
-      >
-        {isUser ? (
-          <User className="h-4 w-4 text-adytum-info" />
-        ) : (
-          <Bot className="h-4 w-4 text-adytum-accent" />
-        )}
-      </div>
-      <div
-        className={clsx(
-          'max-w-[70%] rounded-2xl px-4 py-3',
+          'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-semibold',
           isUser
-            ? 'bg-adytum-accent text-white rounded-br-sm'
-            : 'glass-card rounded-bl-sm',
+            ? 'bg-accent-primary text-white'
+            : 'bg-bg-tertiary text-text-tertiary',
         )}
       >
-        <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-        <span
+        {isUser ? <User className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />}
+      </div>
+      <div className={clsx('flex flex-col gap-1', isUser && 'items-end')}>
+        <div
           className={clsx(
-            'mt-1 block text-xs',
-            isUser ? 'text-white/60' : 'text-adytum-text-muted',
+            'max-w-xl rounded-xl px-4 py-3 text-sm leading-relaxed',
+            isUser
+              ? 'bg-accent-primary text-white rounded-br-sm'
+              : 'bg-bg-secondary border border-border-primary text-text-primary rounded-bl-sm',
           )}
         >
-          {new Date(message.timestamp).toLocaleTimeString()}
-        </span>
+          <p className="whitespace-pre-wrap">{message.content}</p>
+          {!isUser && message.toolCalls && message.toolCalls.length > 0 && (
+            <div className="mt-2.5 flex flex-wrap gap-1.5 pt-2.5 border-t border-border-primary/30">
+              {message.toolCalls.map((tool) => (
+                <span
+                  key={tool}
+                  className="inline-flex items-center gap-1 rounded-md bg-bg-tertiary px-2 py-0.5 text-[11px] font-medium text-text-secondary"
+                >
+                  <Zap className="h-2.5 w-2.5 text-warning" />
+                  {tool}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -9,6 +9,8 @@ import { ToolRegistry } from '../tools/registry.js';
 import { tokenTracker } from './token-tracker.js';
 import { auditLogger } from '../security/audit-logger.js';
 import { EventEmitter } from 'node:events';
+import type { MemoryStore } from './memory-store.js';
+import type { MemoryDB } from './memory-db.js';
 
 export interface AgentRuntimeConfig {
   modelRouter: ModelRouter;
@@ -20,6 +22,9 @@ export interface AgentRuntimeConfig {
   defaultModelRole: ModelRole;
   agentName: string;
   workspacePath?: string;
+  memoryStore?: MemoryStore;
+  memoryTopK?: number;
+  memoryDb?: MemoryDB;
   onApprovalRequired?: (description: string) => Promise<boolean>;
 }
 
@@ -56,6 +61,13 @@ export class AgentRuntime extends EventEmitter {
     this.config.onApprovalRequired = handler;
   }
 
+  /** Seed context with persisted messages (e.g., after restart). */
+  seedContext(messages: Array<{ role: OpenAI.ChatCompletionMessageParam['role']; content: string }>): void {
+    for (const m of messages) {
+      this.context.addMessage({ role: m.role, content: m.content } as OpenAI.ChatCompletionMessageParam);
+    }
+  }
+
   /** Run a full agent turn (user message → response). */
   async run(userMessage: string, sessionId: string): Promise<AgentTurnResult> {
     const traceId = uuid();
@@ -71,6 +83,18 @@ export class AgentRuntime extends EventEmitter {
 
     // Add user message to context
     this.context.addMessage({ role: 'user', content: userMessage });
+    if (this.config.memoryDb) {
+      this.config.memoryDb.addMessage(sessionId, 'user', userMessage);
+    }
+
+    // Auto-extract simple user memory facts (e.g., nickname) and store persistently
+    const extracted = this.extractUserMemory(userMessage);
+    if (extracted && this.config.memoryStore) {
+      this.config.memoryStore.add(extracted, 'user', ['auto'], undefined, 'user_fact');
+    }
+
+    // Prepare memory context for this turn
+    const memoryContext = this.buildMemoryContext(userMessage);
 
     const allToolCalls: ToolCall[] = [];
     let finalResponse = '';
@@ -87,6 +111,12 @@ export class AgentRuntime extends EventEmitter {
 
         // Call the model
         auditLogger.logModelCall(traceId, this.config.defaultModelRole, this.context.getMessageCount());
+        if (this.config.memoryDb) {
+          this.config.memoryDb.addActionLog(traceId, 'model_call', {
+            role: this.config.defaultModelRole,
+            messageCount: this.context.getMessageCount(),
+          }, 'success');
+        }
 
         this.emit('stream', {
           traceId,
@@ -95,9 +125,18 @@ export class AgentRuntime extends EventEmitter {
           delta: `Thinking... (iteration ${iterations})`,
         });
 
+        const baseMessages = this.context.getMessages();
+        const modelMessages = memoryContext
+          ? [
+            baseMessages[0],
+            { role: 'system', content: memoryContext } as OpenAI.ChatCompletionMessageParam,
+            ...baseMessages.slice(1),
+          ]
+          : baseMessages;
+
         const { message, usage } = await this.config.modelRouter.chat(
           this.config.defaultModelRole,
-          this.context.getMessages(),
+          modelMessages,
           {
             tools: this.config.toolRegistry.toOpenAITools(),
             temperature: 0.7,
@@ -107,6 +146,15 @@ export class AgentRuntime extends EventEmitter {
         // Track tokens
         tokenTracker.record(usage, sessionId);
         auditLogger.logModelResponse(traceId, usage.model, usage);
+        if (this.config.memoryDb) {
+          this.config.memoryDb.addActionLog(traceId, 'model_response', {
+            model: usage.model,
+            promptTokens: usage.promptTokens,
+            completionTokens: usage.completionTokens,
+            totalTokens: usage.totalTokens,
+            cost: usage.estimatedCost,
+          }, 'success');
+        }
 
         // Check for tool calls
         if (message.tool_calls && message.tool_calls.length > 0) {
@@ -138,6 +186,12 @@ export class AgentRuntime extends EventEmitter {
             });
 
             auditLogger.logToolCall(traceId, toolCall.name, toolCall.arguments);
+            if (this.config.memoryDb) {
+              this.config.memoryDb.addActionLog(traceId, 'tool_call', {
+                tool: toolCall.name,
+                arguments: toolCall.arguments,
+              }, 'success');
+            }
 
             // Check if tool requires approval
             const toolDef = this.config.toolRegistry.get(toolCall.name);
@@ -159,6 +213,13 @@ export class AgentRuntime extends EventEmitter {
             const result = await this.config.toolRegistry.execute(toolCall);
 
             auditLogger.logToolResult(traceId, toolCall.name, result.result, result.isError);
+            if (this.config.memoryDb) {
+              this.config.memoryDb.addActionLog(traceId, 'tool_result', {
+                tool: toolCall.name,
+                result: result.result,
+                isError: result.isError,
+              }, result.isError ? 'error' : 'success');
+            }
 
             this.emit('stream', {
               traceId,
@@ -198,6 +259,12 @@ export class AgentRuntime extends EventEmitter {
 
         // Add assistant response to context
         this.context.addMessage({ role: 'assistant', content: finalResponse });
+        if (this.config.memoryDb) {
+          this.config.memoryDb.addMessage(sessionId, 'assistant', finalResponse);
+          this.config.memoryDb.addActionLog(traceId, 'message_sent', {
+            content: finalResponse,
+          }, 'success');
+        }
         break;
       }
 
@@ -222,6 +289,10 @@ export class AgentRuntime extends EventEmitter {
       }
 
       this.context.addMessage({ role: 'assistant', content: finalResponse });
+      if (this.config.memoryDb) {
+        this.config.memoryDb.addMessage(sessionId, 'assistant', finalResponse);
+        this.config.memoryDb.addActionLog(traceId, 'error', { message: finalResponse }, 'error');
+      }
     }
 
     this.emit('trace_end', trace);
@@ -254,7 +325,39 @@ export class AgentRuntime extends EventEmitter {
 
     if (message.content) {
       this.context.applyCompaction(message.content);
+      if (this.config.memoryStore) {
+        this.config.memoryStore.add(message.content, 'compaction', ['summary'], {
+          traceId,
+          sessionId,
+        }, 'episodic_summary');
+      }
     }
+  }
+
+  private buildMemoryContext(query: string): string | null {
+    if (!this.config.memoryStore) return null;
+    const topK = this.config.memoryTopK ?? 3;
+    const memories = this.config.memoryStore.search(query, topK);
+    if (memories.length === 0) return null;
+
+    const lines = memories.map((m) => `- ${m.content}`);
+    return `## Relevant memories (persistent)\n${lines.join('\n')}`;
+  }
+
+  private extractUserMemory(text: string): string | null {
+    const patterns: Array<{ regex: RegExp; format: (m: RegExpMatchArray) => string }> = [
+      { regex: /\bmy name is\s+([\w .'-]{2,})/i, format: (m) => `User name is ${m[1].trim()}` },
+      { regex: /\bcall me\s+([\w .'-]{2,})/i, format: (m) => `User prefers to be called ${m[1].trim()}` },
+      { regex: /\bmy nickname is\s+([\w .'-]{2,})/i, format: (m) => `User nickname is ${m[1].trim()}` },
+      { regex: /\bi\s*am\s+([\w .'-]{2,})/i, format: (m) => `User said they are ${m[1].trim()}` },
+    ];
+
+    for (const p of patterns) {
+      const match = text.match(p.regex);
+      if (match) return p.format(match);
+    }
+
+    return null;
   }
 
   private buildSystemPrompt(): void {
