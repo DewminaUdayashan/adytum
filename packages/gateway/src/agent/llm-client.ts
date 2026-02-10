@@ -280,14 +280,21 @@ export class LLMClient {
     endpoint: ProviderEndpoint,
     options: LLMChatOptions,
   ): Promise<LLMChatResult> {
-    // Sanitize messages: some providers (Google Gemini) reject null content
+    // Deep-sanitize messages for provider compatibility.
+    // Google Gemini rejects ANY null value anywhere in the message tree
+    // (e.g. content: null, refusal: null, nested nulls in tool_calls).
+    // Strip all null/undefined values and ensure content is always a string.
     const sanitizedMessages = options.messages.map((msg) => {
-      const m = { ...msg } as any;
-      // Ensure content is always a string, never null/undefined
-      if (m.content === null || m.content === undefined) {
-        m.content = '';
+      // Deep clone and strip nulls via JSON round-trip with replacer
+      const clean = JSON.parse(JSON.stringify(msg, (key, value) => {
+        if (value === null || value === undefined) return undefined; // strip nulls
+        return value;
+      }));
+      // Ensure content is always present as a string
+      if (!('content' in clean) || clean.content === undefined) {
+        clean.content = '';
       }
-      return m;
+      return clean;
     });
 
     const body: Record<string, unknown> = {
