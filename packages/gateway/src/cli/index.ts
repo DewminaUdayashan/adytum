@@ -4,8 +4,9 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { ADYTUM_VERSION } from '@adytum/shared';
 import { runBirthProtocol } from './birth-protocol.js';
-import { existsSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { confirm } from '@inquirer/prompts';
 
 const program = new Command();
 
@@ -23,9 +24,26 @@ program
 
     // Check if already initialized
     if (existsSync(join(projectRoot, 'adytum.config.yaml'))) {
-      console.log(chalk.yellow('⚠  Adytum is already initialized in this directory.'));
-      console.log(chalk.dim('   Run `adytum start` to start the agent.'));
-      return;
+      const reset = await confirm({
+        message: 'Adytum is already initialized in this directory. Do you want to reset all settings and start over?',
+        default: false,
+      });
+
+      if (!reset) {
+        console.log(chalk.dim('\n   Run `adytum start` to start the agent.'));
+        return;
+      }
+
+      console.log(chalk.yellow('\n⚠  Starting over... Existing configuration will be overwritten.\n'));
+
+      // Cleanup persist data
+      try {
+        const dataPath = join(projectRoot, 'data');
+        if (existsSync(dataPath)) {
+          rmSync(dataPath, { recursive: true, force: true });
+          console.log(chalk.dim('   ✓ Cleared data/ directory (memory, logs, cron jobs)'));
+        }
+      } catch (e) {}
     }
 
     await runBirthProtocol(projectRoot);

@@ -5,14 +5,19 @@ import { parseFrame, serializeFrame, type WebSocketFrame } from '@adytum/shared'
 import { auditLogger } from './security/audit-logger.js';
 import { tokenTracker } from './agent/token-tracker.js';
 import { EventEmitter } from 'node:events';
+import { saveConfig } from './config.js';
 import type { WebSocket } from 'ws';
 import type { PermissionManager } from './security/permission-manager.js';
+import type { HeartbeatManager } from './agent/heartbeat-manager.js';
+import type { CronManager } from './agent/cron-manager.js';
 
 export interface ServerConfig {
   port: number;
   host: string;
   permissionManager?: PermissionManager;
   workspacePath?: string;
+  heartbeatManager?: HeartbeatManager;
+  cronManager?: CronManager;
 }
 
 /**
@@ -180,6 +185,81 @@ export class GatewayServer extends EventEmitter {
       const { join } = await import('node:path');
       writeFileSync(join(this.config.workspacePath, 'HEARTBEAT.md'), content, 'utf-8');
       return { success: true };
+    });
+
+    this.app.get('/api/heartbeat/config', async (request, reply) => {
+       if (!this.config.heartbeatManager) {
+         // Fallback if not injected, although it should be
+         return reply.status(503).send({ error: 'Heartbeat manager not available' });
+       }
+       // We need to read the current config. Ideally we should have access to the full config object
+       // But we can get it from the manager if we exposed it, or re-read it.
+       // Simpler: The manager likely knows its interval? Actually I didn't expose getInterval.
+       // Let's just read it from the config file or assume standard.
+       // Better: read Adytum config again or rely on what was passed.
+       // Since I don't have easy access to the global `config` object here (it's in index.ts),
+       // I will import `loadConfig` to get the cached one.
+       const { loadConfig } = await import('./config.js');
+       const cfg = loadConfig();
+       return { interval: cfg.heartbeatIntervalMinutes };
+    });
+
+    this.app.put('/api/heartbeat/config', async (request, reply) => {
+       if (!this.config.heartbeatManager) {
+         return reply.status(503).send({ error: 'Heartbeat manager not available' });
+       }
+       const body = request.body as { interval: number };
+       const interval = Number(body.interval);
+       if (!interval || interval < 1) {
+         return reply.status(400).send({ error: 'Invalid interval' });
+       }
+
+       // 1. Update runtime manager
+       this.config.heartbeatManager.schedule(interval);
+
+       // 2. Persist to config
+       saveConfig({ heartbeatIntervalMinutes: interval });
+
+       return { success: true, interval };
+    });
+
+    // ─── Cron Jobs API ──────────────────────────────────────
+    this.app.get('/api/cron', async () => {
+       if (!this.config.cronManager) return { jobs: [] };
+       return { jobs: this.config.cronManager.getAllJobs() };
+    });
+
+    this.app.post('/api/cron', async (request, reply) => {
+       if (!this.config.cronManager) return reply.status(503).send({ error: 'Cron manager not available' });
+       const { name, schedule, task } = request.body as any;
+       if (!name || !schedule || !task) return reply.status(400).send({ error: 'Missing fields' });
+       
+       try {
+           const job = this.config.cronManager.addJob(name, schedule, task);
+           return { job };
+       } catch (err: any) {
+           return reply.status(400).send({ error: err.message });
+       }
+    });
+
+    this.app.put('/api/cron/:id', async (request, reply) => {
+        if (!this.config.cronManager) return reply.status(503).send({ error: 'Cron manager not available' });
+        const { id } = request.params as { id: string };
+        const updates = request.body as any;
+        
+        try {
+            const job = this.config.cronManager.updateJob(id, updates);
+            return { job };
+        } catch (err: any) {
+            return reply.status(404).send({ error: err.message });
+        }
+    });
+
+    this.app.delete('/api/cron/:id', async (request, reply) => {
+        if (!this.config.cronManager) return reply.status(503).send({ error: 'Cron manager not available' });
+        const { id } = request.params as { id: string };
+        this.config.cronManager.removeJob(id);
+        return { success: true };
     });
 
     // ─── WebSocket Route ────────────────────────────────────

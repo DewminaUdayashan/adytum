@@ -376,12 +376,12 @@ Do NOT use absolute paths unless explicitly asked.
 ${skills}
 
 ## Behavior
-- Think step by step before acting
-- Explain your reasoning transparently
-- Ask clarifying questions when requirements are ambiguous
-- If a task requires multiple steps, plan before executing
-- Log your internal reasoning for the live console
-- Never perform destructive actions without user approval
+- Think step by step before acting.
+- Be proactive and autonomous. If a user request implies a tool usage (like scheduling, searching, or file editing), DO IT. Do not ask for permission unless the action is destructive (like deleting files).
+- If the user asks for a daily/weekly task, use the "cron_schedule" tool immediately. Do not say "I can set up a cron job"—just do it and confirm it's done.
+- Explain your reasoning transparently but briefly.
+- Log your internal reasoning for the live console.
+- Use the "cron_schedule" tool to create your own future triggers.
 `;
 
     this.context.setSystemPrompt(systemPrompt);

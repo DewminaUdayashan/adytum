@@ -12,11 +12,13 @@ import {
   Sparkles,
   Heart,
   Brain,
+  Clock,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: Brain, group: 'main' },
   { href: '/chat', label: 'Chat Interface', icon: MessageCircle, group: 'main' },
+  { href: '/tasks', label: 'Scheduled Tasks', icon: Clock, group: 'main' },
   { href: '/console', label: 'Console Stream', icon: Terminal, group: 'tools' },
   { href: '/tokens', label: 'Token Usage', icon: Coins, group: 'tools' },
   { href: '/permissions', label: 'Access Control', icon: Shield, group: 'config' },

@@ -22,6 +22,9 @@ import { MemoryStore } from './agent/memory-store.js';
 import { MemoryDB } from './agent/memory-db.js';
 import { Dreamer } from './agent/dreamer.js';
 import { InnerMonologue } from './agent/inner-monologue.js';
+import { HeartbeatManager } from './agent/heartbeat-manager.js';
+import { CronManager } from './agent/cron-manager.js';
+import { createCronTools } from './tools/cron.js';
 import cron from 'node-cron';
 import type { AdytumConfig } from '@adytum/shared';
 
@@ -119,6 +122,17 @@ export async function startGateway(projectRoot: string): Promise<void> {
   // ── Dreamer & Inner Monologue (Phase 3/4) ─────────────────
   const dreamer = new Dreamer(modelRouter, memoryDb, memoryStore, config.dataPath, config.workspacePath);
   const monologue = new InnerMonologue(modelRouter, memoryDb, memoryStore);
+  const heartbeatManager = new HeartbeatManager(agent, config.workspacePath);
+  const cronManager = new CronManager(agent, config.dataPath);
+
+  // Register Cron Tools (needs agent instance)
+  for (const tool of createCronTools(cronManager)) {
+    toolRegistry.register(tool);
+  }
+  agent.refreshSystemPrompt();
+  
+  // Start Heartbeat Scheduler
+  heartbeatManager.start(config.heartbeatIntervalMinutes);
 
   cron.schedule('*/30 * * * *', async () => {
     try {
@@ -144,6 +158,8 @@ export async function startGateway(projectRoot: string): Promise<void> {
     host: '127.0.0.1',
     permissionManager,
     workspacePath: config.workspacePath,
+    heartbeatManager,
+    cronManager,
   });
 
   // Route WebSocket messages to agent

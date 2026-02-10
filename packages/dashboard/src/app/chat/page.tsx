@@ -51,7 +51,10 @@ export default function ChatPage() {
     if (events.length === 0) return;
     const latest = events[events.length - 1];
 
-    if (latest.type === 'message' && latest.sessionId === sessionId) {
+    const isCurrentSession = latest.sessionId === sessionId;
+    const isSystemCron = latest.sessionId?.startsWith('cron-');
+
+    if (latest.type === 'message' && (isCurrentSession || isSystemCron)) {
       setMessages((prev) => [
         ...prev,
         {
@@ -60,13 +63,16 @@ export default function ChatPage() {
           content: String(latest.content || ''),
           timestamp: Date.now(),
           toolCalls: pendingTools.length > 0 ? pendingTools : undefined,
+          // Mark cron messages visually if needed, for now just merged in
         },
       ]);
-      setPendingTools([]);
-      setIsThinking(false);
+      if (isCurrentSession) {
+         setPendingTools([]);
+         setIsThinking(false);
+      }
     }
 
-    if (latest.type === 'stream' && latest.streamType === 'tool_call' && latest.sessionId === sessionId) {
+    if (latest.type === 'stream' && latest.streamType === 'tool_call' && isCurrentSession) {
       const toolName = (latest as any).metadata?.tool
         || String(latest.delta || '').replace(/^Calling tool:\s*/i, '').trim();
       if (toolName) setPendingTools((prev) => [...prev, toolName]);
@@ -163,20 +169,41 @@ export default function ChatPage() {
   );
 }
 
+const TOOL_VERBS: Record<string, string> = {
+  cron_schedule: 'Scheduling task...',
+  cron_list: 'Checking schedule...',
+  cron_remove: 'Removing task...',
+  web_fetch: 'Browsing the web...',
+  file_read: 'Reading files...',
+  file_write: 'Writing files...',
+  file_list: 'Scanning directory...',
+  memory_search: 'Recalling memories...',
+  personality_get: 'Checking personality...',
+};
+
 function ThinkingIndicator({ pendingTools }: { pendingTools: string[] }) {
+  const lastTool = pendingTools[pendingTools.length - 1];
+  const statusText = lastTool 
+    ? (TOOL_VERBS[lastTool] || `Running ${lastTool}...`) 
+    : 'Thinking...';
+
   return (
-    <div className="flex items-start gap-3 animate-fade-in">
+    <div className="flex items-start gap-3 animate-fade-in pl-1">
       <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-bg-tertiary">
         <Bot className="h-4 w-4 text-text-tertiary" />
       </div>
-      <div className="rounded-xl border border-border-primary bg-bg-secondary/60 px-4 py-3">
+      <div className="rounded-xl border border-border-primary/60 bg-bg-secondary/40 px-4 py-3 shadow-sm">
         <div className="flex items-center gap-3">
           <Spinner size="sm" />
-          <span className="text-sm text-text-secondary">Thinking…</span>
+          <span className="text-sm font-medium text-text-primary animate-pulse">{statusText}</span>
           {pendingTools.length > 0 && (
-            <div className="flex items-center gap-1.5 text-[11px] text-text-muted">
-              <Zap className="h-3 w-3 text-warning" />
-              <span className="font-mono">{pendingTools.join(', ')}</span>
+            <div className="flex items-center gap-1.5 text-[11px] text-text-muted border-l border-border-primary/50 pl-3 ml-1">
+              <Zap className="h-3 w-3 text-accent-primary" />
+              <div className="flex gap-1">
+                {pendingTools.map((t, i) => (
+                   <span key={i} className="font-mono opacity-80">{t}{i < pendingTools.length - 1 ? ',' : ''}</span>
+                ))}
+              </div>
             </div>
           )}
         </div>

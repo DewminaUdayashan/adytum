@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { gatewayFetch } from '@/lib/api';
 import { Card, Button, Spinner, Badge, EmptyState } from '@/components/ui';
-import { Heart, Save, RotateCcw, Plus, Trash2, Target, Calendar } from 'lucide-react';
+import { Heart, Save, RotateCcw, Plus, Trash2, Target, Calendar, Clock } from 'lucide-react';
 
 interface Goal {
   id: string;
@@ -21,10 +21,27 @@ export default function HeartbeatPage() {
   const [view, setView] = useState<'editor' | 'goals'>('goals');
   const [goals, setGoals] = useState<Goal[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [interval, setIntervalVal] = useState(30);
 
   useEffect(() => {
     loadHeartbeat();
+    gatewayFetch<{ interval: number }>('/api/heartbeat/config')
+      .then((d) => setIntervalVal(d.interval))
+      .catch(console.error);
   }, []);
+
+  const handleIntervalChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const newInterval = Number(e.target.value);
+    setIntervalVal(newInterval);
+    try {
+      await gatewayFetch('/api/heartbeat/config', {
+        method: 'PUT',
+        body: JSON.stringify({ interval: newInterval }),
+      });
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const loadHeartbeat = async () => {
     try {
@@ -100,6 +117,23 @@ export default function HeartbeatPage() {
             <h1 className="text-2xl font-semibold text-text-primary tracking-tight mt-1">Heartbeat</h1>
           </div>
           <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 mr-2 border-r border-border-primary/20 pr-4 h-6">
+              <Clock className="h-3 w-3 text-text-muted" />
+              <select
+                value={interval}
+                onChange={handleIntervalChange}
+                className="bg-transparent text-xs font-medium text-text-muted hover:text-text-primary outline-none cursor-pointer appearance-none"
+              >
+                 <option value={5}>5m</option>
+                 <option value={15}>15m</option>
+                 <option value={30}>30m</option>
+                 <option value={60}>1h</option>
+                 <option value={120}>2h</option>
+                 <option value={360}>6h</option>
+                 <option value={720}>12h</option>
+                 <option value={1440}>24h</option>
+              </select>
+            </div>
             {hasChanges && <Badge variant="warning">Unsaved</Badge>}
             <Button
               size="sm"
