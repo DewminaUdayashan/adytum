@@ -18,7 +18,8 @@ export class PathValidator {
    * Returns the resolved absolute path if valid, throws if blocked.
    */
   validate(targetPath: string, operation: 'read' | 'write' = 'read'): string {
-    const resolved = resolve(targetPath);
+    // Resolve relative paths against workspace root, not process.cwd()
+    const resolved = resolve(this.workspaceRoot, targetPath);
 
     // Always block known sensitive paths
     if (this.isSensitivePath(resolved)) {

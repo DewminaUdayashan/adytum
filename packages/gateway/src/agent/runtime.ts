@@ -19,6 +19,7 @@ export interface AgentRuntimeConfig {
   maxIterations: number;
   defaultModelRole: ModelRole;
   agentName: string;
+  workspacePath?: string;
   onApprovalRequired?: (description: string) => Promise<boolean>;
 }
 
@@ -48,6 +49,11 @@ export class AgentRuntime extends EventEmitter {
     this.config = config;
     this.context = new ContextManager(config.contextSoftLimit);
     this.buildSystemPrompt();
+  }
+
+  /** Replace the approval handler (e.g., to use the shared REPL readline). */
+  setApprovalHandler(handler: (description: string) => Promise<boolean>): void {
+    this.config.onApprovalRequired = handler;
   }
 
   /** Run a full agent turn (user message → response). */
@@ -260,6 +266,9 @@ export class AgentRuntime extends EventEmitter {
 ## Tools
 You have access to the following tools. Use them when needed to accomplish the user's goals.
 Always explain what you're doing before calling a tool.
+All file and directory paths are relative to your workspace root${this.config.workspacePath ? ` (${this.config.workspacePath})` : ''}.
+Use "." to refer to the workspace root itself.
+Do NOT use absolute paths unless explicitly asked.
 
 ${skills}
 

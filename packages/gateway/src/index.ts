@@ -9,7 +9,7 @@ import { ModelRouter } from './agent/model-router.js';
 import { SoulEngine } from './agent/soul-engine.js';
 import { SkillLoader } from './agent/skill-loader.js';
 import { ToolRegistry } from './tools/registry.js';
-import { createShellTool } from './tools/shell.js';
+import { createShellTool, createShellToolWithApproval } from './tools/shell.js';
 import { createFileSystemTools } from './tools/filesystem.js';
 import { createWebFetchTool } from './tools/web-fetch.js';
 import { PermissionManager } from './security/permission-manager.js';
@@ -52,17 +52,9 @@ export async function startGateway(projectRoot: string): Promise<void> {
   // ── Tool Registry ─────────────────────────────────────────
   const toolRegistry = new ToolRegistry();
 
-  const shellTool = createShellTool(async (command) => {
-    const rl = createInterface({ input: process.stdin, output: process.stdout });
-    return new Promise((resolve) => {
-      rl.question(
-        chalk.yellow(`\n  ⚠  Approve command? ${chalk.bold(command)}\n  [y/N]: `),
-        (answer) => {
-          rl.close();
-          resolve(answer.toLowerCase() === 'y');
-        },
-      );
-    });
+  const shellTool = createShellTool(async (_command) => {
+    // Placeholder — will be re-wired after REPL is created
+    return false;
   });
   toolRegistry.register(shellTool);
 
@@ -96,18 +88,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
     maxIterations: 20,
     defaultModelRole: 'thinking',
     agentName: config.agentName,
-    onApprovalRequired: async (description) => {
-      const rl = createInterface({ input: process.stdin, output: process.stdout });
-      return new Promise((resolve) => {
-        rl.question(
-          chalk.yellow(`\n  ⚠  ${description}\n  Approve? [y/N]: `),
-          (answer) => {
-            rl.close();
-            resolve(answer.toLowerCase() === 'y');
-          },
-        );
-      });
-    },
+    workspacePath: config.workspacePath,
   });
 
   console.log(chalk.green('  ✓ ') + chalk.white(`Agent: ${config.agentName} loaded`));
@@ -154,6 +135,56 @@ export async function startGateway(projectRoot: string): Promise<void> {
     input: process.stdin,
     output: process.stdout,
     prompt: chalk.blue(`  ${config.agentName} > `),
+    terminal: true,
+  });
+
+  // Graceful shutdown on Ctrl+C
+  const shutdown = async () => {
+    console.log(chalk.dim(`\n  ${config.agentName} is resting. Goodbye.\n`));
+    rl.close();
+    permissionManager.stopWatching();
+    await server.stop();
+    process.exit(0);
+  };
+
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
+
+  // Shared approval prompt that pauses/resumes the main REPL
+  // to prevent double character echo
+  const promptApproval = async (promptText: string): Promise<boolean> => {
+    rl.pause();
+    // Remove the main readline from stdin so it doesn't intercept keys
+    process.stdin.setRawMode?.(false);
+
+    return new Promise((resolve) => {
+      const approvalRl = createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        terminal: true,
+      });
+      approvalRl.question(promptText, (answer) => {
+        approvalRl.close();
+        rl.resume();
+        resolve(answer.toLowerCase() === 'y');
+      });
+    });
+  };
+
+  // Re-wire the shell tool's approval callback to use the shared prompt
+  toolRegistry.get('shell_execute')!.execute = createShellToolWithApproval(
+    async (command) => {
+      return promptApproval(
+        chalk.yellow(`\n  ⚠  Tool "shell_execute" wants to execute: ${chalk.bold(JSON.stringify({ command }))}\n  Approve? [y/N]: `),
+      );
+    },
+  );
+
+  // Re-wire the agent's approval callback too
+  agent.setApprovalHandler(async (description) => {
+    return promptApproval(
+      chalk.yellow(`\n  ⚠  ${description}\n  Approve? [y/N]: `),
+    );
   });
 
   rl.prompt();
@@ -195,6 +226,9 @@ export async function startGateway(projectRoot: string): Promise<void> {
     }
 
     try {
+      // Pause REPL while agent is processing to avoid stdin conflicts
+      rl.pause();
+
       // Show thinking indicator
       process.stdout.write(chalk.dim('  thinking...\r'));
 
@@ -217,6 +251,8 @@ export async function startGateway(projectRoot: string): Promise<void> {
       console.log(chalk.red(`  Error: ${error.message}\n`));
     }
 
+    // Resume REPL after processing
+    rl.resume();
     rl.prompt();
   });
 

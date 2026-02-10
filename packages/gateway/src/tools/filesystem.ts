@@ -8,9 +8,10 @@ export function createFileSystemTools(permissionManager: PermissionManager): Too
   return [
     {
       name: 'file_read',
-      description: 'Read the contents of a file. Path is validated against workspace and permissions.',
+      description: 'Read the contents of a file. Paths are relative to the workspace root.',
       parameters: z.object({
-        path: z.string().describe('Absolute or relative path to the file'),
+        path: z.string().describe('File path relative to the workspace root'),
+
         encoding: z.string().default('utf-8').describe('File encoding'),
       }),
       execute: async (args) => {
@@ -27,9 +28,10 @@ export function createFileSystemTools(permissionManager: PermissionManager): Too
     },
     {
       name: 'file_write',
-      description: 'Write content to a file. Creates parent directories if needed. Path is validated.',
+      description: 'Write content to a file. Creates parent directories if needed. Paths are relative to the workspace root.',
       parameters: z.object({
-        path: z.string().describe('Absolute or relative path to the file'),
+        path: z.string().describe('File path relative to the workspace root'),
+
         content: z.string().describe('Content to write'),
         createDirs: z.boolean().default(true).describe('Create parent directories if missing'),
       }),
@@ -52,9 +54,10 @@ export function createFileSystemTools(permissionManager: PermissionManager): Too
     },
     {
       name: 'file_list',
-      description: 'List files and directories in a given path. Path is validated.',
+      description: 'List files and directories in a given path. Paths are relative to the workspace root. Use "." for the workspace root.',
       parameters: z.object({
-        path: z.string().describe('Directory path to list'),
+        path: z.string().describe('Directory path relative to the workspace root, or "." for workspace root'),
+
         recursive: z.boolean().default(false).describe('List recursively'),
         maxDepth: z.number().default(3).describe('Max depth for recursive listing'),
       }),
@@ -89,9 +92,10 @@ export function createFileSystemTools(permissionManager: PermissionManager): Too
     },
     {
       name: 'file_search',
-      description: 'Search for text within files in a directory. Path is validated.',
+      description: 'Search for text within files in a directory. Paths are relative to the workspace root.',
       parameters: z.object({
-        path: z.string().describe('Directory to search in'),
+        path: z.string().describe('Directory to search in, relative to the workspace root'),
+
         query: z.string().describe('Text or regex pattern to search for'),
         extensions: z.array(z.string()).optional().describe('File extensions to include'),
         maxResults: z.number().default(20).describe('Maximum number of results'),
