@@ -40,13 +40,19 @@ program
 
     if (!existsSync(join(projectRoot, 'adytum.config.yaml'))) {
       console.log(chalk.red('✗  No adytum.config.yaml found.'));
-      console.log(chalk.dim('   Run `adytum init` first.'));
-      return;
+      console.log(chalk.dim('   Run `adytum init` first to set up your agent.\n'));
+      process.exit(1);
     }
 
-    // Dynamically import to avoid loading heavy deps during init
-    const { startGateway } = await import('../index.js');
-    await startGateway(projectRoot);
+    try {
+      // Dynamically import to avoid loading heavy deps during init
+      const { startGateway } = await import('../index.js');
+      await startGateway(projectRoot);
+    } catch (err: any) {
+      console.error(chalk.red(`\n  ❌ Gateway failed to start: ${err.message}`));
+      if (process.env.DEBUG) console.error(err);
+      process.exit(1);
+    }
   });
 
 // ─── adytum status ────────────────────────────────────────────
@@ -102,3 +108,10 @@ program
   });
 
 program.parse();
+
+// Catch unhandled rejections so errors are never swallowed
+process.on('unhandledRejection', (err: any) => {
+  console.error(chalk.red(`\n  ❌ Unhandled error: ${err?.message || err}`));
+  if (process.env.DEBUG) console.error(err);
+  process.exit(1);
+});

@@ -10,3 +10,6 @@ data/
 *.tsbuildinfo
 coverage/
 .turbo/
+adytum.config.yaml
+litellm_config.yaml
+workspace/

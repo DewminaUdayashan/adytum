@@ -1,6 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import chalk from 'chalk';
 import { createInterface } from 'node:readline';
+import { fileURLToPath } from 'node:url';
 import { loadConfig } from './config.js';
 import { GatewayServer } from './server.js';
 import { AgentRuntime } from './agent/runtime.js';
@@ -16,6 +17,23 @@ import { tokenTracker } from './agent/token-tracker.js';
 import { auditLogger } from './security/audit-logger.js';
 import { autoProvisionStorage } from './storage/provision.js';
 import type { AdytumConfig } from '@adytum/shared';
+
+// ─── Direct Execution Detection ─────────────────────────────
+// If this file is run directly (e.g. `node dist/index.js start`),
+// delegate to the CLI entry point which uses Commander.
+import { resolve, dirname } from 'node:path';
+
+const __filename = fileURLToPath(import.meta.url);
+const entryFile = process.argv[1] ? resolve(process.argv[1]) : '';
+
+if (entryFile === __filename) {
+  // Dynamically import the CLI which parses process.argv via Commander
+  import('./cli/index.js').catch((err) => {
+    console.error(chalk.red('\n  ❌ Fatal error:'), err.message || err);
+    if (process.env.DEBUG) console.error(err);
+    process.exit(1);
+  });
+}
 
 /** Start the full Adytum gateway with terminal CLI. */
 export async function startGateway(projectRoot: string): Promise<void> {
