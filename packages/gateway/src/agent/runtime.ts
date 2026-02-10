@@ -197,7 +197,18 @@ export class AgentRuntime extends EventEmitter {
       trace.endTime = Date.now();
       trace.status = 'failed';
       trace.outcome = error.message;
-      finalResponse = `I encountered an error: ${error.message}`;
+
+      // Provide a user-friendly error instead of raw stack trace
+      const msg = error.message || String(error);
+      if (msg.includes('All models failed')) {
+        finalResponse = `I encountered an error: ${msg}`;
+      } else if (msg.includes('No API key')) {
+        finalResponse = `I can't respond because: ${msg}`;
+      } else if (msg.includes('ECONNREFUSED') || msg.includes('fetch failed')) {
+        finalResponse = `I can't reach the model provider. Check your API keys or network connection.\n\nDetails: ${msg}`;
+      } else {
+        finalResponse = `I encountered an error: ${msg}`;
+      }
 
       this.context.addMessage({ role: 'assistant', content: finalResponse });
     }

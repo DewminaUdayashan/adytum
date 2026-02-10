@@ -80,6 +80,10 @@ export async function startGateway(projectRoot: string): Promise<void> {
     models: config.models,
   });
 
+  // Detect LiteLLM vs direct API mode
+  const llmStatus = await modelRouter.initialize();
+  console.log(chalk.green('  ✓ ') + chalk.white(`LLM: ${llmStatus}`));
+
   const soulEngine = new SoulEngine(config.workspacePath);
   const skillLoader = new SkillLoader(config.workspacePath);
 
