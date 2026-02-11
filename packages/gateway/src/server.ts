@@ -829,10 +829,14 @@ export class GatewayServer extends EventEmitter {
     const cfg = loadConfig();
     const defaultCommSkillId =
       cfg.execution?.defaultCommSkillId ||
-      this.config.skillLoader
-        ?.getAll()
-        .find((s) => s.communication)?.id;
-    const defaultChannel = cfg.execution?.defaultChannel;
+      this.config.skillLoader?.getAll().find((s) => s.communication)?.id;
+
+    const defaultChannel =
+      payload.meta?.defaultChannel ||
+      cfg.execution?.defaultChannel ||
+      cfg.skills?.permissions?.defaultChannel ||
+      cfg.skills?.entries?.[defaultCommSkillId || '']?.config?.defaultChannelId ||
+      cfg.skills?.entries?.[defaultCommSkillId || '']?.config?.defaultChannel;
     if (defaultCommSkillId && defaultChannel && this.config.toolRegistry) {
       let sendTool =
         this.config.toolRegistry.get(`${defaultCommSkillId}_send`) ||
