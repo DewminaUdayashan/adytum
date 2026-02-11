@@ -361,8 +361,8 @@ export class GatewayServer extends EventEmitter {
         load: { paths: [] },
         entries: {},
       };
-      const currentEntries = currentSkills.entries || {};
-      const currentEntry = currentEntries[id] || {};
+      const currentEntries: Record<string, any> = currentSkills.entries || {};
+      const currentEntry: Record<string, any> = currentEntries[id] || {};
 
       const nextEntry = {
         ...currentEntry,
