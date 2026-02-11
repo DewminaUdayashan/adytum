@@ -74,11 +74,16 @@ Accepted by `--due` and date filters:
 
 - `today`, `tomorrow`, `yesterday`
 - `YYYY-MM-DD`
-- `YYYY-MM-DD HH:mm`
-- ISO 8601 (`2026-01-04T12:34:56Z`)
+- `YYYY-MM-DDTHH:mm` (recommended; include the `T`)
+- ISO 8601 with timezone (`2026-01-04T12:34:56-05:00`)
+- Natural phrases like `tomorrow 3pm`
 
 Notes
 
-- macOS-only.
-- If access is denied, enable Terminal/remindctl in System Settings → Privacy & Security → Reminders.
-- If running over SSH, grant access on the Mac that runs the command.
+Potential Fixes if encountered time format issues.
+
+Try these variations to see which one your specific version of remindctl prefers:
+
+- Option 1: Use a space instead of 'T' Many CLI parsers prefer a space between the date and time. remindctl add "Title" --due "2026-02-12 15:30"
+- Option 2: Use quotes with a simplified format If the tool assumes your local system time, you can drop the offset: remindctl add "Title" --due "2026-02-12 15:30:00"
+- Option 3: Use the "Slash" format Some older utilities look for YYYY/MM/DD: remindctl add "Title" --due "2026/02/12 15:30"

@@ -446,13 +446,13 @@ class DiscordService {
     const channels = await guild.channels.fetch();
 
     return channels
-      .filter((channel) => {
+      .filter((channel: { type: ChannelType; }) => {
         if (!channel) return false;
         if (channel.type === ChannelType.GuildVoice && !input?.includeVoiceChannels) return false;
         if (channel.type === ChannelType.GuildCategory && !input?.includeCategories) return false;
         return true;
       })
-      .map((channel) => ({
+      .map((channel: any) => ({
         id: channel!.id,
         name: channel!.name,
         type: ChannelType[channel!.type] || String(channel!.type),
@@ -512,7 +512,7 @@ class DiscordService {
       limit: input?.limit ?? 25,
     });
 
-    return members.map((member) => ({
+    return members.map((member: { id: any; user: { username: any; bot: any; }; displayName: any; }) => ({
       id: member.id,
       username: member.user?.username,
       displayName: member.displayName,
