@@ -20,11 +20,12 @@ interface ChatMessage {
 }
 
 export default function ChatPage() {
-  const { connected, events, sendMessage, sessionId } = useGatewaySocket();
+  const { connected, events, sendMessage, sendFrame, sessionId } = useGatewaySocket();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
   const [pendingTools, setPendingTools] = useState<string[]>([]);
+  const [approvals, setApprovals] = useState<Array<{ id: string; description: string; kind: string }>>([]);
   const [activityFeed, setActivityFeed] = useState<ThinkingActivityEntry[]>([]);
   const [thinkingStartedAt, setThinkingStartedAt] = useState<number | null>(null);
   const [hasRestored, setHasRestored] = useState(false);
@@ -119,6 +120,14 @@ export default function ChatPage() {
         continue;
       }
 
+      if (event.type === 'approval_request') {
+        setApprovals((prev) => {
+          if (prev.some((p) => p.id === event.id)) return prev;
+          return [...prev, { id: String(event.id), description: String(event.description || ''), kind: String(event.kind || '') }];
+        });
+        continue;
+      }
+
       if (event.type !== 'stream' || event.sessionId !== sessionId) {
         continue;
       }
@@ -187,6 +196,14 @@ export default function ChatPage() {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages.length, isThinking, activityFeed.length, pendingTools.length]);
 
+  const handleApproval = useCallback(
+    (id: string, approved: boolean) => {
+      sendFrame({ type: 'approval_response', id, approved });
+      setApprovals((prev) => prev.filter((p) => p.id !== id));
+    },
+    [sendFrame],
+  );
+
   const handleSend = useCallback(() => {
     const text = input.trim();
     if (!text || !connected) return;
@@ -233,6 +250,35 @@ export default function ChatPage() {
           </div>
         </div>
       </div>
+
+      {/* Approvals */}
+      {approvals.length > 0 && (
+        <div className="px-8 pb-3 space-y-2">
+          {approvals.map((req) => (
+            <div key={req.id} className="rounded-lg border border-border-primary bg-bg-primary/50 px-4 py-3 flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-text-primary">Approval required</p>
+                <p className="text-xs text-text-muted mt-1">{req.description || req.kind}</p>
+                <p className="text-[11px] text-text-tertiary font-mono">{req.id}</p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  className="rounded-md bg-success/20 text-success px-3 py-2 text-xs font-semibold border border-success/40"
+                  onClick={() => handleApproval(req.id, true)}
+                >
+                  Approve
+                </button>
+                <button
+                  className="rounded-md bg-error/15 text-error px-3 py-2 text-xs font-semibold border border-error/30"
+                  onClick={() => handleApproval(req.id, false)}
+                >
+                  Deny
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-auto px-8 py-4 space-y-4">

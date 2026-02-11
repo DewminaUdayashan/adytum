@@ -14,6 +14,7 @@ import type { PermissionManager } from './security/permission-manager.js';
 import type { HeartbeatManager } from './agent/heartbeat-manager.js';
 import type { CronManager } from './agent/cron-manager.js';
 import type { SkillLoader } from './agent/skill-loader.js';
+import type { ToolRegistry } from './tools/registry.js';
 
 export interface ServerConfig {
   port: number;
@@ -825,13 +826,17 @@ export class GatewayServer extends EventEmitter {
     });
 
     // Notify via communication skill if configured
-    const defaultCommSkillId = this.config.config.execution?.defaultCommSkillId;
-    const defaultChannel = this.config.config.execution?.defaultChannel;
+    const cfg = loadConfig();
+    const defaultCommSkillId = cfg.execution?.defaultCommSkillId;
+    const defaultChannel = cfg.execution?.defaultChannel;
     if (defaultCommSkillId && defaultChannel && this.config.toolRegistry) {
-      const sendTool =
-        this.config.toolRegistry.get('discord_send') ||
-        this.config.toolRegistry.get('slack_send') ||
-        null;
+      let sendTool = null;
+      if (defaultCommSkillId === 'discord') sendTool = this.config.toolRegistry.get('discord_send');
+      else if (defaultCommSkillId === 'slack') sendTool = this.config.toolRegistry.get('slack_send');
+      else {
+        // fallback: try common send tool names
+        sendTool = this.config.toolRegistry.get(`${defaultCommSkillId}_send`) || this.config.toolRegistry.get('discord_send');
+      }
       if (sendTool) {
         // fire and forget
         sendTool

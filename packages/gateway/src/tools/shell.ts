@@ -11,6 +11,7 @@ export type ShellApprovalResult = {
   reason?: string;
   mode?: 'auto' | 'ask' | 'deny';
   defaultChannel?: string;
+  defaultCommSkillId?: string;
   message?: string;
 };
 

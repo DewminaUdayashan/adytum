@@ -183,6 +183,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
     heartbeatManager,
     cronManager,
     skillLoader,
+    toolRegistry,
     onScheduleUpdate: (type, intervalMinutes) => {
       if (type === 'dreamer') scheduleDreamer(intervalMinutes);
       else if (type === 'monologue') scheduleMonologue(intervalMinutes);
