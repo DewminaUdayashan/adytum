@@ -203,6 +203,41 @@ export class MemoryDB {
     stmt.run(crypto.randomUUID(), content, Date.now(), 'pending');
   }
 
+  redactSensitiveData(redact: (text: string) => string): { messages: number; memories: number } {
+    let messagesUpdated = 0;
+    let memoriesUpdated = 0;
+
+    const messageRows = this.db.prepare('SELECT id, content FROM messages').all() as Array<{ id: string; content: string }>;
+    const updateMessage = this.db.prepare('UPDATE messages SET content = ? WHERE id = ?');
+
+    for (const row of messageRows) {
+      const cleaned = redact(row.content);
+      if (cleaned !== row.content) {
+        updateMessage.run(cleaned, row.id);
+        messagesUpdated += 1;
+      }
+    }
+
+    const memoryRows = this.db.prepare('SELECT id, content FROM memories').all() as Array<{ id: string; content: string }>;
+    const updateMemory = this.db.prepare('UPDATE memories SET content = ? WHERE id = ?');
+
+    for (const row of memoryRows) {
+      const cleaned = redact(row.content);
+      if (cleaned !== row.content) {
+        updateMemory.run(cleaned, row.id);
+        memoriesUpdated += 1;
+        try {
+          this.db.prepare('DELETE FROM memories_fts WHERE memory_id = ?').run(row.id);
+          this.db.prepare('INSERT INTO memories_fts (content, memory_id) VALUES (?, ?)').run(cleaned, row.id);
+        } catch {
+          // ignore if FTS unavailable
+        }
+      }
+    }
+
+    return { messages: messagesUpdated, memories: memoriesUpdated };
+  }
+
   addPendingUpdate(updateType: 'soul' | 'guidelines', content: string): void {
     const stmt = this.db.prepare(
       'INSERT INTO pending_updates (id, update_type, content, created_at, status) VALUES (?, ?, ?, ?, ?)'

@@ -102,7 +102,8 @@ export const AgentLogSchema = z.object({
   actionType: z.enum([
     'model_call', 'model_response', 'tool_call', 'tool_result',
     'thinking', 'message_sent', 'message_received',
-    'security_event', 'error', 'sub_agent_spawn',
+    'security_event', 'error', 'sub_agent_spawn', 'monologue_run',
+    'dreamer_run'
   ]),
   payload: z.record(z.unknown()),
   status: z.enum(['success', 'error', 'blocked', 'pending']),
@@ -166,6 +167,19 @@ export const SkillMetadataSchema = z.object({
 });
 export type SkillMetadata = z.infer<typeof SkillMetadataSchema>;
 
+// ─── Discord Config ──────────────────────────────────────────
+
+export const DiscordConfigSchema = z.object({
+  enabled: z.boolean().default(false),
+  botToken: z.string().optional(),
+  defaultChannelId: z.string().optional(),
+  guildId: z.string().optional(),
+  allowedChannelIds: z.array(z.string()).optional(),
+  allowedUserIds: z.array(z.string()).optional(),
+  allowDm: z.boolean().optional(),
+});
+export type DiscordConfig = z.infer<typeof DiscordConfigSchema>;
+
 // ─── Agent Config ─────────────────────────────────────────────
 
 export const AdytumConfigSchema = z.object({
@@ -181,5 +195,8 @@ export const AdytumConfigSchema = z.object({
   dashboardPort: z.number().default(3000),
   contextSoftLimit: z.number().default(40000),
   heartbeatIntervalMinutes: z.number().default(30),
+  dreamerIntervalMinutes: z.number().default(30),
+  monologueIntervalMinutes: z.number().default(15),
+  discord: DiscordConfigSchema.optional(),
 });
 export type AdytumConfig = z.infer<typeof AdytumConfigSchema>;

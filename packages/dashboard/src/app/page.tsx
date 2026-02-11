@@ -137,9 +137,11 @@ function ActivityItem({ activity }: { activity: LogEntry }) {
         <div className="mt-3 flex items-center gap-3">
            <FeedbackButtons traceId={activity.id} />
            {activity.status && (
-             <Badge variant={activity.status === 'success' ? 'success' : 'error'} size="sm" className="uppercase tracking-widest text-[9px] py-0.5">
-               {activity.status}
-             </Badge>
+             <span className="uppercase tracking-widest text-[9px] py-0.5">
+               <Badge variant={activity.status === 'success' ? 'success' : 'error'} size="sm">
+                 {activity.status}
+               </Badge>
+             </span>
            )}
         </div>
       </div>

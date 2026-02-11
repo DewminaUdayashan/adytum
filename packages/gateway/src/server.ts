@@ -18,6 +18,8 @@ export interface ServerConfig {
   workspacePath?: string;
   heartbeatManager?: HeartbeatManager;
   cronManager?: CronManager;
+  /** Callback to reschedule dreamer/monologue intervals */
+  onScheduleUpdate?: (type: 'dreamer' | 'monologue', intervalMinutes: number) => void;
 }
 
 /**
@@ -221,6 +223,60 @@ export class GatewayServer extends EventEmitter {
        saveConfig({ heartbeatIntervalMinutes: interval });
 
        return { success: true, interval };
+    });
+
+    // ─── Schedule Settings (Dreamer / Monologue / Heartbeat) ─
+    this.app.get('/api/schedules', async () => {
+       const { loadConfig } = await import('./config.js');
+       const cfg = loadConfig();
+       return {
+         heartbeat: cfg.heartbeatIntervalMinutes,
+         dreamer: cfg.dreamerIntervalMinutes,
+         monologue: cfg.monologueIntervalMinutes,
+       };
+    });
+
+    this.app.put('/api/schedules', async (request, reply) => {
+       const body = request.body as {
+         heartbeat?: number;
+         dreamer?: number;
+         monologue?: number;
+       };
+
+       const updates: Record<string, number> = {};
+       const results: Record<string, number> = {};
+
+       if (body.heartbeat && body.heartbeat >= 1) {
+         const interval = Math.floor(body.heartbeat);
+         if (this.config.heartbeatManager) {
+           this.config.heartbeatManager.schedule(interval);
+         }
+         updates.heartbeatIntervalMinutes = interval;
+         results.heartbeat = interval;
+       }
+
+       if (body.dreamer && body.dreamer >= 1) {
+         const interval = Math.floor(body.dreamer);
+         this.config.onScheduleUpdate?.('dreamer', interval);
+         updates.dreamerIntervalMinutes = interval;
+         results.dreamer = interval;
+       }
+
+       if (body.monologue && body.monologue >= 1) {
+         const interval = Math.floor(body.monologue);
+         this.config.onScheduleUpdate?.('monologue', interval);
+         updates.monologueIntervalMinutes = interval;
+         results.monologue = interval;
+       }
+
+       if (Object.keys(updates).length === 0) {
+         return reply.status(400).send({ error: 'Provide at least one of: heartbeat, dreamer, monologue (minutes, >= 1)' });
+       }
+
+       // Persist to config file
+       saveConfig(updates);
+
+       return { success: true, ...results };
     });
 
     // ─── Cron Jobs API ──────────────────────────────────────

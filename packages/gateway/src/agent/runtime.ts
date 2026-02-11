@@ -268,6 +268,10 @@ export class AgentRuntime extends EventEmitter {
         break;
       }
 
+      if (!finalResponse.trim()) {
+        finalResponse = 'I did not receive a usable response from the model. Please try again.';
+      }
+
       trace.endTime = Date.now();
       trace.outcome = finalResponse.slice(0, 200);
       trace.status = 'completed';

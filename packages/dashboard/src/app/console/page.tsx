@@ -95,13 +95,27 @@ export default function ConsolePage() {
 
 function ConsoleEntry({ event }: { event: StreamEvent }) {
   const type = event.streamType || event.type || 'unknown';
-  const color = TYPE_COLORS[type] || 'text-text-secondary';
-  const prefix = TYPE_PREFIXES[type] || type.toUpperCase();
+  let color = TYPE_COLORS[type] || 'text-text-secondary';
+  let prefix = TYPE_PREFIXES[type] || type.toUpperCase();
   const time = new Date().toLocaleTimeString('en-US', { hour12: false });
 
   let content = '';
   if (event.delta) {
     content = event.delta;
+    if (type === 'status') {
+      const match = content.match(/^\[(dreamer_run|monologue_run)\]\s*/);
+      if (match) {
+        const tag = match[1];
+        if (tag === 'dreamer_run') {
+          prefix = '🌙 DREAMER';
+          color = 'text-accent-primary';
+        } else if (tag === 'monologue_run') {
+          prefix = '🧠 MONOLOGUE';
+          color = 'text-accent-secondary';
+        }
+        content = content.replace(/^\[[^\]]+\]\s*/, '');
+      }
+    }
   } else if (event.type === 'token_update') {
     content = `model=${event.model} tokens=${event.totalTokens} cost=$${(Number(event.estimatedCost) || 0).toFixed(4)}`;
   } else if (event.type === 'connect') {

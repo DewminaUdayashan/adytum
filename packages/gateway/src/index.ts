@@ -25,6 +25,8 @@ import { InnerMonologue } from './agent/inner-monologue.js';
 import { HeartbeatManager } from './agent/heartbeat-manager.js';
 import { CronManager } from './agent/cron-manager.js';
 import { createCronTools } from './tools/cron.js';
+import { DiscordBridge } from './agent/discord-bridge.js';
+import { createDiscordTools } from './tools/discord.js';
 import cron from 'node-cron';
 import type { AdytumConfig } from '@adytum/shared';
 
@@ -85,8 +87,6 @@ export async function startGateway(projectRoot: string): Promise<void> {
     toolRegistry.register(pTool);
   }
 
-  console.log(chalk.green('  ✓ ') + chalk.white(`Tools: ${toolRegistry.getAll().length} registered`));
-
   // ── Agent Runtime ─────────────────────────────────────────
   const modelRouter = new ModelRouter({
     litellmBaseUrl: `http://localhost:${config.litellmPort}/v1`,
@@ -123,32 +123,61 @@ export async function startGateway(projectRoot: string): Promise<void> {
   const dreamer = new Dreamer(modelRouter, memoryDb, memoryStore, config.dataPath, config.workspacePath);
   const monologue = new InnerMonologue(modelRouter, memoryDb, memoryStore);
   const heartbeatManager = new HeartbeatManager(agent, config.workspacePath);
-  const cronManager = new CronManager(agent, config.dataPath);
+
+  // Managed cron tasks for dreamer and monologue (restartable)
+  let dreamerTask: cron.ScheduledTask | null = null;
+  let monologueTask: cron.ScheduledTask | null = null;
+
+  function scheduleDreamer(minutes: number) {
+    dreamerTask?.stop();
+    const safe = Math.max(1, Math.floor(minutes));
+    const expr = safe < 60 ? `*/${safe} * * * *` : `0 */${Math.floor(safe / 60)} * * *`;
+    console.log(chalk.dim(`  [Dreamer] Scheduling every ${safe}m → ${expr}`));
+    dreamerTask = cron.schedule(expr, async () => {
+      try { await dreamer.run(); } catch (err) { if (process.env.DEBUG) console.error(err); }
+    });
+  }
+
+  function scheduleMonologue(minutes: number) {
+    monologueTask?.stop();
+    const safe = Math.max(1, Math.floor(minutes));
+    const expr = safe < 60 ? `*/${safe} * * * *` : `0 */${Math.floor(safe / 60)} * * *`;
+    console.log(chalk.dim(`  [Monologue] Scheduling every ${safe}m → ${expr}`));
+    monologueTask = cron.schedule(expr, async () => {
+      try { await monologue.run(); } catch (err) { if (process.env.DEBUG) console.error(err); }
+    });
+  }
+
+  scheduleDreamer(config.dreamerIntervalMinutes);
+  scheduleMonologue(config.monologueIntervalMinutes);
+
+  // ── Discord Bridge ─────────────────────────────────────────
+  const discordBridge = config.discord?.enabled && config.discord.botToken
+    ? new DiscordBridge(agent, config.discord)
+    : null;
+
+  if (discordBridge) {
+    try {
+      await discordBridge.start();
+      for (const tool of createDiscordTools(discordBridge)) {
+        toolRegistry.register(tool);
+      }
+    } catch (err: any) {
+      console.error(chalk.red(`  ✗ Discord bridge failed: ${err.message || err}`));
+    }
+  }
+
+  const cronManager = new CronManager(agent, config.dataPath, discordBridge);
 
   // Register Cron Tools (needs agent instance)
   for (const tool of createCronTools(cronManager)) {
     toolRegistry.register(tool);
   }
+  console.log(chalk.green('  ✓ ') + chalk.white(`Tools: ${toolRegistry.getAll().length} registered`));
   agent.refreshSystemPrompt();
   
   // Start Heartbeat Scheduler
   heartbeatManager.start(config.heartbeatIntervalMinutes);
-
-  cron.schedule('*/30 * * * *', async () => {
-    try {
-      await dreamer.run();
-    } catch (err) {
-      if (process.env.DEBUG) console.error(err);
-    }
-  });
-
-  cron.schedule('*/15 * * * *', async () => {
-    try {
-      await monologue.run();
-    } catch (err) {
-      if (process.env.DEBUG) console.error(err);
-    }
-  });
 
   console.log(chalk.green('  ✓ ') + chalk.white(`Agent: ${config.agentName} loaded`));
 
@@ -160,6 +189,10 @@ export async function startGateway(projectRoot: string): Promise<void> {
     workspacePath: config.workspacePath,
     heartbeatManager,
     cronManager,
+    onScheduleUpdate: (type, intervalMinutes) => {
+      if (type === 'dreamer') scheduleDreamer(intervalMinutes);
+      else if (type === 'monologue') scheduleMonologue(intervalMinutes);
+    },
   });
 
   // Route WebSocket messages to agent
@@ -204,6 +237,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
     console.log(chalk.dim(`\n  ${config.agentName} is resting. Goodbye.\n`));
     rl.close();
     permissionManager.stopWatching();
+    await discordBridge?.stop();
     await server.stop();
     process.exit(0);
   };
@@ -261,6 +295,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
     if (input.toLowerCase() === 'exit') {
       console.log(chalk.dim(`\n  ${config.agentName} is resting. Goodbye.\n`));
       permissionManager.stopWatching();
+      await discordBridge?.stop();
       await server.stop();
       process.exit(0);
     }
@@ -319,6 +354,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
 
   rl.on('close', async () => {
     permissionManager.stopWatching();
+    await discordBridge?.stop();
     await server.stop();
     process.exit(0);
   });

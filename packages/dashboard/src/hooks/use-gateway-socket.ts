@@ -18,7 +18,31 @@ export function useGatewaySocket() {
   const [connected, setConnected] = useState(false);
   const [events, setEvents] = useState<StreamEvent[]>([]);
   const sessionIdRef = useRef<string>(crypto.randomUUID());
+  const [wsSessionId, setWsSessionId] = useState<string>(sessionIdRef.current);
   const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const hasRestoredRef = useRef(false);
+
+  // Restore events from sessionStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const raw = window.sessionStorage.getItem('adytum.console.events');
+    if (raw) {
+      try {
+        const parsed = JSON.parse(raw) as StreamEvent[];
+        if (Array.isArray(parsed)) setEvents(parsed);
+      } catch {
+        // ignore
+      }
+    }
+    hasRestoredRef.current = true;
+  }, []);
+
+  // Persist events to sessionStorage
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!hasRestoredRef.current) return;
+    window.sessionStorage.setItem('adytum.console.events', JSON.stringify(events));
+  }, [events]);
 
   const connect = useCallback(() => {
     if (socketRef.current?.readyState === WebSocket.OPEN) return;
@@ -41,6 +65,7 @@ export function useGatewaySocket() {
         const data = JSON.parse(e.data) as StreamEvent;
         if (data.type === 'connect' && data.sessionId) {
           sessionIdRef.current = data.sessionId;
+          setWsSessionId(data.sessionId);
         }
         setEvents((prev) => [...prev.slice(-500), data]); // Keep last 500
       } catch {
@@ -79,5 +104,5 @@ export function useGatewaySocket() {
     };
   }, [connect]);
 
-  return { connected, events, sendMessage, clearEvents, sessionId: sessionIdRef.current };
+  return { connected, events, sendMessage, clearEvents, sessionId: wsSessionId || sessionIdRef.current };
 }
