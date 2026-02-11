@@ -827,16 +827,19 @@ export class GatewayServer extends EventEmitter {
 
     // Notify via communication skill if configured
     const cfg = loadConfig();
-    const defaultCommSkillId = cfg.execution?.defaultCommSkillId;
+    const defaultCommSkillId =
+      cfg.execution?.defaultCommSkillId ||
+      this.config.skillLoader
+        ?.getAll()
+        .find((s) => s.communication)?.id;
     const defaultChannel = cfg.execution?.defaultChannel;
     if (defaultCommSkillId && defaultChannel && this.config.toolRegistry) {
-      let sendTool = null;
-      if (defaultCommSkillId === 'discord') sendTool = this.config.toolRegistry.get('discord_send');
-      else if (defaultCommSkillId === 'slack') sendTool = this.config.toolRegistry.get('slack_send');
-      else {
-        // fallback: try common send tool names
-        sendTool = this.config.toolRegistry.get(`${defaultCommSkillId}_send`) || this.config.toolRegistry.get('discord_send');
-      }
+      let sendTool =
+        this.config.toolRegistry.get(`${defaultCommSkillId}_send`) ||
+        (defaultCommSkillId === 'discord' ? this.config.toolRegistry.get('discord_send') : null) ||
+        (defaultCommSkillId === 'slack' ? this.config.toolRegistry.get('slack_send') : null) ||
+        this.config.toolRegistry.get('discord_send');
+
       if (sendTool) {
         // fire and forget
         sendTool
@@ -844,7 +847,11 @@ export class GatewayServer extends EventEmitter {
             channelId: defaultChannel,
             message: `Approval needed: ${payload.description}\nRequest ID: ${id}`,
           })
-          .catch(() => undefined);
+          .catch((err: any) => {
+            console.warn('[approval] failed to send comm notification:', err?.message || err);
+          });
+      } else {
+        console.warn('[approval] no send tool found for comm skill', defaultCommSkillId);
       }
     }
 
