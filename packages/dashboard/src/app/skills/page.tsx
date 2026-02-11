@@ -51,8 +51,21 @@ type SkillRecord = {
   error?: string;
   toolNames: string[];
   serviceIds: string[];
+  instructionFiles: string[];
   manifest: SkillManifest | null;
   configEntry: SkillConfigEntry;
+};
+
+type SkillInstructionFile = {
+  path: string;
+  relativePath: string;
+  content: string;
+  editable: boolean;
+};
+
+type SkillInstructionsResponse = {
+  files: SkillInstructionFile[];
+  combined: string;
 };
 
 type SkillsResponse = {
@@ -64,6 +77,10 @@ type SkillsResponse = {
     loadPaths: string[];
   };
 };
+
+function instructionContentKey(skillId: string, relativePath: string): string {
+  return `${skillId}:${relativePath}`;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -288,6 +305,12 @@ export default function SkillsPage() {
   const [draftEnabled, setDraftEnabled] = useState<Record<string, boolean>>({});
   const [originalConfig, setOriginalConfig] = useState<Record<string, Record<string, unknown>>>({});
   const [originalEnabled, setOriginalEnabled] = useState<Record<string, boolean>>({});
+  const [instructionFilesBySkill, setInstructionFilesBySkill] = useState<Record<string, SkillInstructionFile[]>>({});
+  const [selectedInstructionFileBySkill, setSelectedInstructionFileBySkill] = useState<Record<string, string>>({});
+  const [instructionDrafts, setInstructionDrafts] = useState<Record<string, string>>({});
+  const [instructionOriginals, setInstructionOriginals] = useState<Record<string, string>>({});
+  const [instructionLoadingSkillId, setInstructionLoadingSkillId] = useState<string | null>(null);
+  const [instructionSavingSkillId, setInstructionSavingSkillId] = useState<string | null>(null);
 
   const loadSkills = async () => {
     try {
@@ -326,14 +349,76 @@ export default function SkillsPage() {
     }
   };
 
+  const loadSkillInstructions = async (skillId: string) => {
+    try {
+      setInstructionLoadingSkillId(skillId);
+      const res = await gatewayFetch<SkillInstructionsResponse>(`/api/skills/${skillId}/instructions`);
+      const files = Array.isArray(res.files) ? res.files : [];
+
+      setInstructionFilesBySkill((prev) => ({
+        ...prev,
+        [skillId]: files,
+      }));
+
+      setSelectedInstructionFileBySkill((prev) => {
+        if (prev[skillId] && files.some((file) => file.relativePath === prev[skillId])) {
+          return prev;
+        }
+        const firstPath = files[0]?.relativePath || '';
+        return {
+          ...prev,
+          [skillId]: firstPath,
+        };
+      });
+
+      setInstructionDrafts((prev) => {
+        const next = { ...prev };
+        for (const file of files) {
+          next[instructionContentKey(skillId, file.relativePath)] = file.content || '';
+        }
+        return next;
+      });
+
+      setInstructionOriginals((prev) => {
+        const next = { ...prev };
+        for (const file of files) {
+          next[instructionContentKey(skillId, file.relativePath)] = file.content || '';
+        }
+        return next;
+      });
+
+      setError(null);
+    } catch (err: any) {
+      setError(err.message || String(err));
+    } finally {
+      setInstructionLoadingSkillId((current) => (current === skillId ? null : current));
+    }
+  };
+
   useEffect(() => {
     loadSkills();
   }, []);
+
+  useEffect(() => {
+    if (!selectedSkillId) return;
+    if (instructionFilesBySkill[selectedSkillId]) return;
+    loadSkillInstructions(selectedSkillId);
+  }, [selectedSkillId, instructionFilesBySkill]);
 
   const hasSkillChanges = (skillId: string): boolean => {
     const cfgChanged = JSON.stringify(draftConfig[skillId] || {}) !== JSON.stringify(originalConfig[skillId] || {});
     const enabledChanged = draftEnabled[skillId] !== originalEnabled[skillId];
     return cfgChanged || enabledChanged;
+  };
+
+  const hasInstructionChanges = (skillId: string, relativePath: string): boolean => {
+    const key = instructionContentKey(skillId, relativePath);
+    return (instructionDrafts[key] || '') !== (instructionOriginals[key] || '');
+  };
+
+  const hasAnyInstructionChanges = (skillId: string): boolean => {
+    const files = instructionFilesBySkill[skillId] || [];
+    return files.some((file) => hasInstructionChanges(skillId, file.relativePath));
   };
 
   const saveSkill = async (skillId: string) => {
@@ -354,6 +439,35 @@ export default function SkillsPage() {
     }
   };
 
+  const saveSkillInstructions = async (skillId: string) => {
+    const selectedFile = selectedInstructionFileBySkill[skillId];
+    if (!selectedFile) {
+      setError('No instruction file selected for this skill');
+      return;
+    }
+
+    const key = instructionContentKey(skillId, selectedFile);
+    const content = instructionDrafts[key] || '';
+
+    try {
+      setInstructionSavingSkillId(skillId);
+      await gatewayFetch(`/api/skills/${skillId}/instructions`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          relativePath: selectedFile,
+          content,
+        }),
+      });
+      await loadSkillInstructions(skillId);
+      await loadSkills();
+      setError(null);
+    } catch (err: any) {
+      setError(err.message || String(err));
+    } finally {
+      setInstructionSavingSkillId((current) => (current === skillId ? null : current));
+    }
+  };
+
   const loadedCount = useMemo(
     () => skills.filter((skill) => skill.status === 'loaded').length,
     [skills],
@@ -362,6 +476,18 @@ export default function SkillsPage() {
     () => skills.find((skill) => skill.id === selectedSkillId) || null,
     [skills, selectedSkillId],
   );
+  const selectedInstructionFiles = selectedSkill
+    ? instructionFilesBySkill[selectedSkill.id] || []
+    : [];
+  const selectedInstructionPath = selectedSkill
+    ? selectedInstructionFileBySkill[selectedSkill.id] || selectedInstructionFiles[0]?.relativePath || ''
+    : '';
+  const selectedInstructionKey = selectedSkill && selectedInstructionPath
+    ? instructionContentKey(selectedSkill.id, selectedInstructionPath)
+    : '';
+  const selectedInstructionContent = selectedInstructionKey
+    ? instructionDrafts[selectedInstructionKey] || ''
+    : '';
 
   if (loading && skills.length === 0) {
     return (
@@ -413,7 +539,7 @@ export default function SkillsPage() {
                 <div className="space-y-2">
                   {skills.map((skill) => {
                     const isActive = selectedSkillId === skill.id;
-                    const hasChanges = hasSkillChanges(skill.id);
+                    const hasChanges = hasSkillChanges(skill.id) || hasAnyInstructionChanges(skill.id);
 
                     return (
                       <button
@@ -519,6 +645,88 @@ export default function SkillsPage() {
                         This skill does not expose configurable schema fields.
                       </div>
                     )}
+
+                    <div className="space-y-3 rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h3 className="text-sm font-semibold text-text-primary">Skill Prompt</h3>
+                        {selectedInstructionFiles.length > 1 && (
+                          <select
+                            value={selectedInstructionPath}
+                            onChange={(e) => {
+                              const nextPath = e.target.value;
+                              setSelectedInstructionFileBySkill((prev) => ({
+                                ...prev,
+                                [skill.id]: nextPath,
+                              }));
+                            }}
+                            className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-xs text-text-primary focus:border-accent-primary/50 focus:outline-none"
+                          >
+                            {selectedInstructionFiles.map((file) => (
+                              <option key={file.relativePath} value={file.relativePath}>
+                                {file.relativePath}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+
+                      {instructionLoadingSkillId === skill.id ? (
+                        <div className="flex items-center gap-2 text-sm text-text-muted">
+                          <Spinner size="sm" />
+                          Loading instructions...
+                        </div>
+                      ) : selectedInstructionFiles.length === 0 ? (
+                        <p className="text-sm text-text-muted">No instruction files found for this skill.</p>
+                      ) : (
+                        <>
+                          <textarea
+                            value={selectedInstructionContent}
+                            onChange={(e) => {
+                              if (!selectedInstructionPath) return;
+                              const key = instructionContentKey(skill.id, selectedInstructionPath);
+                              setInstructionDrafts((prev) => ({
+                                ...prev,
+                                [key]: e.target.value,
+                              }));
+                            }}
+                            className="min-h-[220px] w-full rounded-lg border border-border-primary bg-bg-tertiary px-3 py-2 font-mono text-xs leading-relaxed text-text-primary focus:border-accent-primary/50 focus:outline-none"
+                            spellCheck={false}
+                          />
+
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => {
+                                if (!selectedInstructionPath) return;
+                                const key = instructionContentKey(skill.id, selectedInstructionPath);
+                                setInstructionDrafts((prev) => ({
+                                  ...prev,
+                                  [key]: instructionOriginals[key] || '',
+                                }));
+                              }}
+                              disabled={!selectedInstructionPath || !hasInstructionChanges(skill.id, selectedInstructionPath)}
+                            >
+                              Reset Prompt
+                            </Button>
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              isLoading={instructionSavingSkillId === skill.id}
+                              onClick={() => saveSkillInstructions(skill.id)}
+                              disabled={
+                                !selectedInstructionPath ||
+                                !hasInstructionChanges(skill.id, selectedInstructionPath) ||
+                                instructionSavingSkillId === skill.id
+                              }
+                            >
+                              <Save className="h-3.5 w-3.5" />
+                              Save Prompt
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
 
                     <div className="flex items-center justify-end gap-2">
                       <Button

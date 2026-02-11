@@ -1,0 +1,108 @@
+{
+  "id": "web-surf",
+  "name": "Web Surf",
+  "description": "Autonomous web research with search, multi-rotation crawling, and configurable extraction budgets.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": { "type": "boolean", "default": true },
+      "searchProvider": {
+        "type": "string",
+        "enum": ["duckduckgo", "serpapi", "searxng"],
+        "default": "duckduckgo"
+      },
+      "serpApiKey": { "type": "string" },
+      "serpApiKeyEnv": { "type": "string", "default": "SERPAPI_API_KEY" },
+      "searxngBaseUrl": { "type": "string", "default": "http://localhost:8080" },
+      "defaultMaxResults": { "type": "integer", "default": 8 },
+      "defaultMaxPages": { "type": "integer", "default": 4 },
+      "defaultRotations": { "type": "integer", "default": 2 },
+      "maxTotalExtractChars": { "type": "integer", "default": 28000 },
+      "maxExtractCharsPerPage": { "type": "integer", "default": 7000 },
+      "requestTimeoutMs": { "type": "integer", "default": 15000 },
+      "blockPrivateIps": { "type": "boolean", "default": true },
+      "safeDomains": {
+        "type": "array",
+        "items": { "type": "string" },
+        "default": []
+      },
+      "blockedDomains": {
+        "type": "array",
+        "items": { "type": "string" },
+        "default": [
+          "localhost",
+          "metadata.google.internal",
+          "169.254.169.254",
+          "127.0.0.1",
+          "0.0.0.0",
+          "::1"
+        ]
+      },
+      "userAgent": { "type": "string", "default": "Adytum-WebSurf/0.1" },
+      "includeSearchSnippetsInContext": { "type": "boolean", "default": true }
+    }
+  },
+  "uiHints": {
+    "searchProvider": {
+      "label": "Search Provider",
+      "help": "duckduckgo works without API key. serpapi requires key. searxng requires local/remote SearXNG endpoint."
+    },
+    "serpApiKey": {
+      "label": "SERPAPI Key",
+      "help": "Optional direct key. If empty, serpApiKeyEnv is used.",
+      "sensitive": true
+    },
+    "serpApiKeyEnv": {
+      "label": "SERPAPI Key Env Var",
+      "help": "Environment variable name for SERPAPI key."
+    },
+    "searxngBaseUrl": {
+      "label": "SearXNG Base URL",
+      "help": "Used when searchProvider is searxng."
+    },
+    "defaultMaxResults": {
+      "label": "Default Results Per Search",
+      "help": "How many links to collect per rotation."
+    },
+    "defaultMaxPages": {
+      "label": "Default Pages To Open",
+      "help": "How many result pages web_surf fetches by default."
+    },
+    "defaultRotations": {
+      "label": "Default Rotations",
+      "help": "How many search query variations web_surf runs by default."
+    },
+    "maxTotalExtractChars": {
+      "label": "Max Total Extract Chars",
+      "help": "Global extraction budget per web_surf run (rough token burn control)."
+    },
+    "maxExtractCharsPerPage": {
+      "label": "Max Chars Per Page",
+      "help": "Per-page extraction cap."
+    },
+    "requestTimeoutMs": {
+      "label": "Request Timeout (ms)",
+      "help": "HTTP timeout for search/fetch requests."
+    },
+    "blockPrivateIps": {
+      "label": "Block Private IPs",
+      "help": "Protects against local/private network fetching (SSRF hardening)."
+    },
+    "safeDomains": {
+      "label": "Safe Domains Allowlist",
+      "help": "If non-empty, only these domains are fetchable (one per line)."
+    },
+    "blockedDomains": {
+      "label": "Blocked Domains",
+      "help": "Domains that are never fetched (one per line)."
+    },
+    "userAgent": {
+      "label": "HTTP User Agent"
+    },
+    "includeSearchSnippetsInContext": {
+      "label": "Include Search Snippets",
+      "help": "Attach result snippets to combinedContext when raw page text is omitted."
+    }
+  }
+}

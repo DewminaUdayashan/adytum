@@ -6,6 +6,8 @@ import { auditLogger } from './security/audit-logger.js';
 import { tokenTracker } from './agent/token-tracker.js';
 import { EventEmitter } from 'node:events';
 import { loadConfig, saveConfig } from './config.js';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join, relative, resolve } from 'node:path';
 import type { WebSocket } from 'ws';
 import type { PermissionManager } from './security/permission-manager.js';
 import type { HeartbeatManager } from './agent/heartbeat-manager.js';
@@ -156,7 +158,7 @@ export class GatewayServer extends EventEmitter {
         loadPaths: cfg.skills?.load?.paths ?? [],
       };
 
-      const skills = (this.config.skillLoader?.getAll() || []).map((skill) => ({
+	      const skills = (this.config.skillLoader?.getAll() || []).map((skill) => ({
         id: skill.id,
         name: skill.name,
         description: skill.description,
@@ -166,9 +168,10 @@ export class GatewayServer extends EventEmitter {
         enabled: skill.enabled,
         error: skill.error,
         toolNames: skill.toolNames,
-        serviceIds: skill.serviceIds,
-        manifestPath: skill.manifestPath,
-        manifest: skill.manifest
+	        serviceIds: skill.serviceIds,
+	        manifestPath: skill.manifestPath,
+	        instructionFiles: skill.instructionFiles.map((filePath) => relative(skill.path, filePath)),
+	        manifest: skill.manifest
           ? {
               id: skill.manifest.id,
               name: skill.manifest.name,
@@ -184,10 +187,102 @@ export class GatewayServer extends EventEmitter {
         configEntry: entries[skill.id] || {},
       }));
 
-      return { skills, global };
-    });
+	      return { skills, global };
+	    });
 
-    this.app.put('/api/skills/:id', async (request, reply) => {
+	    this.app.get('/api/skills/:id/instructions', async (request, reply) => {
+	      const { id } = request.params as { id: string };
+	      if (!this.config.skillLoader) {
+	        return reply.status(503).send({ error: 'Skill loader not available' });
+	      }
+
+	      const knownSkill = this.config.skillLoader.getAll().find((skill) => skill.id === id);
+	      if (!knownSkill) {
+	        return reply.status(404).send({ error: `Unknown skill: ${id}` });
+	      }
+
+	      const files = getInstructionFilesForSkill(knownSkill);
+	      const payload = files.map((filePath) => ({
+	        path: filePath,
+	        relativePath: relative(knownSkill.path, filePath),
+	        content: readFileSync(filePath, 'utf-8'),
+	        editable: true,
+	      }));
+
+	      return {
+	        files: payload,
+	        combined: knownSkill.instructions,
+	      };
+	    });
+
+	    this.app.put('/api/skills/:id/instructions', async (request, reply) => {
+	      const { id } = request.params as { id: string };
+	      const body = request.body as {
+	        relativePath?: string;
+	        content?: string;
+	      };
+
+	      if (!this.config.skillLoader) {
+	        return reply.status(503).send({ error: 'Skill loader not available' });
+	      }
+
+	      const knownSkill = this.config.skillLoader.getAll().find((skill) => skill.id === id);
+	      if (!knownSkill) {
+	        return reply.status(404).send({ error: `Unknown skill: ${id}` });
+	      }
+
+	      if (typeof body.content !== 'string') {
+	        return reply.status(400).send({ error: 'content string required' });
+	      }
+
+	      const instructionFiles = getInstructionFilesForSkill(knownSkill);
+	      let targetRelativePath = body.relativePath?.trim();
+	      let targetPath: string | undefined;
+
+	      if (targetRelativePath) {
+	        targetPath = instructionFiles.find(
+	          (filePath) => relative(knownSkill.path, filePath) === targetRelativePath,
+	        );
+	        if (!targetPath) {
+	          return reply.status(400).send({
+	            error: `relativePath must reference one of the skill instruction files: ${instructionFiles
+	              .map((filePath) => relative(knownSkill.path, filePath))
+	              .join(', ')}`,
+	          });
+	        }
+	      } else if (instructionFiles.length > 0) {
+	        targetPath = instructionFiles[0];
+	        targetRelativePath = relative(knownSkill.path, targetPath);
+	      } else {
+	        targetPath = resolve(knownSkill.path, 'SKILL.md');
+	        targetRelativePath = 'SKILL.md';
+	      }
+
+	      const resolvedTarget = resolve(targetPath);
+	      const resolvedRoot = resolve(knownSkill.path);
+	      if (!resolvedTarget.startsWith(`${resolvedRoot}/`) && resolvedTarget !== resolvedRoot) {
+	        return reply.status(400).send({ error: 'Instruction target must stay within skill directory' });
+	      }
+
+	      writeFileSync(resolvedTarget, body.content, 'utf-8');
+
+	      if (this.config.onSkillsReload) {
+	        try {
+	          await this.config.onSkillsReload();
+	        } catch (err: any) {
+	          return reply.status(500).send({
+	            error: `Instruction saved but skill reload failed: ${err?.message || err}`,
+	          });
+	        }
+	      }
+
+	      return {
+	        success: true,
+	        relativePath: targetRelativePath,
+	      };
+	    });
+
+	    this.app.put('/api/skills/:id', async (request, reply) => {
       const { id } = request.params as { id: string };
       const body = request.body as {
         enabled?: boolean;
@@ -542,7 +637,16 @@ export class GatewayServer extends EventEmitter {
     await this.app.close();
   }
 
-  private sendFrame(socket: WebSocket, frame: WebSocketFrame): void {
-    socket.send(serializeFrame(frame));
-  }
+	  private sendFrame(socket: WebSocket, frame: WebSocketFrame): void {
+	    socket.send(serializeFrame(frame));
+	  }
+	}
+
+function getInstructionFilesForSkill(skill: { path: string; instructionFiles: string[] }): string[] {
+  const files = skill.instructionFiles.filter((filePath) => existsSync(filePath));
+  if (files.length > 0) return files;
+
+  const fallback = join(skill.path, 'SKILL.md');
+  if (existsSync(fallback)) return [fallback];
+  return [];
 }

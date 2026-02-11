@@ -49,6 +49,7 @@ export interface LoadedSkill {
   toolNames: string[];
   serviceIds: string[];
   instructions: string;
+  instructionFiles: string[];
   manifest?: SkillManifest;
   module?: AdytumSkillPluginDefinition;
 }
@@ -198,12 +199,14 @@ export class SkillLoader {
           toolNames: [],
           serviceIds: [],
           instructions: '',
+          instructionFiles: [],
           manifest: undefined,
         });
         continue;
       }
 
       const manifest = manifestResult.manifest;
+      const instructionBundle = this.collectSkillInstructions(candidate.rootDir, manifest);
       if (seenIds.has(manifest.id)) {
         discovered.push({
           id: manifest.id,
@@ -219,7 +222,8 @@ export class SkillLoader {
           error: `Duplicate skill id "${manifest.id}" discovered at ${candidate.rootDir}`,
           toolNames: [],
           serviceIds: [],
-          instructions: this.collectSkillInstructions(candidate.rootDir, manifest),
+          instructions: instructionBundle.instructions,
+          instructionFiles: instructionBundle.files,
           manifest,
         });
         continue;
@@ -242,7 +246,8 @@ export class SkillLoader {
         error: state.enabled ? undefined : state.reason,
         toolNames: [],
         serviceIds: [],
-        instructions: this.collectSkillInstructions(candidate.rootDir, manifest),
+        instructions: instructionBundle.instructions,
+        instructionFiles: instructionBundle.files,
         manifest,
       });
     }
@@ -582,7 +587,10 @@ export class SkillLoader {
     return { ok: true, manifest, manifestPath };
   }
 
-  private collectSkillInstructions(rootDir: string, manifest: SkillManifest): string {
+  private collectSkillInstructions(
+    rootDir: string,
+    manifest: SkillManifest,
+  ): { instructions: string; files: string[] } {
     const filesToRead = new Set<string>();
 
     const rootSkill = join(rootDir, 'SKILL.md');
@@ -614,7 +622,10 @@ export class SkillLoader {
       }
     }
 
-    return sections.join('\n\n').trim();
+    return {
+      instructions: sections.join('\n\n').trim(),
+      files: Array.from(filesToRead.values()),
+    };
   }
 
   private resolveEnableState(id: string): { enabled: boolean; reason?: string } {

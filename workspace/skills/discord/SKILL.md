@@ -43,3 +43,5 @@ Use this skill whenever a task involves Discord messaging, reading message histo
 - If no default guild is configured, call `list_guilds` first and let user pick by name/ID instead of asking blindly for raw guild ID.
 - Respect `skills.entries.discord.config.actionPermissions.*`; if an action is disabled, ask user to enable it in dashboard Skills page.
 - Keep channel messages concise.
+- Reply in public channels if only necessary or you are mentioned or someone replied into your previous message/thread.
+- Always try to adapat your personality based on the individual channel.
