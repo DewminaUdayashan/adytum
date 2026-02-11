@@ -128,6 +128,27 @@ export class GatewayServer extends EventEmitter {
       };
     });
 
+    // ─── Approval Resolution (for comm channels) ────────────
+    this.app.post('/api/approvals/:id', async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const body = request.body as { approved?: boolean };
+      const ok = this.resolveApproval(id, Boolean(body?.approved));
+      if (!ok) return reply.status(404).send({ error: 'unknown_or_expired' });
+      return { success: true, id, approved: Boolean(body?.approved) };
+    });
+
+    this.app.get('/api/approvals/:id', async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const { approved } = request.query as { approved?: string };
+      if (approved === undefined) {
+        return reply.status(400).send({ error: 'approved query param required (true/false)' });
+      }
+      const value = approved === 'true' || approved === '1' || approved === 'yes';
+      const ok = this.resolveApproval(id, value);
+      if (!ok) return reply.status(404).send({ error: 'unknown_or_expired' });
+      return { success: true, id, approved: value };
+    });
+
     // ─── Feedback Submission ────────────────────────────────
     this.app.post('/api/feedback', async (request, reply) => {
       const body = request.body as {
@@ -808,6 +829,15 @@ export class GatewayServer extends EventEmitter {
     }
   }
 
+  /** Resolve a pending approval (returns false if not found). */
+  resolveApproval(id: string, approved: boolean): boolean {
+    const pending = this.pendingApprovals.get(id);
+    if (!pending) return false;
+    this.pendingApprovals.delete(id);
+    pending.resolve(Boolean(approved));
+    return true;
+  }
+
   async requestApproval(payload: { kind: string; description: string; meta?: Record<string, unknown> }): Promise<boolean> {
     const id = crypto.randomUUID();
     const expiresAt = Date.now() + 60_000;
@@ -867,11 +897,14 @@ export class GatewayServer extends EventEmitter {
         this.config.toolRegistry.get('discord_send');
 
       if (sendTool) {
+        const baseUrl = `http://${this.config.host}:${this.config.port}`;
+        const approveUrl = `${baseUrl}/api/approvals/${id}?approved=true`;
+        const denyUrl = `${baseUrl}/api/approvals/${id}?approved=false`;
         // fire and forget
         sendTool
           .execute({
             channelId,
-            content: `Approval needed: ${payload.description}\nRequest ID: ${id}`,
+            content: `Approval needed: ${payload.description}\nRequest ID: ${id}\nApprove: ${approveUrl}\nDeny: ${denyUrl}`,
           })
           .catch((err: any) => {
             console.warn('[approval] failed to send comm notification:', err?.message || err);
