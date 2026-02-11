@@ -10,6 +10,7 @@ import type { AgentRuntime } from './runtime.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const MANIFEST_FILE = 'adytum.plugin.json';
+const SKILL_MD = 'SKILL.md';
 const ENTRY_CANDIDATES = [
   'index.ts',
   'index.js',
@@ -19,7 +20,7 @@ const ENTRY_CANDIDATES = [
   'index.cjs',
 ];
 
-export type SkillOrigin = 'workspace' | 'external';
+export type SkillOrigin = 'workspace' | 'managed' | 'extra';
 
 export interface SkillManifest {
   id: string;
@@ -32,6 +33,7 @@ export interface SkillManifest {
   skills?: string[];
   uiHints?: Record<string, unknown>;
   configSchema: Record<string, unknown>;
+  metadata?: ReturnType<typeof resolveMetadata>;
 }
 
 export interface LoadedSkill {
@@ -112,10 +114,72 @@ type SkillModuleExport =
   | LegacySkillModule
   | ((api: AdytumSkillPluginApi) => Promise<void> | void);
 
+type ParsedFrontmatter = {
+  data: Record<string, unknown>;
+  body: string;
+};
+
+const parseFrontmatter = (raw: string): ParsedFrontmatter => {
+  const match = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
+  if (!match) {
+    return { data: {}, body: raw };
+  }
+  try {
+    const data = parseYaml(match[1]) as Record<string, unknown>;
+    return { data, body: match[2] || '' };
+  } catch {
+    return { data: {}, body: raw };
+  }
+};
+
+const resolveStringArray = (value: unknown): string[] =>
+  Array.isArray(value) ? value.map((v) => String(v).trim()).filter(Boolean) : [];
+
+const resolveMetadata = (data: Record<string, unknown>) => {
+  const rawMeta = isRecord(data.metadata) ? (data.metadata as Record<string, unknown>) : {};
+  const oc = isRecord(rawMeta.openclaw) ? (rawMeta.openclaw as Record<string, unknown>) : rawMeta;
+  const requires = (data.requires as Record<string, unknown>) || (oc.requires as Record<string, unknown>) || {};
+  const primaryEnv = typeof (data.primaryEnv || oc.primaryEnv) === 'string' ? String(data.primaryEnv || oc.primaryEnv).trim() : undefined;
+  const always = typeof (data.always ?? oc.always) === 'boolean' ? (data.always ?? oc.always) : undefined;
+  return {
+    name: typeof data.name === 'string' ? data.name.trim() : undefined,
+    description: typeof data.description === 'string' ? data.description.trim() : undefined,
+    version: typeof data.version === 'string' ? data.version.trim() : undefined,
+    requires: {
+      bins: resolveStringArray(requires.bins),
+      anyBins: resolveStringArray(requires.anyBins),
+      env: resolveStringArray(requires.env),
+      config: resolveStringArray(requires.config),
+      os: resolveStringArray(requires.os),
+    },
+    primaryEnv,
+    always,
+  };
+};
+
+const resolveConfigPathTruthy = (cfg: AdytumConfig, pathStr: string): boolean => {
+  const parts = pathStr.split('.').filter(Boolean);
+  let cursor: any = cfg;
+  for (const part of parts) {
+    if (cursor && typeof cursor === 'object' && part in cursor) {
+      cursor = cursor[part];
+    } else {
+      return false;
+    }
+  }
+  if (cursor === undefined || cursor === null) return false;
+  if (typeof cursor === 'boolean') return cursor;
+  if (typeof cursor === 'number') return cursor !== 0;
+  if (typeof cursor === 'string') return cursor.trim().length > 0;
+  return true;
+};
+
 interface SkillCandidate {
   rootDir: string;
-  source: string;
+  source?: string;
   origin: SkillOrigin;
+  priority: number;
+  hasSkillMd: boolean;
 }
 
 interface ServiceRegistration {
@@ -133,13 +197,13 @@ interface SkillLoaderOptions {
   config?: AdytumConfig;
 }
 
-/**
- * Adytum plugin-style skill loader.
- *
- * A valid skill requires:
- *   1. adytum.plugin.json (manifest)
- *   2. entry file (index.ts/js or package.json adytum.extensions)
- */
+  /**
+   * Adytum skill loader.
+   *
+   * Supports:
+   *   1) Plugin-style skills: adytum.plugin.json + entry file (index.* or package.json adytum.extensions)
+   *   2) Instruction-only skills: SKILL.md (AgentSkills / OpenClaw style)
+   */
 export class SkillLoader {
   private skills: LoadedSkill[] = [];
   private skillsDir: string;
@@ -154,11 +218,14 @@ export class SkillLoader {
   private projectRoot: string;
   private dataPath: string;
   private config: AdytumConfig;
+  private managedSkillsDir: string;
 
   constructor(workspacePath: string, options: SkillLoaderOptions = {}) {
     this.skillsDir = join(workspacePath, 'skills');
     this.projectRoot = resolve(options.projectRoot || join(workspacePath, '..'));
     this.dataPath = resolve(options.dataPath || join(this.projectRoot, 'data'));
+    const home = process.env.HOME || process.env.USERPROFILE || '';
+    this.managedSkillsDir = home ? resolve(home, '.adytum', 'skills') : '';
     this.config =
       options.config ||
       ({
@@ -181,15 +248,16 @@ export class SkillLoader {
   /** Rescan skills from disk and config. */
   discover(): void {
     const candidates = this.discoverCandidates();
-    const seenIds = new Set<string>();
-    const discovered: LoadedSkill[] = [];
+    const discovered: Map<string, LoadedSkill & { priority: number }> = new Map();
 
     for (const candidate of candidates) {
-      const manifestResult = this.loadManifest(candidate.rootDir);
+      const manifestResult = this.loadManifest(candidate.rootDir, candidate.hasSkillMd);
       if (!manifestResult.ok) {
-        discovered.push({
-          id: basename(candidate.rootDir),
-          name: basename(candidate.rootDir),
+        const fallbackId = basename(candidate.rootDir);
+        if (discovered.has(fallbackId)) continue;
+        discovered.set(fallbackId, {
+          id: fallbackId,
+          name: fallbackId,
           path: candidate.rootDir,
           source: candidate.source,
           origin: candidate.origin,
@@ -201,38 +269,20 @@ export class SkillLoader {
           instructions: '',
           instructionFiles: [],
           manifest: undefined,
+          priority: candidate.priority,
         });
         continue;
       }
 
       const manifest = manifestResult.manifest;
       const instructionBundle = this.collectSkillInstructions(candidate.rootDir, manifest);
-      if (seenIds.has(manifest.id)) {
-        discovered.push({
-          id: manifest.id,
-          name: manifest.name || manifest.id,
-          description: manifest.description,
-          version: manifest.version,
-          path: candidate.rootDir,
-          source: candidate.source,
-          manifestPath: manifestResult.manifestPath,
-          origin: candidate.origin,
-          enabled: false,
-          status: 'error',
-          error: `Duplicate skill id "${manifest.id}" discovered at ${candidate.rootDir}`,
-          toolNames: [],
-          serviceIds: [],
-          instructions: instructionBundle.instructions,
-          instructionFiles: instructionBundle.files,
-          manifest,
-        });
+
+      const existing = discovered.get(manifest.id);
+      if (existing && existing.priority > candidate.priority) {
         continue;
       }
-
-      seenIds.add(manifest.id);
-
-      const state = this.resolveEnableState(manifest.id);
-      discovered.push({
+      const state = this.resolveEnableState(manifest.id, manifest.metadata);
+      discovered.set(manifest.id, {
         id: manifest.id,
         name: manifest.name || manifest.id,
         description: manifest.description,
@@ -249,10 +299,11 @@ export class SkillLoader {
         instructions: instructionBundle.instructions,
         instructionFiles: instructionBundle.files,
         manifest,
+        priority: candidate.priority,
       });
     }
 
-    this.skills = discovered;
+    this.skills = Array.from(discovered.values()).map(({ priority: _p, ...rest }) => rest);
   }
 
   /** Load and register enabled skills (tools + services). */
@@ -272,9 +323,10 @@ export class SkillLoader {
     }
 
     for (const skill of enabled) {
+      this.applyEnvOverrides(skill);
       if (!skill.source) {
-        skill.status = 'error';
-        skill.error = 'Missing entry source file';
+        // Instruction-only skill
+        skill.status = 'loaded';
         continue;
       }
 
@@ -418,75 +470,91 @@ export class SkillLoader {
   }
 
   private discoverCandidates(): SkillCandidate[] {
+    const buckets: Array<{ roots: string[]; origin: SkillOrigin; priority: number }> = [
+      { roots: [this.skillsDir], origin: 'workspace', priority: 3 },
+      { roots: this.managedSkillsDir ? [this.managedSkillsDir] : [], origin: 'managed', priority: 2 },
+      {
+        roots:
+          this.config.skills?.load?.paths?.map((p) =>
+            isAbsolute(p) ? resolve(p) : resolve(this.projectRoot, p),
+          ) || [],
+        origin: 'extra',
+        priority: 1,
+      },
+      {
+        roots:
+          this.config.skills?.load?.extraDirs?.map((p) =>
+            isAbsolute(p) ? resolve(p) : resolve(this.projectRoot, p),
+          ) || [],
+        origin: 'extra',
+        priority: 1,
+      },
+    ];
+
     const candidates: SkillCandidate[] = [];
     const seen = new Set<string>();
 
     const addCandidate = (candidate: SkillCandidate) => {
-      const key = resolve(candidate.source);
+      const key = resolve(candidate.rootDir);
       if (seen.has(key)) return;
       seen.add(key);
       candidates.push({
         rootDir: resolve(candidate.rootDir),
-        source: resolve(candidate.source),
+        source: candidate.source ? resolve(candidate.source) : undefined,
         origin: candidate.origin,
+        priority: candidate.priority,
+        hasSkillMd: candidate.hasSkillMd,
       });
     };
 
-    // workspace/skills/* directories
-    if (existsSync(this.skillsDir)) {
-      const entries = readdirSync(this.skillsDir, { withFileTypes: true });
-      for (const entry of entries) {
-        if (!entry.isDirectory()) continue;
-        const rootDir = join(this.skillsDir, entry.name);
-        const source = this.resolveEntrySource(rootDir);
-        if (!source) continue;
-        addCandidate({ rootDir, source, origin: 'workspace' });
+    for (const bucket of buckets) {
+      for (const root of bucket.roots) {
+        if (!root || !existsSync(root)) continue;
+        const statRoot = statSync(root);
+        if (statRoot.isFile()) {
+          const hasSkillMd = false;
+          addCandidate({
+            rootDir: dirname(root),
+            source: root,
+            origin: bucket.origin,
+            priority: bucket.priority,
+            hasSkillMd,
+          });
+          continue;
+        }
+
+        const directSkillMd = join(root, SKILL_MD);
+        const directSource = this.resolveEntrySource(root);
+        const hasSkillMd = existsSync(directSkillMd);
+        if (directSource || hasSkillMd) {
+          addCandidate({
+            rootDir: root,
+            source: directSource,
+            origin: bucket.origin,
+            priority: bucket.priority,
+            hasSkillMd,
+          });
+        }
+
+        const entries = readdirSync(root, { withFileTypes: true });
+        for (const entry of entries) {
+          if (!entry.isDirectory()) continue;
+          const childRoot = join(root, entry.name);
+          const childSource = this.resolveEntrySource(childRoot);
+          const childHasSkillMd = existsSync(join(childRoot, SKILL_MD));
+          if (!childSource && !childHasSkillMd) continue;
+          addCandidate({
+            rootDir: childRoot,
+            source: childSource,
+            origin: bucket.origin,
+            priority: bucket.priority,
+            hasSkillMd: childHasSkillMd,
+          });
+        }
       }
     }
 
-    // extra load paths from config
-    for (const rawPath of this.config.skills?.load?.paths || []) {
-      const resolvedPath = isAbsolute(rawPath) ? resolve(rawPath) : resolve(this.projectRoot, rawPath);
-      if (!existsSync(resolvedPath)) {
-        console.warn(chalk.yellow(`  [SkillLoader] Ignoring missing load path: ${resolvedPath}`));
-        continue;
-      }
-
-      const stat = statSync(resolvedPath);
-      if (stat.isFile()) {
-        addCandidate({
-          rootDir: dirname(resolvedPath),
-          source: resolvedPath,
-          origin: 'external',
-        });
-        continue;
-      }
-
-      const directSource = this.resolveEntrySource(resolvedPath);
-      if (directSource) {
-        addCandidate({
-          rootDir: resolvedPath,
-          source: directSource,
-          origin: 'external',
-        });
-        continue;
-      }
-
-      // Directory-of-plugins case
-      const nested = readdirSync(resolvedPath, { withFileTypes: true });
-      for (const entry of nested) {
-        if (!entry.isDirectory()) continue;
-        const childRoot = join(resolvedPath, entry.name);
-        const childSource = this.resolveEntrySource(childRoot);
-        if (!childSource) continue;
-        addCandidate({
-          rootDir: childRoot,
-          source: childSource,
-          origin: 'external',
-        });
-      }
-    }
-
+    // De-duplicate by skill id later (when manifest/frontmatter parsed) using priority.
     return candidates;
   }
 
@@ -521,11 +589,33 @@ export class SkillLoader {
     return undefined;
   }
 
-  private loadManifest(rootDir: string):
+  private loadManifest(rootDir: string, allowInstructionOnly = false):
     | { ok: true; manifest: SkillManifest; manifestPath: string }
     | { ok: false; error: string; manifestPath: string } {
     const manifestPath = join(rootDir, MANIFEST_FILE);
-    if (!existsSync(manifestPath)) {
+    const skillMdPath = join(rootDir, SKILL_MD);
+    const hasManifest = existsSync(manifestPath);
+    const hasSkillMd = existsSync(skillMdPath);
+
+    if (!hasManifest && allowInstructionOnly && hasSkillMd) {
+      // Build minimal manifest from SKILL.md frontmatter
+      const raw = readFileSync(skillMdPath, 'utf-8');
+      const parsed = parseFrontmatter(raw);
+      const meta = resolveMetadata(parsed.data);
+      const id = meta.name || basename(rootDir);
+      const manifest: SkillManifest = {
+        id,
+        name: meta.name || id,
+        description: meta.description,
+        version: meta.version,
+        configSchema: { type: 'object', additionalProperties: false, properties: {} },
+        skills: [],
+        metadata: meta,
+      };
+      return { ok: true, manifest, manifestPath: skillMdPath };
+    }
+
+    if (!hasManifest) {
       return {
         ok: false,
         manifestPath,
@@ -571,6 +661,7 @@ export class SkillLoader {
       };
     }
 
+    const meta = resolveMetadata((raw.metadata as Record<string, unknown>) || {});
     const manifest: SkillManifest = {
       id,
       configSchema,
@@ -582,6 +673,7 @@ export class SkillLoader {
       providers: normalizeStringList(raw.providers),
       skills: normalizeStringList(raw.skills),
       uiHints: isRecord(raw.uiHints) ? raw.uiHints : undefined,
+      metadata: meta,
     };
 
     return { ok: true, manifest, manifestPath };
@@ -628,7 +720,10 @@ export class SkillLoader {
     };
   }
 
-  private resolveEnableState(id: string): { enabled: boolean; reason?: string } {
+  private resolveEnableState(
+    id: string,
+    metadata?: ReturnType<typeof resolveMetadata>,
+  ): { enabled: boolean; reason?: string } {
     const skillsConfig = this.config.skills;
     if (skillsConfig?.enabled === false) {
       return { enabled: false, reason: 'Skills disabled by config' };
@@ -647,6 +742,47 @@ export class SkillLoader {
       return { enabled: false, reason: 'Disabled in skills.entries' };
     }
 
+    if (!metadata) {
+      return { enabled: true };
+    }
+
+    if (metadata.always) {
+      return { enabled: true };
+    }
+
+    const requiredOs = metadata.requires.os || [];
+    if (requiredOs.length > 0 && !requiredOs.includes(process.platform)) {
+      return { enabled: false, reason: `OS not allowed (${process.platform})` };
+    }
+
+    const requiredBins = metadata.requires.bins || [];
+    for (const bin of requiredBins) {
+      if (!hasBinary(bin)) {
+        return { enabled: false, reason: `Missing binary "${bin}"` };
+      }
+    }
+
+    const anyBins = metadata.requires.anyBins || [];
+    if (anyBins.length > 0 && !anyBins.some((bin) => hasBinary(bin))) {
+      return { enabled: false, reason: `Missing any of binaries: ${anyBins.join(', ')}` };
+    }
+
+    const requiredEnv = metadata.requires.env || [];
+    for (const envName of requiredEnv) {
+      if (process.env[envName]) continue;
+      const configured = entry?.env?.[envName] || entry?.apiKey;
+      if (!configured || (metadata.primaryEnv && envName !== metadata.primaryEnv && !entry?.env?.[envName])) {
+        return { enabled: false, reason: `Missing env ${envName}` };
+      }
+    }
+
+    const requiredConfig = metadata.requires.config || [];
+    for (const path of requiredConfig) {
+      if (!resolveConfigPathTruthy(this.config, path)) {
+        return { enabled: false, reason: `Missing config ${path}` };
+      }
+    }
+
     return { enabled: true };
   }
 
@@ -654,6 +790,21 @@ export class SkillLoader {
     const value = this.config.skills?.entries?.[id]?.config;
     if (!isRecord(value)) return undefined;
     return { ...value };
+  }
+
+  private applyEnvOverrides(skill: LoadedSkill) {
+    const entry = this.config.skills?.entries?.[skill.id];
+    if (!entry) return;
+    if (entry.env) {
+      for (const [key, val] of Object.entries(entry.env)) {
+        if (!val || process.env[key]) continue;
+        process.env[key] = val;
+      }
+    }
+    const primaryEnv = skill.manifest?.metadata?.primaryEnv;
+    if (primaryEnv && entry.apiKey && !process.env[primaryEnv]) {
+      process.env[primaryEnv] = entry.apiKey;
+    }
   }
 
   private resolveSkillModule(rawModule: unknown):
@@ -822,6 +973,23 @@ function normalizeStringList(value: unknown): string[] {
   return value
     .map((entry) => (typeof entry === 'string' ? entry.trim() : ''))
     .filter(Boolean);
+}
+
+function hasBinary(bin: string): boolean {
+  const pathEnv = process.env.PATH || '';
+  const parts = pathEnv.split(process.platform === 'win32' ? ';' : ':').filter(Boolean);
+  for (const part of parts) {
+    const candidate = join(part, bin);
+    if (existsSync(candidate)) {
+      try {
+        const stat = statSync(candidate);
+        if (stat.isFile()) return true;
+      } catch {
+        continue;
+      }
+    }
+  }
+  return false;
 }
 
 function stripFrontmatter(raw: string): string {

@@ -314,11 +314,13 @@ export class GatewayServer extends EventEmitter {
 	      };
 	    });
 
-	    this.app.put('/api/skills/:id', async (request, reply) => {
+    this.app.put('/api/skills/:id', async (request, reply) => {
       const { id } = request.params as { id: string };
       const body = request.body as {
         enabled?: boolean;
         config?: Record<string, unknown>;
+        env?: Record<string, string>;
+        apiKey?: string;
       };
 
       if (!this.config.skillLoader) {
@@ -332,8 +334,10 @@ export class GatewayServer extends EventEmitter {
 
       const hasEnabled = typeof body.enabled === 'boolean';
       const hasConfig = body.config !== undefined;
-      if (!hasEnabled && !hasConfig) {
-        return reply.status(400).send({ error: 'Provide at least one of: enabled, config' });
+      const hasEnv = body.env !== undefined;
+      const hasApiKey = body.apiKey !== undefined;
+      if (!hasEnabled && !hasConfig && !hasEnv && !hasApiKey) {
+        return reply.status(400).send({ error: 'Provide at least one of: enabled, config, env, apiKey' });
       }
 
       if (
@@ -341,6 +345,12 @@ export class GatewayServer extends EventEmitter {
         (typeof body.config !== 'object' || body.config === null || Array.isArray(body.config))
       ) {
         return reply.status(400).send({ error: 'config must be an object' });
+      }
+      if (
+        hasEnv &&
+        (typeof body.env !== 'object' || body.env === null || Array.isArray(body.env))
+      ) {
+        return reply.status(400).send({ error: 'env must be an object' });
       }
 
       const cfg = loadConfig();
@@ -358,6 +368,8 @@ export class GatewayServer extends EventEmitter {
         ...currentEntry,
         ...(hasEnabled ? { enabled: body.enabled } : {}),
         ...(hasConfig ? { config: body.config } : {}),
+        ...(hasEnv ? { env: body.env } : {}),
+        ...(hasApiKey ? { apiKey: body.apiKey } : {}),
       };
 
       const nextSkills = {

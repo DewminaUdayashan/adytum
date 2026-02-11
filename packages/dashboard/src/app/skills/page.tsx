@@ -337,9 +337,8 @@ export default function SkillsPage() {
       setOriginalConfig(nextConfig);
       setOriginalEnabled(nextEnabled);
       setSelectedSkillId((prev) => {
-        if (nextSkills.length === 0) return null;
         if (prev && nextSkills.some((skill) => skill.id === prev)) return prev;
-        return nextSkills[0].id;
+        return null;
       });
       setError(null);
     } catch (err: any) {
@@ -529,7 +528,7 @@ export default function SkillsPage() {
           <EmptyState
             icon={Puzzle}
             title="No skills discovered"
-            description="Add skills under workspace/skills/<id>/ with adytum.plugin.json + index.ts."
+            description="Add skills under workspace/skills/<id>/ (SKILL.md or adytum.plugin.json + index.ts)."
           />
         ) : (
           <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">

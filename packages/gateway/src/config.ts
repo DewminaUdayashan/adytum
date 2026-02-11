@@ -31,10 +31,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const parseSkillEntries = (
   value: unknown,
-): Record<string, { enabled?: boolean; config?: Record<string, unknown> }> | undefined => {
+): Record<string, { enabled?: boolean; config?: Record<string, unknown>; env?: Record<string, string>; apiKey?: string }> | undefined => {
   if (!isRecord(value)) return undefined;
 
-  const entries: Record<string, { enabled?: boolean; config?: Record<string, unknown> }> = {};
+  const entries: Record<string, { enabled?: boolean; config?: Record<string, unknown>; env?: Record<string, string>; apiKey?: string }> = {};
   for (const [id, rawEntry] of Object.entries(value)) {
     if (!id.trim()) continue;
 
@@ -45,7 +45,12 @@ const parseSkillEntries = (
 
     const enabled = typeof rawEntry.enabled === 'boolean' ? rawEntry.enabled : undefined;
     const config = isRecord(rawEntry.config) ? { ...rawEntry.config } : undefined;
-    entries[id] = { enabled, config };
+    const env =
+      isRecord(rawEntry.env) && Object.values(rawEntry.env).every((v) => typeof v === 'string')
+        ? (rawEntry.env as Record<string, string>)
+        : undefined;
+    const apiKey = typeof rawEntry.apiKey === 'string' ? rawEntry.apiKey : undefined;
+    entries[id] = { enabled, config, env, apiKey };
   }
 
   return entries;
@@ -106,6 +111,7 @@ export function loadConfig(projectRoot?: string): AdytumConfig {
           parseList(fileSkillsLoad.paths as string[] | string | undefined) ||
           envSkillsLoadPaths ||
           [],
+        extraDirs: parseList(fileSkillsLoad.extraDirs as string[] | string | undefined) || [],
       },
       entries: parseSkillEntries(fileSkills.entries) || {},
     },

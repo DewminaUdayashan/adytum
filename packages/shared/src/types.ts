@@ -160,10 +160,17 @@ export const SkillMetadataSchema = z.object({
   name: z.string(),
   description: z.string(),
   version: z.string().optional(),
-  requires: z.object({
-    bins: z.array(z.string()).optional(),
-    env: z.array(z.string()).optional(),
-  }).optional(),
+  requires: z
+    .object({
+      bins: z.array(z.string()).optional(),
+      anyBins: z.array(z.string()).optional(),
+      env: z.array(z.string()).optional(),
+      config: z.array(z.string()).optional(),
+      os: z.array(z.string()).optional(),
+    })
+    .optional(),
+  primaryEnv: z.string().optional(),
+  always: z.boolean().optional(),
   adytum: z.record(z.unknown()).optional(),
 });
 export type SkillMetadata = z.infer<typeof SkillMetadataSchema>;
@@ -184,6 +191,8 @@ export type DiscordConfig = z.infer<typeof DiscordConfigSchema>;
 export const SkillEntryConfigSchema = z.object({
   enabled: z.boolean().optional(),
   config: z.record(z.unknown()).optional(),
+  env: z.record(z.string(), z.string()).optional(),
+  apiKey: z.string().optional(),
 });
 export type SkillEntryConfig = z.infer<typeof SkillEntryConfigSchema>;
 
@@ -193,6 +202,7 @@ export const SkillsConfigSchema = z.object({
   deny: z.array(z.string()).default([]),
   load: z.object({
     paths: z.array(z.string()).default([]),
+    extraDirs: z.array(z.string()).default([]),
   }).optional(),
   entries: z.record(SkillEntryConfigSchema).default({}),
 });
