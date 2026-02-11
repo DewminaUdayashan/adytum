@@ -149,9 +149,11 @@ function FieldRenderer(props: {
   config: Record<string, unknown>;
   onChange: (path: string[], value: unknown) => void;
   uiHints?: Record<string, SkillUiHint>;
+  showAdvanced?: boolean;
 }) {
-  const { schema, path, config, onChange, uiHints } = props;
+  const { schema, path, config, onChange, uiHints, showAdvanced } = props;
   const hint = getHint(uiHints, path);
+  if (hint?.advanced && !showAdvanced) return null;
   const raw = getAtPath(config, path);
   const value = raw === undefined ? schema.default : raw;
   const fieldKey = path.join('.');
@@ -543,6 +545,7 @@ export default function SkillsPage() {
     () => skills.find((skill) => skill.id === selectedSkillId) || null,
     [skills, selectedSkillId],
   );
+  const [showAdvancedBySkill, setShowAdvancedBySkill] = useState<Record<string, boolean>>({});
   const selectedInstructionFiles = selectedSkill
     ? instructionFilesBySkill[selectedSkill.id] || []
     : [];
@@ -751,6 +754,19 @@ export default function SkillsPage() {
                     {canRenderConfig ? (
                       <div className="space-y-3 rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4">
                         <h3 className="text-sm font-semibold text-text-primary">Configuration</h3>
+                        <div className="flex justify-end">
+                          <label className="text-xs text-text-muted inline-flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={Boolean(showAdvancedBySkill[skill.id])}
+                              onChange={(e) =>
+                                setShowAdvancedBySkill((prev) => ({ ...prev, [skill.id]: e.target.checked }))
+                              }
+                              className="h-3.5 w-3.5 rounded border-border-primary"
+                            />
+                            Show advanced fields
+                          </label>
+                        </div>
                         <FieldRenderer
                           schema={schema}
                           path={[]}
@@ -765,6 +781,7 @@ export default function SkillsPage() {
                             });
                           }}
                           uiHints={uiHints}
+                          showAdvanced={Boolean(showAdvancedBySkill[skill.id])}
                         />
                       </div>
                     ) : (

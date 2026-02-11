@@ -59,83 +59,40 @@
   "uiHints": {
     "botToken": {
       "label": "Bot Token",
-      "help": "Optional. If empty, tokenEnv will be used.",
-      "sensitive": true,
-      "placeholder": "Paste Discord bot token"
+      "help": "Required. Paste your Discord bot token.",
+      "sensitive": true
     },
-    "tokenEnv": {
-      "label": "Bot Token Env Var",
-      "help": "Environment variable used when botToken is empty."
-    },
+    "tokenEnv": { "advanced": true },
     "defaultChannelId": {
       "label": "Default Channel ID",
       "help": "Used when a send action has no target channel."
     },
-    "defaultChannelIdEnv": {
-      "label": "Default Channel Env Var",
-      "help": "Environment variable fallback for defaultChannelId."
-    },
-    "guildId": {
-      "label": "Default Guild ID",
-      "help": "Used for guild actions when request does not include guildId."
-    },
-    "guildIdEnv": {
-      "label": "Default Guild Env Var",
-      "help": "Environment variable fallback for guildId."
-    },
-    "allowedChannelIds": {
-      "label": "Allowed Inbound Channel IDs",
-      "help": "Optional allow-list for inbound listener. One ID per line."
-    },
-    "allowedUserIds": {
-      "label": "Allowed Inbound User IDs",
-      "help": "Optional allow-list for inbound listener. One ID per line."
-    },
-    "actionPermissions": {
-      "label": "Action Permissions",
-      "help": "Toggle individual Discord actions that tools can execute."
-    },
-    "actionPermissions.send_message": {
-      "label": "Send Message"
-    },
-    "actionPermissions.read_messages": {
-      "label": "Read Messages"
-    },
-    "actionPermissions.fetch_message": {
-      "label": "Fetch Message"
-    },
-    "actionPermissions.react": {
-      "label": "React"
-    },
-    "actionPermissions.create_poll": {
-      "label": "Create Poll"
-    },
-    "actionPermissions.create_thread": {
-      "label": "Create Thread"
-    },
-    "actionPermissions.reply_thread": {
-      "label": "Reply Thread"
-    },
-    "actionPermissions.create_channel": {
-      "label": "Create Channel"
-    },
-    "actionPermissions.pin_message": {
-      "label": "Pin Message"
-    },
-    "actionPermissions.unpin_message": {
-      "label": "Unpin Message"
-    },
-    "actionPermissions.list_channels": {
-      "label": "List Channels"
-    },
-    "actionPermissions.list_guilds": {
-      "label": "List Guilds"
-    },
-    "actionPermissions.guild_info": {
-      "label": "Guild Info"
-    },
-    "actionPermissions.list_members": {
-      "label": "List Members"
-    }
+    "defaultChannelIdEnv": { "advanced": true },
+    "guildId": { "advanced": true },
+    "guildIdEnv": { "advanced": true },
+    "allowedChannelIds": { "advanced": true },
+    "allowedUserIds": { "advanced": true },
+    "allowDm": { "advanced": true },
+    "listenIncoming": { "advanced": true },
+    "respondToMentionsOnly": { "advanced": true },
+    "includeAttachmentLinksInInbound": { "advanced": true },
+    "outboundReplyPrefix": { "advanced": true },
+    "enableMessageContentIntent": { "advanced": true },
+    "enableGuildMembersIntent": { "advanced": true },
+    "actionPermissions": { "advanced": true },
+    "actionPermissions.send_message": { "advanced": true },
+    "actionPermissions.read_messages": { "advanced": true },
+    "actionPermissions.fetch_message": { "advanced": true },
+    "actionPermissions.react": { "advanced": true },
+    "actionPermissions.create_poll": { "advanced": true },
+    "actionPermissions.create_thread": { "advanced": true },
+    "actionPermissions.reply_thread": { "advanced": true },
+    "actionPermissions.create_channel": { "advanced": true },
+    "actionPermissions.pin_message": { "advanced": true },
+    "actionPermissions.unpin_message": { "advanced": true },
+    "actionPermissions.list_channels": { "advanced": true },
+    "actionPermissions.list_guilds": { "advanced": true },
+    "actionPermissions.guild_info": { "advanced": true },
+    "actionPermissions.list_members": { "advanced": true }
   }
 }
