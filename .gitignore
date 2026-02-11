@@ -14,7 +14,3 @@ adytum.config.yaml
 litellm_config.yaml
 # workspace holds user skills and should be tracked
 reference-project/
-# Temporary runtime artifacts (user state)
-workspace/EVOLUTION.md
-workspace/HEARTBEAT.md
-workspace/SOUL.md
