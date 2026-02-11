@@ -88,6 +88,7 @@ export function loadConfig(projectRoot?: string): AdytumConfig {
   const envSkillsAllow = parseList(process.env.ADYTUM_SKILLS_ALLOW);
   const envSkillsDeny = parseList(process.env.ADYTUM_SKILLS_DENY);
   const envSkillsLoadPaths = parseList(process.env.ADYTUM_SKILLS_LOAD_PATHS);
+  const fileExecution = isRecord(fileConfig.execution) ? fileConfig.execution : {};
 
   const merged = {
     agentName: fileConfig.agentName || process.env.ADYTUM_AGENT_NAME || 'Adytum',
@@ -108,6 +109,15 @@ export function loadConfig(projectRoot?: string): AdytumConfig {
     heartbeatIntervalMinutes: Number(fileConfig.heartbeatIntervalMinutes || 30),
     dreamerIntervalMinutes: Number(fileConfig.dreamerIntervalMinutes || 30),
     monologueIntervalMinutes: Number(fileConfig.monologueIntervalMinutes || 15),
+    execution: {
+      shell:
+        (fileExecution.shell as 'auto' | 'ask' | 'deny') ||
+        ('ask' as 'auto' | 'ask' | 'deny'),
+      defaultChannel:
+        typeof fileExecution.defaultChannel === 'string'
+          ? fileExecution.defaultChannel
+          : undefined,
+    },
     skills: {
       enabled: (fileSkills.enabled as boolean | undefined) ?? envSkillsEnabled ?? true,
       allow: parseList(fileSkills.allow as string[] | string | undefined) || envSkillsAllow || [],

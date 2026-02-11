@@ -6,12 +6,22 @@ import type { ToolDefinition } from '@adytum/shared';
 
 const execAsync = promisify(exec);
 
+export type ShellApprovalResult = {
+  approved: boolean;
+  reason?: string;
+  mode?: 'auto' | 'ask' | 'deny';
+  defaultChannel?: string;
+  message?: string;
+};
+
+export type ShellApprovalFn = (command: string) => Promise<ShellApprovalResult>;
+
 /**
  * Creates the shell_execute function body given an approval callback.
  * Exported so the REPL can re-wire the callback after tool registration.
  */
 export function createShellToolWithApproval(
-  onApprovalRequired: (command: string) => Promise<boolean>,
+  onApprovalRequired: ShellApprovalFn,
 ): ToolDefinition['execute'] {
   return async (args: any) => {
     const { command, cwd, timeout } = args as {
@@ -25,16 +35,18 @@ export function createShellToolWithApproval(
       command.toLowerCase().includes(pattern.toLowerCase()),
     );
 
-    if (isDangerous) {
-      const approved = await onApprovalRequired(command);
-      if (!approved) {
-        return {
-          exitCode: -1,
-          stdout: '',
-          stderr: 'Command rejected by user: flagged as potentially dangerous.',
-          approved: false,
-        };
-      }
+    const approval = isDangerous ? await onApprovalRequired(command) : { approved: true };
+    if (!approval.approved) {
+      return {
+        exitCode: -1,
+        stdout: '',
+        stderr: approval.message || 'Command rejected: approval required.',
+        approved: false,
+        approvalRequired: true,
+        defaultChannel: approval.defaultChannel,
+        reason: approval.reason,
+        mode: approval.mode,
+      };
     }
 
     try {
@@ -49,7 +61,8 @@ export function createShellToolWithApproval(
         exitCode: 0,
         stdout: stdout.slice(0, 10000), // Cap output
         stderr: stderr.slice(0, 5000),
-        approved: isDangerous ? true : undefined,
+        approved: approval.approved,
+        mode: approval.mode,
       };
     } catch (error: any) {
       return {
@@ -62,7 +75,7 @@ export function createShellToolWithApproval(
 }
 
 export function createShellTool(
-  onApprovalRequired: (command: string) => Promise<boolean>,
+  onApprovalRequired: ShellApprovalFn,
 ): ToolDefinition {
   return {
     name: 'shell_execute',

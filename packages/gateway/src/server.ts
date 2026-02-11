@@ -180,6 +180,24 @@ export class GatewayServer extends EventEmitter {
       return { success: true };
     });
 
+    // Execution permissions (shell, etc.)
+    this.app.get('/api/execution/permissions', async () => {
+      const cfg = loadConfig();
+      const exec = cfg.execution || { shell: 'ask' as 'auto' | 'ask' | 'deny' };
+      return { execution: { shell: exec.shell || 'ask', defaultChannel: exec.defaultChannel } };
+    });
+
+    this.app.put('/api/execution/permissions', async (request, reply) => {
+      const body = request.body as { shell?: 'auto' | 'ask' | 'deny'; defaultChannel?: string };
+      const cfg = loadConfig();
+      const next = {
+        shell: body.shell || cfg.execution?.shell || 'ask',
+        defaultChannel: body.defaultChannel ?? cfg.execution?.defaultChannel,
+      };
+      saveConfig({ execution: next } as any);
+      return { success: true, execution: next };
+    });
+
     // Skills permissions (global)
     this.app.put('/api/skills/permissions', async (request, reply) => {
       const body = request.body as { install?: 'auto' | 'ask' | 'deny'; defaultChannel?: string };

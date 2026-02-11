@@ -232,6 +232,12 @@ export const SkillsConfigSchema = z.object({
 });
 export type SkillsConfig = z.infer<typeof SkillsConfigSchema>;
 
+export const ExecutionPermissionsSchema = z.object({
+  shell: z.enum(['auto', 'ask', 'deny']).default('ask'),
+  defaultChannel: z.string().optional(),
+});
+export type ExecutionPermissions = z.infer<typeof ExecutionPermissionsSchema>;
+
 // ─── Agent Config ─────────────────────────────────────────────
 
 export const AdytumConfigSchema = z.object({
@@ -250,6 +256,7 @@ export const AdytumConfigSchema = z.object({
   dreamerIntervalMinutes: z.number().default(30),
   monologueIntervalMinutes: z.number().default(15),
   skills: SkillsConfigSchema.optional(),
+  execution: ExecutionPermissionsSchema.optional(),
   discord: DiscordConfigSchema.optional(),
 });
 export type AdytumConfig = z.infer<typeof AdytumConfigSchema>;

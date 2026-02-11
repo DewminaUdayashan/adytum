@@ -62,7 +62,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
 
   const shellTool = createShellTool(async (_command) => {
     // Placeholder — will be re-wired after REPL is created
-    return false;
+    return { approved: false, reason: 'bootstrap', mode: 'ask' };
   });
   toolRegistry.register(shellTool);
 
@@ -261,14 +261,37 @@ export async function startGateway(projectRoot: string): Promise<void> {
     });
   };
 
-  // Re-wire the shell tool's approval callback to use the shared prompt
-  toolRegistry.get('shell_execute')!.execute = createShellToolWithApproval(
-    async (command) => {
-      return promptApproval(
-        chalk.yellow(`\n  ⚠  Tool "shell_execute" wants to execute: ${chalk.bold(JSON.stringify({ command }))}\n  Approve? [y/N]: `),
+  // Re-wire the shell tool's approval callback to respect execution permissions
+  toolRegistry.get('shell_execute')!.execute = createShellToolWithApproval(async (command) => {
+    const latestConfig = loadConfig(projectRoot);
+    const mode = latestConfig.execution?.shell || 'ask';
+    const defaultChannel = latestConfig.execution?.defaultChannel;
+
+    if (mode === 'auto') {
+      return { approved: true, mode };
+    }
+    if (mode === 'deny') {
+      return { approved: false, mode, reason: 'policy_denied', defaultChannel };
+    }
+
+    // mode === 'ask'
+    if (process.stdin.isTTY) {
+      const approved = await promptApproval(
+        chalk.yellow(
+          `\n  ⚠  Tool "shell_execute" wants to execute: ${chalk.bold(JSON.stringify({ command }))}\n  Approve? [y/N]: `,
+        ),
       );
-    },
-  );
+      return { approved, mode, reason: approved ? undefined : 'user_denied', defaultChannel };
+    }
+
+    return {
+      approved: false,
+      mode,
+      reason: 'approval_required',
+      defaultChannel,
+      message: 'Shell command requires approval',
+    };
+  });
 
   // Re-wire the agent's approval callback too
   agent.setApprovalHandler(async (description) => {

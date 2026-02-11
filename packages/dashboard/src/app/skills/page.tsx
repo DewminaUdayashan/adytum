@@ -79,6 +79,8 @@ type SkillInstructionsResponse = {
   combined: string;
 };
 
+type ExecutionPermissions = { shell: 'auto' | 'ask' | 'deny'; defaultChannel?: string };
+
 type SkillsResponse = {
   skills: SkillRecord[];
   global: {
@@ -321,6 +323,7 @@ export default function SkillsPage() {
   const [originalEnabled, setOriginalEnabled] = useState<Record<string, boolean>>({});
   const [originalInstallPerm, setOriginalInstallPerm] = useState<Record<string, 'auto' | 'ask' | 'deny' | undefined>>({});
   const [globalPerms, setGlobalPerms] = useState<{ install: 'auto' | 'ask' | 'deny'; defaultChannel?: string }>({ install: 'ask', defaultChannel: '' });
+  const [execPerms, setExecPerms] = useState<ExecutionPermissions>({ shell: 'ask', defaultChannel: '' });
   const [instructionFilesBySkill, setInstructionFilesBySkill] = useState<Record<string, SkillInstructionFile[]>>({});
   const [selectedInstructionFileBySkill, setSelectedInstructionFileBySkill] = useState<Record<string, string>>({});
   const [instructionDrafts, setInstructionDrafts] = useState<Record<string, string>>({});
@@ -377,6 +380,20 @@ export default function SkillsPage() {
     }
   };
 
+  const loadExecPerms = async () => {
+    try {
+      const res = await gatewayFetch<{ execution: ExecutionPermissions }>('/api/execution/permissions');
+      if (res.execution) {
+        setExecPerms({
+          shell: res.execution.shell || 'ask',
+          defaultChannel: res.execution.defaultChannel,
+        });
+      }
+    } catch (err: any) {
+      setError(err.message || String(err));
+    }
+  };
+
   const loadSkillInstructions = async (skillId: string) => {
     try {
       setInstructionLoadingSkillId(skillId);
@@ -425,6 +442,7 @@ export default function SkillsPage() {
 
   useEffect(() => {
     loadSkills();
+    loadExecPerms();
   }, []);
 
   useEffect(() => {
@@ -555,48 +573,94 @@ export default function SkillsPage() {
         )}
 
         <div className="px-8 pb-4">
-          <div className="rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4 flex flex-wrap items-center gap-4">
-            <div>
-              <p className="text-sm font-semibold text-text-primary">Install permissions</p>
-              <p className="text-xs text-text-muted">Controls whether skills may run install commands.</p>
-            </div>
-            <select
-              className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent-primary/50 focus:outline-none"
-              value={globalPerms.install}
-              onChange={(e) =>
-                setGlobalPerms((prev) => ({ ...prev, install: e.target.value as 'auto' | 'ask' | 'deny' }))
-              }
-            >
-              <option value="auto">Auto</option>
-              <option value="ask">Ask</option>
-              <option value="deny">Deny</option>
-            </select>
-            <input
-              className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent-primary/50 focus:outline-none flex-1 min-w-[180px]"
-              placeholder="Default channel (optional)"
-              value={globalPerms.defaultChannel || ''}
-              onChange={(e) => setGlobalPerms((prev) => ({ ...prev, defaultChannel: e.target.value }))}
-            />
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={async () => {
-                try {
-                  await gatewayFetch('/api/skills/permissions', {
-                    method: 'PUT',
-                    body: JSON.stringify({
-                      install: globalPerms.install,
-                      defaultChannel: globalPerms.defaultChannel,
-                    }),
-                  });
-                  await loadSkills();
-                } catch (err: any) {
-                  setError(err.message || String(err));
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4 flex flex-wrap items-center gap-4">
+              <div>
+                <p className="text-sm font-semibold text-text-primary">Install permissions</p>
+                <p className="text-xs text-text-muted">Controls whether skills may run install commands.</p>
+              </div>
+              <select
+                className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent-primary/50 focus:outline-none"
+                value={globalPerms.install}
+                onChange={(e) =>
+                  setGlobalPerms((prev) => ({ ...prev, install: e.target.value as 'auto' | 'ask' | 'deny' }))
                 }
-              }}
-            >
-              Save
-            </Button>
+              >
+                <option value="auto">Auto</option>
+                <option value="ask">Ask</option>
+                <option value="deny">Deny</option>
+              </select>
+              <input
+                className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent-primary/50 focus:outline-none flex-1 min-w-[180px]"
+                placeholder="Default channel (optional)"
+                value={globalPerms.defaultChannel || ''}
+                onChange={(e) => setGlobalPerms((prev) => ({ ...prev, defaultChannel: e.target.value }))}
+              />
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await gatewayFetch('/api/skills/permissions', {
+                      method: 'PUT',
+                      body: JSON.stringify({
+                        install: globalPerms.install,
+                        defaultChannel: globalPerms.defaultChannel,
+                      }),
+                    });
+                    await loadSkills();
+                  } catch (err: any) {
+                    setError(err.message || String(err));
+                  }
+                }}
+              >
+                Save
+              </Button>
+            </div>
+
+            <div className="rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4 flex flex-wrap items-center gap-4">
+              <div>
+                <p className="text-sm font-semibold text-text-primary">Shell commands</p>
+                <p className="text-xs text-text-muted">Control automatic terminal execution by the agent.</p>
+              </div>
+              <select
+                className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent-primary/50 focus:outline-none"
+                value={execPerms.shell}
+                onChange={(e) =>
+                  setExecPerms((prev) => ({ ...prev, shell: e.target.value as 'auto' | 'ask' | 'deny' }))
+                }
+              >
+                <option value="auto">Auto</option>
+                <option value="ask">Ask</option>
+                <option value="deny">Deny</option>
+              </select>
+              <input
+                className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent-primary/50 focus:outline-none flex-1 min-w-[180px]"
+                placeholder="Default channel for approvals (optional)"
+                value={execPerms.defaultChannel || ''}
+                onChange={(e) => setExecPerms((prev) => ({ ...prev, defaultChannel: e.target.value }))}
+              />
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={async () => {
+                  try {
+                    await gatewayFetch('/api/execution/permissions', {
+                      method: 'PUT',
+                      body: JSON.stringify({
+                        shell: execPerms.shell,
+                        defaultChannel: execPerms.defaultChannel,
+                      }),
+                    });
+                    await loadExecPerms();
+                  } catch (err: any) {
+                    setError(err.message || String(err));
+                  }
+                }}
+              >
+                Save
+              </Button>
+            </div>
           </div>
         </div>
 
