@@ -31,10 +31,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const parseSkillEntries = (
   value: unknown,
-): Record<string, { enabled?: boolean; config?: Record<string, unknown>; env?: Record<string, string>; apiKey?: string }> | undefined => {
+): Record<string, { enabled?: boolean; config?: Record<string, unknown>; env?: Record<string, string>; apiKey?: string; installPermission?: 'auto' | 'ask' | 'deny' }> | undefined => {
   if (!isRecord(value)) return undefined;
 
-  const entries: Record<string, { enabled?: boolean; config?: Record<string, unknown>; env?: Record<string, string>; apiKey?: string }> = {};
+  const entries: Record<string, { enabled?: boolean; config?: Record<string, unknown>; env?: Record<string, string>; apiKey?: string; installPermission?: 'auto' | 'ask' | 'deny' }> = {};
   for (const [id, rawEntry] of Object.entries(value)) {
     if (!id.trim()) continue;
 
@@ -50,7 +50,12 @@ const parseSkillEntries = (
         ? (rawEntry.env as Record<string, string>)
         : undefined;
     const apiKey = typeof rawEntry.apiKey === 'string' ? rawEntry.apiKey : undefined;
-    entries[id] = { enabled, config, env, apiKey };
+    const installPermission =
+      typeof rawEntry.installPermission === 'string' &&
+      ['auto', 'ask', 'deny'].includes(rawEntry.installPermission)
+        ? (rawEntry.installPermission as 'auto' | 'ask' | 'deny')
+        : undefined;
+    entries[id] = { enabled, config, env, apiKey, installPermission };
   }
 
   return entries;
@@ -78,6 +83,7 @@ export function loadConfig(projectRoot?: string): AdytumConfig {
   // Merge env + file config
   const fileSkills = isRecord(fileConfig.skills) ? fileConfig.skills : {};
   const fileSkillsLoad = isRecord(fileSkills.load) ? fileSkills.load : {};
+  const fileSkillsPermissions = isRecord(fileSkills.permissions) ? fileSkills.permissions : {};
   const envSkillsEnabled = parseBool(process.env.ADYTUM_SKILLS_ENABLED);
   const envSkillsAllow = parseList(process.env.ADYTUM_SKILLS_ALLOW);
   const envSkillsDeny = parseList(process.env.ADYTUM_SKILLS_DENY);
@@ -112,6 +118,15 @@ export function loadConfig(projectRoot?: string): AdytumConfig {
           envSkillsLoadPaths ||
           [],
         extraDirs: parseList(fileSkillsLoad.extraDirs as string[] | string | undefined) || [],
+      },
+      permissions: {
+        install:
+          (fileSkillsPermissions.install as 'auto' | 'ask' | 'deny') ||
+          ('ask' as 'auto' | 'ask' | 'deny'),
+        defaultChannel:
+          typeof fileSkillsPermissions.defaultChannel === 'string'
+            ? fileSkillsPermissions.defaultChannel
+            : undefined,
       },
       entries: parseSkillEntries(fileSkills.entries) || {},
     },

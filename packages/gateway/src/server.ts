@@ -8,6 +8,7 @@ import { EventEmitter } from 'node:events';
 import { loadConfig, saveConfig } from './config.js';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
+import { execFile } from 'node:child_process';
 import type { WebSocket } from 'ws';
 import type { PermissionManager } from './security/permission-manager.js';
 import type { HeartbeatManager } from './agent/heartbeat-manager.js';
@@ -179,18 +180,62 @@ export class GatewayServer extends EventEmitter {
       return { success: true };
     });
 
+    // Skills permissions (global)
+    this.app.put('/api/skills/permissions', async (request, reply) => {
+      const body = request.body as { install?: 'auto' | 'ask' | 'deny'; defaultChannel?: string };
+      const cfg = loadConfig();
+      const skills =
+        cfg.skills || {
+          enabled: true,
+          allow: [],
+          deny: [],
+          load: { paths: [], extraDirs: [] },
+          permissions: { install: 'ask' as 'auto' | 'ask' | 'deny', defaultChannel: undefined },
+          entries: {},
+        };
+      const next = {
+        ...skills,
+        permissions: {
+          install: body.install || skills.permissions?.install || 'ask',
+          defaultChannel: body.defaultChannel ?? skills.permissions?.defaultChannel,
+        },
+      };
+      saveConfig({ skills: next } as any);
+      return { success: true, permissions: next.permissions };
+    });
+
     // ─── Skills Management ───────────────────────────────────
     this.app.get('/api/skills', async () => {
       const cfg = loadConfig();
-      const entries = cfg.skills?.entries || {};
+      const skillsCfg: {
+        enabled: boolean;
+        allow: string[];
+        deny: string[];
+        load: { paths?: string[]; extraDirs?: string[] };
+        permissions: { install: 'auto' | 'ask' | 'deny'; defaultChannel?: string };
+        entries: Record<string, any>;
+      } = (cfg.skills as any) || {
+        enabled: true,
+        allow: [],
+        deny: [],
+        load: { paths: [], extraDirs: [] },
+        permissions: { install: 'ask', defaultChannel: undefined },
+        entries: {},
+      };
+      const entries = skillsCfg.entries || {};
       const global = {
-        enabled: cfg.skills?.enabled ?? true,
-        allow: cfg.skills?.allow ?? [],
-        deny: cfg.skills?.deny ?? [],
-        loadPaths: cfg.skills?.load?.paths ?? [],
+        enabled: skillsCfg.enabled ?? true,
+        allow: skillsCfg.allow ?? [],
+        deny: skillsCfg.deny ?? [],
+        loadPaths: skillsCfg.load?.paths ?? [],
+        extraDirs: skillsCfg.load?.extraDirs ?? [],
+        permissions: {
+          install: skillsCfg.permissions?.install ?? 'ask',
+          defaultChannel: skillsCfg.permissions?.defaultChannel,
+        },
       };
 
-	      const skills = (this.config.skillLoader?.getAll() || []).map((skill) => ({
+		  const skills = (this.config.skillLoader?.getAll() || []).map((skill) => ({
         id: skill.id,
         name: skill.name,
         description: skill.description,
@@ -200,10 +245,14 @@ export class GatewayServer extends EventEmitter {
         enabled: skill.enabled,
         error: skill.error,
         toolNames: skill.toolNames,
-	        serviceIds: skill.serviceIds,
-	        manifestPath: skill.manifestPath,
-	        instructionFiles: skill.instructionFiles.map((filePath) => relative(skill.path, filePath)),
-	        manifest: skill.manifest
+		    serviceIds: skill.serviceIds,
+		    manifestPath: skill.manifestPath,
+		    instructionFiles: skill.instructionFiles.map((filePath) => relative(skill.path, filePath)),
+        missing: skill.missing,
+        eligible: skill.eligible,
+        communication: skill.communication === true,
+        install: skill.install || [],
+		    manifest: skill.manifest
           ? {
               id: skill.manifest.id,
               name: skill.manifest.name,
@@ -219,14 +268,67 @@ export class GatewayServer extends EventEmitter {
         configEntry: entries[skill.id] || {},
       }));
 
-	      return { skills, global };
-	    });
+		  return { skills, global };
+		});
 
-	    this.app.get('/api/skills/:id/instructions', async (request, reply) => {
-	      const { id } = request.params as { id: string };
-	      if (!this.config.skillLoader) {
-	        return reply.status(503).send({ error: 'Skill loader not available' });
-	      }
+    this.app.post('/api/skills/:id/install', async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const body = request.body as { approve?: boolean };
+      const cfg = loadConfig();
+      const skillsCfg: {
+        permissions: { install: 'auto' | 'ask' | 'deny'; defaultChannel?: string };
+        entries: Record<string, any>;
+      } = (cfg.skills as any) || { permissions: { install: 'ask' }, entries: {} };
+      const skill = this.config.skillLoader?.getAll().find((s) => s.id === id);
+      if (!skill) {
+        return reply.status(404).send({ error: `Unknown skill: ${id}` });
+      }
+      const installSpecs = skill.install || [];
+      if (installSpecs.length === 0) {
+        return reply.status(400).send({ error: 'No install specs found for this skill' });
+      }
+      const effectivePermission =
+        (skillsCfg.entries?.[id]?.installPermission as 'auto' | 'ask' | 'deny' | undefined) ||
+        (skillsCfg.permissions?.install as 'auto' | 'ask' | 'deny' | undefined) ||
+        'ask';
+      if (effectivePermission === 'deny') {
+        return reply.status(403).send({ error: 'Install denied by policy' });
+      }
+      if (effectivePermission === 'ask' && !body?.approve) {
+        return reply.status(409).send({
+          error: 'approval_required',
+          message: 'Installation requires approval',
+          defaultChannel: skillsCfg.permissions?.defaultChannel,
+        });
+      }
+      const selected =
+        installSpecs.find(
+          (spec) =>
+            spec &&
+            typeof spec === 'object' &&
+            (spec.os === undefined ||
+              (Array.isArray(spec.os) && spec.os.length === 0) ||
+              (Array.isArray(spec.os) && spec.os.map(String).includes(process.platform))),
+        ) || installSpecs[0];
+      if (!selected || selected.kind !== 'brew' || typeof selected.formula !== 'string') {
+        return reply.status(400).send({ error: 'Only brew install specs are supported right now' });
+      }
+      try {
+        await runBrewInstall(selected.formula);
+        if (this.config.onSkillsReload) {
+          await this.config.onSkillsReload();
+        }
+        return { success: true, message: `Installed ${selected.formula}` };
+      } catch (err: any) {
+        return reply.status(500).send({ error: 'Install failed', detail: err?.message || String(err) });
+      }
+    });
+
+    this.app.get('/api/skills/:id/instructions', async (request, reply) => {
+      const { id } = request.params as { id: string };
+      if (!this.config.skillLoader) {
+        return reply.status(503).send({ error: 'Skill loader not available' });
+      }
 
 	      const knownSkill = this.config.skillLoader.getAll().find((skill) => skill.id === id);
 	      if (!knownSkill) {
@@ -321,6 +423,7 @@ export class GatewayServer extends EventEmitter {
         config?: Record<string, unknown>;
         env?: Record<string, string>;
         apiKey?: string;
+        installPermission?: 'auto' | 'ask' | 'deny';
       };
 
       if (!this.config.skillLoader) {
@@ -336,8 +439,9 @@ export class GatewayServer extends EventEmitter {
       const hasConfig = body.config !== undefined;
       const hasEnv = body.env !== undefined;
       const hasApiKey = body.apiKey !== undefined;
-      if (!hasEnabled && !hasConfig && !hasEnv && !hasApiKey) {
-        return reply.status(400).send({ error: 'Provide at least one of: enabled, config, env, apiKey' });
+      const hasInstallPerm = body.installPermission !== undefined;
+      if (!hasEnabled && !hasConfig && !hasEnv && !hasApiKey && !hasInstallPerm) {
+        return reply.status(400).send({ error: 'Provide at least one of: enabled, config, env, apiKey, installPermission' });
       }
 
       if (
@@ -370,6 +474,7 @@ export class GatewayServer extends EventEmitter {
         ...(hasConfig ? { config: body.config } : {}),
         ...(hasEnv ? { env: body.env } : {}),
         ...(hasApiKey ? { apiKey: body.apiKey } : {}),
+        ...(hasInstallPerm ? { installPermission: body.installPermission } : {}),
       };
 
       const nextSkills = {
@@ -836,6 +941,20 @@ function absolutizeMetaUrl(value: string, baseUrl: string): string | undefined {
   } catch {
     return undefined;
   }
+}
+
+function runBrewInstall(formula: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = execFile('brew', ['install', formula], { timeout: 15 * 60 * 1000 }, (err, _stdout, stderr) => {
+      if (err) {
+        reject(new Error(stderr || err.message));
+        return;
+      }
+      resolve();
+    });
+    child.stdout?.on('data', (d) => console.log(String(d)));
+    child.stderr?.on('data', (d) => console.warn(String(d)));
+  });
 }
 
 function firstNonEmpty(...values: Array<string | undefined | null>): string | undefined {

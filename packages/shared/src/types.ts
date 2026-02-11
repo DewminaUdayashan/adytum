@@ -171,6 +171,22 @@ export const SkillMetadataSchema = z.object({
     .optional(),
   primaryEnv: z.string().optional(),
   always: z.boolean().optional(),
+  communication: z.boolean().optional(),
+  install: z
+    .array(
+      z.object({
+        id: z.string().optional(),
+        kind: z.enum(['brew', 'node', 'go', 'uv', 'download']).optional(),
+        formula: z.string().optional(),
+        package: z.string().optional(),
+        module: z.string().optional(),
+        url: z.string().optional(),
+        bins: z.array(z.string()).optional(),
+        label: z.string().optional(),
+        os: z.array(z.string()).optional(),
+      }),
+    )
+    .optional(),
   adytum: z.record(z.unknown()).optional(),
 });
 export type SkillMetadata = z.infer<typeof SkillMetadataSchema>;
@@ -193,8 +209,15 @@ export const SkillEntryConfigSchema = z.object({
   config: z.record(z.unknown()).optional(),
   env: z.record(z.string(), z.string()).optional(),
   apiKey: z.string().optional(),
+  installPermission: z.enum(['auto', 'ask', 'deny']).optional(),
 });
 export type SkillEntryConfig = z.infer<typeof SkillEntryConfigSchema>;
+
+export const SkillsPermissionsSchema = z.object({
+  install: z.enum(['auto', 'ask', 'deny']).default('ask'),
+  defaultChannel: z.string().optional(),
+});
+export type SkillsPermissions = z.infer<typeof SkillsPermissionsSchema>;
 
 export const SkillsConfigSchema = z.object({
   enabled: z.boolean().default(true),
@@ -204,6 +227,7 @@ export const SkillsConfigSchema = z.object({
     paths: z.array(z.string()).default([]),
     extraDirs: z.array(z.string()).default([]),
   }).optional(),
+  permissions: SkillsPermissionsSchema.optional(),
   entries: z.record(SkillEntryConfigSchema).default({}),
 });
 export type SkillsConfig = z.infer<typeof SkillsConfigSchema>;

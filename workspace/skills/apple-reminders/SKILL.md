@@ -4,22 +4,10 @@ description: Manage Apple Reminders via the `remindctl` CLI on macOS (list, add,
 homepage: https://github.com/steipete/remindctl
 metadata:
   {
-    "openclaw":
-      {
-        "emoji": "⏰",
-        "os": ["darwin"],
-        "requires": { "bins": ["remindctl"] },
-        "install":
-          [
-            {
-              "id": "brew",
-              "kind": "brew",
-              "formula": "steipete/tap/remindctl",
-              "bins": ["remindctl"],
-              "label": "Install remindctl via Homebrew",
-            },
-          ],
-      },
+    "requires": { "bins": ["remindctl"], "os": ["darwin"] },
+    "install": [
+      { "id": "brew", "kind": "brew", "formula": "steipete/tap/remindctl", "bins": ["remindctl"], "label": "Install remindctl via Homebrew" }
+    ]
   }
 ---
 

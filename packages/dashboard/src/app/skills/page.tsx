@@ -38,6 +38,7 @@ type SkillManifest = {
 type SkillConfigEntry = {
   enabled?: boolean;
   config?: Record<string, unknown>;
+  installPermission?: 'auto' | 'ask' | 'deny';
 };
 
 type SkillRecord = {
@@ -54,6 +55,16 @@ type SkillRecord = {
   instructionFiles: string[];
   manifest: SkillManifest | null;
   configEntry: SkillConfigEntry;
+  missing?: {
+    bins: string[];
+    anyBins: string[];
+    env: string[];
+    config: string[];
+    os: string[];
+  };
+  eligible?: boolean;
+  communication?: boolean;
+  install?: Array<Record<string, unknown>>;
 };
 
 type SkillInstructionFile = {
@@ -75,6 +86,8 @@ type SkillsResponse = {
     allow: string[];
     deny: string[];
     loadPaths: string[];
+    extraDirs?: string[];
+    permissions?: { install: 'auto' | 'ask' | 'deny'; defaultChannel?: string };
   };
 };
 
@@ -303,8 +316,11 @@ export default function SkillsPage() {
   const [savingSkillId, setSavingSkillId] = useState<string | null>(null);
   const [draftConfig, setDraftConfig] = useState<Record<string, Record<string, unknown>>>({});
   const [draftEnabled, setDraftEnabled] = useState<Record<string, boolean>>({});
+  const [draftInstallPerm, setDraftInstallPerm] = useState<Record<string, 'auto' | 'ask' | 'deny' | undefined>>({});
   const [originalConfig, setOriginalConfig] = useState<Record<string, Record<string, unknown>>>({});
   const [originalEnabled, setOriginalEnabled] = useState<Record<string, boolean>>({});
+  const [originalInstallPerm, setOriginalInstallPerm] = useState<Record<string, 'auto' | 'ask' | 'deny' | undefined>>({});
+  const [globalPerms, setGlobalPerms] = useState<{ install: 'auto' | 'ask' | 'deny'; defaultChannel?: string }>({ install: 'ask', defaultChannel: '' });
   const [instructionFilesBySkill, setInstructionFilesBySkill] = useState<Record<string, SkillInstructionFile[]>>({});
   const [selectedInstructionFileBySkill, setSelectedInstructionFileBySkill] = useState<Record<string, string>>({});
   const [instructionDrafts, setInstructionDrafts] = useState<Record<string, string>>({});
@@ -318,9 +334,16 @@ export default function SkillsPage() {
       const res = await gatewayFetch<SkillsResponse>('/api/skills');
       const nextSkills = res.skills;
       setSkills(nextSkills);
+      if (res.global?.permissions) {
+        setGlobalPerms({
+          install: res.global.permissions.install || 'ask',
+          defaultChannel: res.global.permissions.defaultChannel,
+        });
+      }
 
       const nextConfig: Record<string, Record<string, unknown>> = {};
       const nextEnabled: Record<string, boolean> = {};
+      const nextInstallPerm: Record<string, 'auto' | 'ask' | 'deny' | undefined> = {};
 
       for (const skill of nextSkills) {
         nextConfig[skill.id] = isRecord(skill.configEntry?.config)
@@ -330,12 +353,18 @@ export default function SkillsPage() {
           typeof skill.configEntry?.enabled === 'boolean'
             ? skill.configEntry.enabled
             : skill.enabled;
+        const perm = skill.configEntry?.installPermission;
+        if (perm === 'auto' || perm === 'ask' || perm === 'deny') {
+          nextInstallPerm[skill.id] = perm;
+        }
       }
 
       setDraftConfig(nextConfig);
       setDraftEnabled(nextEnabled);
+      setDraftInstallPerm(nextInstallPerm);
       setOriginalConfig(nextConfig);
       setOriginalEnabled(nextEnabled);
+      setOriginalInstallPerm(nextInstallPerm);
       setSelectedSkillId((prev) => {
         if (prev && nextSkills.some((skill) => skill.id === prev)) return prev;
         return null;
@@ -407,7 +436,8 @@ export default function SkillsPage() {
   const hasSkillChanges = (skillId: string): boolean => {
     const cfgChanged = JSON.stringify(draftConfig[skillId] || {}) !== JSON.stringify(originalConfig[skillId] || {});
     const enabledChanged = draftEnabled[skillId] !== originalEnabled[skillId];
-    return cfgChanged || enabledChanged;
+    const permChanged = draftInstallPerm[skillId] !== originalInstallPerm[skillId];
+    return cfgChanged || enabledChanged || permChanged;
   };
 
   const hasInstructionChanges = (skillId: string, relativePath: string): boolean => {
@@ -428,6 +458,7 @@ export default function SkillsPage() {
         body: JSON.stringify({
           enabled: draftEnabled[skillId],
           config: draftConfig[skillId] || {},
+          installPermission: draftInstallPerm[skillId],
         }),
       });
       await loadSkills();
@@ -497,33 +528,79 @@ export default function SkillsPage() {
   }
 
   return (
-    <div className="flex h-full flex-col animate-fade-in">
-      <div className="px-8 pt-8 pb-4">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted font-medium">Configuration</p>
-            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-text-primary">Skills</h1>
-            <p className="mt-1 text-sm text-text-muted">
-              Configure each skill from its manifest-defined schema. Changes apply immediately after skill reload.
-            </p>
+      <div className="flex h-full flex-col animate-fade-in">
+        <div className="px-8 pt-8 pb-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted font-medium">Configuration</p>
+              <h1 className="mt-1 text-2xl font-semibold tracking-tight text-text-primary">Skills</h1>
+              <p className="mt-1 text-sm text-text-muted">
+                Configure each skill from its manifest-defined schema. Changes apply immediately after skill reload.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="info">{loadedCount}/{skills.length} loaded</Badge>
+              <Button variant="ghost" size="sm" onClick={loadSkills}>
+                <RefreshCw className="h-3.5 w-3.5" />
+                Refresh
+              </Button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <Badge variant="info">{loadedCount}/{skills.length} loaded</Badge>
-            <Button variant="ghost" size="sm" onClick={loadSkills}>
-              <RefreshCw className="h-3.5 w-3.5" />
-              Refresh
+        </div>
+
+        {error && (
+          <div className="mx-8 mb-2 rounded-lg border border-error/30 bg-error/10 px-4 py-2 text-sm text-error">
+            {error}
+          </div>
+        )}
+
+        <div className="px-8 pb-4">
+          <div className="rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4 flex flex-wrap items-center gap-4">
+            <div>
+              <p className="text-sm font-semibold text-text-primary">Install permissions</p>
+              <p className="text-xs text-text-muted">Controls whether skills may run install commands.</p>
+            </div>
+            <select
+              className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent-primary/50 focus:outline-none"
+              value={globalPerms.install}
+              onChange={(e) =>
+                setGlobalPerms((prev) => ({ ...prev, install: e.target.value as 'auto' | 'ask' | 'deny' }))
+              }
+            >
+              <option value="auto">Auto</option>
+              <option value="ask">Ask</option>
+              <option value="deny">Deny</option>
+            </select>
+            <input
+              className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent-primary/50 focus:outline-none flex-1 min-w-[180px]"
+              placeholder="Default channel (optional)"
+              value={globalPerms.defaultChannel || ''}
+              onChange={(e) => setGlobalPerms((prev) => ({ ...prev, defaultChannel: e.target.value }))}
+            />
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={async () => {
+                try {
+                  await gatewayFetch('/api/skills/permissions', {
+                    method: 'PUT',
+                    body: JSON.stringify({
+                      install: globalPerms.install,
+                      defaultChannel: globalPerms.defaultChannel,
+                    }),
+                  });
+                  await loadSkills();
+                } catch (err: any) {
+                  setError(err.message || String(err));
+                }
+              }}
+            >
+              Save
             </Button>
           </div>
         </div>
-      </div>
 
-      {error && (
-        <div className="mx-8 mb-2 rounded-lg border border-error/30 bg-error/10 px-4 py-2 text-sm text-error">
-          {error}
-        </div>
-      )}
-
-      <div className="flex-1 overflow-auto px-8 pb-8">
+        <div className="flex-1 overflow-auto px-8 pb-8">
         {skills.length === 0 ? (
           <EmptyState
             icon={Puzzle}
@@ -618,6 +695,23 @@ export default function SkillsPage() {
                           className="h-4 w-4 rounded border-border-primary bg-bg-primary text-accent-primary focus:ring-accent-primary/50"
                         />
                       </label>
+                      <label className="inline-flex items-center gap-2 rounded-lg border border-border-primary bg-bg-tertiary/20 px-3 py-2 text-sm">
+                        <span className="text-text-secondary">Install</span>
+                        <select
+                          className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent-primary/50 focus:outline-none"
+                          value={draftInstallPerm[skill.id] || 'ask'}
+                          onChange={(e) =>
+                            setDraftInstallPerm((prev) => ({
+                              ...prev,
+                              [skill.id]: e.target.value as 'auto' | 'ask' | 'deny',
+                            }))
+                          }
+                        >
+                          <option value="auto">Auto</option>
+                          <option value="ask">Ask</option>
+                          <option value="deny">Deny</option>
+                        </select>
+                      </label>
                     </div>
 
                     {canRenderConfig ? (
@@ -644,6 +738,47 @@ export default function SkillsPage() {
                         This skill does not expose configurable schema fields.
                       </div>
                     )}
+
+                    <div className="space-y-2 rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <h3 className="text-sm font-semibold text-text-primary">Install & Requirements</h3>
+                        <div className="text-xs text-text-muted">
+                          Missing: {[
+                            ...(skill.missing?.bins || []).map((b) => `bin:${b}`),
+                            ...(skill.missing?.anyBins || []).map((b) => `any:${b}`),
+                            ...(skill.missing?.env || []).map((e) => `env:${e}`),
+                            ...(skill.missing?.config || []).map((c) => `config:${c}`),
+                            ...(skill.missing?.os || []).map((o) => `os:${o}`),
+                          ].join(', ') || 'none'}
+                        </div>
+                      </div>
+                      {skill.install && skill.install.length > 0 ? (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={async () => {
+                              try {
+                                await gatewayFetch(`/api/skills/${skill.id}/install`, {
+                                  method: 'POST',
+                                  body: JSON.stringify({ approve: true }),
+                                });
+                                await loadSkills();
+                              } catch (err: any) {
+                                setError(err.message || String(err));
+                              }
+                            }}
+                          >
+                            Install missing deps
+                          </Button>
+                          <p className="text-xs text-text-muted">
+                            Uses manifest install hints (brew supported).
+                          </p>
+                        </div>
+                      ) : (
+                        <p className="text-xs text-text-muted">No installer hints provided.</p>
+                      )}
+                    </div>
 
                     <div className="space-y-3 rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4">
                       <div className="flex flex-wrap items-center justify-between gap-2">

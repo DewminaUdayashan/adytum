@@ -54,7 +54,25 @@ export interface LoadedSkill {
   instructionFiles: string[];
   manifest?: SkillManifest;
   module?: AdytumSkillPluginDefinition;
+  eligible?: boolean;
+  missing?: {
+    bins: string[];
+    anyBins: string[];
+    env: string[];
+    config: string[];
+    os: string[];
+  };
+  communication?: boolean;
+  install?: Array<Record<string, unknown>>;
 }
+
+type SkillMissing = {
+  bins: string[];
+  anyBins: string[];
+  env: string[];
+  config: string[];
+  os: string[];
+};
 
 export interface SkillLogger {
   debug: (message: string) => void;
@@ -137,14 +155,35 @@ const resolveStringArray = (value: unknown): string[] =>
 
 const resolveMetadata = (data: Record<string, unknown>) => {
   const rawMeta = isRecord(data.metadata) ? (data.metadata as Record<string, unknown>) : {};
-  const oc = isRecord(rawMeta.openclaw) ? (rawMeta.openclaw as Record<string, unknown>) : rawMeta;
+  const manifestBlock = isRecord(rawMeta.manifest) ? (rawMeta.manifest as Record<string, unknown>) : undefined;
+  const oc = isRecord(rawMeta.openclaw)
+    ? (rawMeta.openclaw as Record<string, unknown>)
+    : manifestBlock || rawMeta;
   const requires = (data.requires as Record<string, unknown>) || (oc.requires as Record<string, unknown>) || {};
   const primaryEnv = typeof (data.primaryEnv || oc.primaryEnv) === 'string' ? String(data.primaryEnv || oc.primaryEnv).trim() : undefined;
   const always = typeof (data.always ?? oc.always) === 'boolean' ? (data.always ?? oc.always) : undefined;
+  const installRaw = Array.isArray(oc.install) ? oc.install : Array.isArray(rawMeta.install) ? rawMeta.install : [];
+  const install = installRaw.filter((entry) => isRecord(entry)).map((entry) => entry as Record<string, unknown>);
+  const skillKey = typeof (oc.skillKey ?? rawMeta.skillKey) === 'string'
+    ? String(oc.skillKey ?? rawMeta.skillKey).trim()
+    : undefined;
+  const homepage = typeof (oc.homepage ?? rawMeta.homepage) === 'string'
+    ? String(oc.homepage ?? rawMeta.homepage).trim()
+    : undefined;
+  const emoji = typeof (oc.emoji ?? rawMeta.emoji) === 'string'
+    ? String(oc.emoji ?? rawMeta.emoji).trim()
+    : undefined;
+  const communication =
+    typeof (data.communication ?? oc.communication) === 'boolean'
+      ? (data.communication ?? oc.communication)
+      : undefined;
   return {
     name: typeof data.name === 'string' ? data.name.trim() : undefined,
     description: typeof data.description === 'string' ? data.description.trim() : undefined,
     version: typeof data.version === 'string' ? data.version.trim() : undefined,
+    skillKey,
+    homepage,
+    emoji,
     requires: {
       bins: resolveStringArray(requires.bins),
       anyBins: resolveStringArray(requires.anyBins),
@@ -154,6 +193,8 @@ const resolveMetadata = (data: Record<string, unknown>) => {
     },
     primaryEnv,
     always,
+    communication,
+    install,
   };
 };
 
@@ -299,6 +340,10 @@ export class SkillLoader {
         instructions: instructionBundle.instructions,
         instructionFiles: instructionBundle.files,
         manifest,
+        eligible: state.enabled,
+        missing: state.missing,
+        communication: manifest.metadata?.communication === true,
+        install: manifest.metadata?.install,
         priority: candidate.priority,
       });
     }
@@ -602,7 +647,7 @@ export class SkillLoader {
       const raw = readFileSync(skillMdPath, 'utf-8');
       const parsed = parseFrontmatter(raw);
       const meta = resolveMetadata(parsed.data);
-      const id = meta.name || basename(rootDir);
+      const id = meta.skillKey || meta.name || basename(rootDir);
       const manifest: SkillManifest = {
         id,
         name: meta.name || id,
@@ -723,48 +768,50 @@ export class SkillLoader {
   private resolveEnableState(
     id: string,
     metadata?: ReturnType<typeof resolveMetadata>,
-  ): { enabled: boolean; reason?: string } {
+  ): { enabled: boolean; reason?: string; missing: SkillMissing } {
     const skillsConfig = this.config.skills;
+    const missing: SkillMissing = { bins: [], anyBins: [], env: [], config: [], os: [] };
     if (skillsConfig?.enabled === false) {
-      return { enabled: false, reason: 'Skills disabled by config' };
+      return { enabled: false, reason: 'Skills disabled by config', missing };
     }
 
     if (skillsConfig?.deny?.includes(id)) {
-      return { enabled: false, reason: 'Blocked by skills.deny' };
+      return { enabled: false, reason: 'Blocked by skills.deny', missing };
     }
 
     if (skillsConfig?.allow && skillsConfig.allow.length > 0 && !skillsConfig.allow.includes(id)) {
-      return { enabled: false, reason: 'Not listed in skills.allow' };
+      return { enabled: false, reason: 'Not listed in skills.allow', missing };
     }
 
     const entry = skillsConfig?.entries?.[id];
     if (entry?.enabled === false) {
-      return { enabled: false, reason: 'Disabled in skills.entries' };
+      return { enabled: false, reason: 'Disabled in skills.entries', missing };
     }
 
     if (!metadata) {
-      return { enabled: true };
+      return { enabled: true, missing };
     }
 
     if (metadata.always) {
-      return { enabled: true };
+      return { enabled: true, missing };
     }
 
     const requiredOs = metadata.requires.os || [];
     if (requiredOs.length > 0 && !requiredOs.includes(process.platform)) {
-      return { enabled: false, reason: `OS not allowed (${process.platform})` };
+      missing.os = requiredOs;
+      return { enabled: false, reason: `OS not allowed (${process.platform})`, missing };
     }
 
     const requiredBins = metadata.requires.bins || [];
     for (const bin of requiredBins) {
       if (!hasBinary(bin)) {
-        return { enabled: false, reason: `Missing binary "${bin}"` };
+        missing.bins.push(bin);
       }
     }
 
     const anyBins = metadata.requires.anyBins || [];
     if (anyBins.length > 0 && !anyBins.some((bin) => hasBinary(bin))) {
-      return { enabled: false, reason: `Missing any of binaries: ${anyBins.join(', ')}` };
+      missing.anyBins = anyBins;
     }
 
     const requiredEnv = metadata.requires.env || [];
@@ -772,18 +819,28 @@ export class SkillLoader {
       if (process.env[envName]) continue;
       const configured = entry?.env?.[envName] || entry?.apiKey;
       if (!configured || (metadata.primaryEnv && envName !== metadata.primaryEnv && !entry?.env?.[envName])) {
-        return { enabled: false, reason: `Missing env ${envName}` };
+        missing.env.push(envName);
       }
     }
 
     const requiredConfig = metadata.requires.config || [];
     for (const path of requiredConfig) {
       if (!resolveConfigPathTruthy(this.config, path)) {
-        return { enabled: false, reason: `Missing config ${path}` };
+        missing.config.push(path);
       }
     }
 
-    return { enabled: true };
+    const enabled =
+      missing.bins.length === 0 &&
+      missing.anyBins.length === 0 &&
+      missing.env.length === 0 &&
+      missing.config.length === 0 &&
+      missing.os.length === 0;
+    return {
+      enabled,
+      reason: enabled ? undefined : 'Missing requirements',
+      missing,
+    };
   }
 
   private resolvePluginConfig(id: string): Record<string, unknown> | undefined {
