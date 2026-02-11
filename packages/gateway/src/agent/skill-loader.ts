@@ -862,6 +862,7 @@ export class SkillLoader {
   private applyEnvOverrides(skill: LoadedSkill) {
     const entry = this.config.skills?.entries?.[skill.id];
     const secrets = this.secrets[skill.id] || {};
+    const entryConfig = (entry?.config as Record<string, any> | undefined) || {};
 
     const setIfAbsent = (key: string, val?: string) => {
       if (!key || !val) return;
@@ -889,8 +890,14 @@ export class SkillLoader {
     if (skill.id === 'discord') {
       const token = secrets['ADYTUM_DISCORD_BOT_TOKEN'];
       const chan = secrets['ADYTUM_DISCORD_DEFAULT_CHANNEL_ID'];
+      const cfgToken = entryConfig.botToken as string | undefined;
+      const cfgChan = entryConfig.defaultChannelId as string | undefined;
+      const cfgGuild = entryConfig.guildId as string | undefined;
       if (token && !process.env.ADYTUM_DISCORD_BOT_TOKEN) process.env.ADYTUM_DISCORD_BOT_TOKEN = token;
       if (chan && !process.env.ADYTUM_DISCORD_DEFAULT_CHANNEL_ID) process.env.ADYTUM_DISCORD_DEFAULT_CHANNEL_ID = chan;
+      if (cfgToken && !process.env.ADYTUM_DISCORD_BOT_TOKEN) process.env.ADYTUM_DISCORD_BOT_TOKEN = cfgToken;
+      if (cfgChan && !process.env.ADYTUM_DISCORD_DEFAULT_CHANNEL_ID) process.env.ADYTUM_DISCORD_DEFAULT_CHANNEL_ID = cfgChan;
+      if (cfgGuild && !process.env.ADYTUM_DISCORD_GUILD_ID) process.env.ADYTUM_DISCORD_GUILD_ID = cfgGuild;
     }
   }
 
