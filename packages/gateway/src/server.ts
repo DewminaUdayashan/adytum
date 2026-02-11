@@ -328,15 +328,15 @@ export class GatewayServer extends EventEmitter {
               (Array.isArray(spec.os) && spec.os.length === 0) ||
               (Array.isArray(spec.os) && spec.os.map(String).includes(process.platform))),
         ) || installSpecs[0];
-      if (!selected || selected.kind !== 'brew' || typeof selected.formula !== 'string') {
-        return reply.status(400).send({ error: 'Only brew install specs are supported right now' });
+      if (!selected || typeof selected !== 'object' || !selected.kind) {
+        return reply.status(400).send({ error: 'Unsupported install spec' });
       }
       try {
-        await runBrewInstall(selected.formula);
+        await runInstall(selected as any);
         if (this.config.onSkillsReload) {
           await this.config.onSkillsReload();
         }
-        return { success: true, message: `Installed ${selected.formula}` };
+        return { success: true, message: 'Install completed' };
       } catch (err: any) {
         return reply.status(500).send({ error: 'Install failed', detail: err?.message || String(err) });
       }
@@ -961,18 +961,121 @@ function absolutizeMetaUrl(value: string, baseUrl: string): string | undefined {
   }
 }
 
-function runBrewInstall(formula: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const child = execFile('brew', ['install', formula], { timeout: 15 * 60 * 1000 }, (err, _stdout, stderr) => {
-      if (err) {
-        reject(new Error(stderr || err.message));
-        return;
-      }
-      resolve();
+function runInstall(spec: {
+  kind: string;
+  formula?: string;
+  package?: string;
+  module?: string;
+  url?: string;
+  archive?: boolean;
+  extract?: boolean;
+  targetDir?: string;
+  stripComponents?: number;
+}): Promise<void> {
+  const kind = String(spec.kind || '').toLowerCase();
+  if (kind === 'brew') {
+    if (!spec.formula) {
+      return Promise.reject(new Error('brew install requires formula'));
+    }
+    const formula: string = spec.formula;
+    return new Promise((resolve, reject) => {
+      const child = execFile(
+        'brew',
+        ['install', formula],
+        { timeout: 15 * 60 * 1000 },
+        (err: any, _stdout: any, stderr: any) => {
+          if (err) {
+            reject(new Error(stderr || err.message));
+            return;
+          }
+          resolve();
+        },
+      );
+      child.stdout?.on('data', (d) => console.log(String(d)));
+      child.stderr?.on('data', (d) => console.warn(String(d)));
     });
-    child.stdout?.on('data', (d) => console.log(String(d)));
-    child.stderr?.on('data', (d) => console.warn(String(d)));
-  });
+  }
+
+  if (kind === 'node') {
+    const pkg = spec.package;
+    if (!pkg) return Promise.reject(new Error('node install requires package'));
+    return new Promise((resolve, reject) => {
+      const child = execFile('npm', ['install', '-g', pkg], { timeout: 15 * 60 * 1000 }, (err, _stdout, stderr) => {
+        if (err) return reject(new Error(stderr || err.message));
+        resolve();
+      });
+      child.stdout?.on('data', (d) => console.log(String(d)));
+      child.stderr?.on('data', (d) => console.warn(String(d)));
+    });
+  }
+
+  if (kind === 'go') {
+    const mod = spec.module;
+    if (!mod) return Promise.reject(new Error('go install requires module'));
+    return new Promise((resolve, reject) => {
+      const child = execFile('go', ['install', `${mod}@latest`], { timeout: 15 * 60 * 1000 }, (err, _stdout, stderr) => {
+        if (err) return reject(new Error(stderr || err.message));
+        resolve();
+      });
+      child.stdout?.on('data', (d) => console.log(String(d)));
+      child.stderr?.on('data', (d) => console.warn(String(d)));
+    });
+  }
+
+  if (kind === 'uv') {
+    const mod = spec.module || spec.package;
+    if (!mod) return Promise.reject(new Error('uv install requires module'));
+    return new Promise((resolve, reject) => {
+      const child = execFile('uv', ['tool', 'install', mod], { timeout: 15 * 60 * 1000 }, (err, _stdout, stderr) => {
+        if (err) return reject(new Error(stderr || err.message));
+        resolve();
+      });
+      child.stdout?.on('data', (d) => console.log(String(d)));
+      child.stderr?.on('data', (d) => console.warn(String(d)));
+    });
+  }
+
+  if (kind === 'download') {
+    const url = spec.url;
+    if (!url) return Promise.reject(new Error('download install requires url'));
+    const downloadUrl: string = url;
+    const targetDir: string = spec.targetDir || '/tmp';
+    const archive = spec.archive !== false; // default true
+    const strip = spec.stripComponents ?? 0;
+    const tempFile = `/tmp/adytum-skill-download-${Date.now()}.tar`;
+    return new Promise((resolve, reject) => {
+      const curl = execFile(
+        'curl',
+        ['-L', '-o', tempFile, downloadUrl],
+        { timeout: 10 * 60 * 1000 },
+        (err: any, _stdout: any, stderr: any) => {
+          if (err) {
+            reject(new Error(stderr || err.message));
+            return;
+          }
+          if (!archive) {
+            resolve();
+            return;
+          }
+          const args: string[] = ['-xf', tempFile, '-C', targetDir];
+          if (strip > 0) {
+            args.splice(2, 0, `--strip-components=${strip}`);
+          }
+          execFile('tar', args, { timeout: 10 * 60 * 1000 }, (tarErr: any, _so: any, stde: any) => {
+            if (tarErr) {
+              reject(new Error(stde || tarErr.message));
+              return;
+            }
+            resolve();
+          });
+        },
+      );
+      curl.stdout?.on('data', (d) => console.log(String(d)));
+      curl.stderr?.on('data', (d) => console.warn(String(d)));
+    });
+  }
+
+  return Promise.reject(new Error(`Unsupported install kind: ${kind}`));
 }
 
 function firstNonEmpty(...values: Array<string | undefined | null>): string | undefined {

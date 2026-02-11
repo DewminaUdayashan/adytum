@@ -1,0 +1,29 @@
+{
+  "id": "web-search",
+  "name": "Web Search",
+  "description": "Performs web searches (DuckDuckGo by default) and lightweight surf/follow-up across results.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": { "type": "boolean", "default": true },
+      "provider": { "type": "string", "enum": ["duckduckgo", "serper"], "default": "duckduckgo" },
+      "apiKey": { "type": "string" },
+      "maxResults": { "type": "integer", "default": 5 },
+      "rotations": { "type": "integer", "default": 2 },
+      "maxTokens": { "type": "integer", "default": 6000 }
+    }
+  },
+  "uiHints": {
+    "provider": { "label": "Provider", "help": "duckduckgo requires no API key. serper needs apiKey." },
+    "apiKey": { "label": "API Key", "help": "Optional. Required for serper provider.", "sensitive": true },
+    "maxResults": { "label": "Max Results", "help": "How many results to fetch per search." },
+    "rotations": { "label": "Surf Depth", "help": "How many follow-up hops to fetch when surfing." },
+    "maxTokens": { "label": "Token Budget", "help": "Approx tokens to spend per search batch." }
+  },
+  "metadata": {
+    "communication": false,
+    "requires": { "bins": [], "env": [] }
+  }
+}
