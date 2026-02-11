@@ -65,6 +65,38 @@ export class GatewayServer extends EventEmitter {
       recent: tokenTracker.getRecentRecords(20),
     }));
 
+    this.app.get('/api/link-preview', async (request, reply) => {
+      const { url } = request.query as { url?: string };
+      if (!url || typeof url !== 'string') {
+        return reply.status(400).send({ error: 'url query parameter is required' });
+      }
+
+      let target: URL;
+      try {
+        target = new URL(url);
+      } catch {
+        return reply.status(400).send({ error: 'Invalid URL' });
+      }
+
+      if (!isHttpUrl(target)) {
+        return reply.status(400).send({ error: 'Only http/https URLs are allowed' });
+      }
+
+      if (!isLinkPreviewHostAllowed(target.hostname)) {
+        return reply.status(400).send({ error: 'Blocked URL host' });
+      }
+
+      try {
+        const preview = await fetchLinkPreview(target);
+        return preview;
+      } catch (err: any) {
+        return reply.status(502).send({
+          error: 'Failed to fetch preview',
+          detail: err?.message || String(err),
+        });
+      }
+    });
+
     this.app.get('/api/logs', async (request) => {
       const { limit, type } = request.query as { limit?: string; type?: string };
       const count = Math.min(Number(limit) || 50, 200);
@@ -649,4 +681,188 @@ function getInstructionFilesForSkill(skill: { path: string; instructionFiles: st
   const fallback = join(skill.path, 'SKILL.md');
   if (existsSync(fallback)) return [fallback];
   return [];
+}
+
+interface LinkPreviewPayload {
+  url: string;
+  domain: string;
+  title: string;
+  description: string;
+  image?: string;
+  favicon: string;
+  contentType: string;
+  status: number;
+}
+
+const LINK_PREVIEW_TIMEOUT_MS = 8_000;
+const LINK_PREVIEW_MAX_REDIRECTS = 3;
+const LINK_PREVIEW_BLOCKED_HOSTS = new Set([
+  'localhost',
+  'localhost.localdomain',
+  '0.0.0.0',
+  '127.0.0.1',
+  '::1',
+]);
+
+async function fetchLinkPreview(initialUrl: URL): Promise<LinkPreviewPayload> {
+  let current = new URL(initialUrl.toString());
+
+  for (let redirects = 0; redirects <= LINK_PREVIEW_MAX_REDIRECTS; redirects += 1) {
+    const response = await fetch(current.toString(), {
+      method: 'GET',
+      redirect: 'manual',
+      headers: {
+        'User-Agent': 'Adytum-LinkPreview/0.1',
+        Accept: 'text/html,application/xhtml+xml',
+      },
+      signal: AbortSignal.timeout(LINK_PREVIEW_TIMEOUT_MS),
+    });
+
+    if (isRedirectStatus(response.status)) {
+      const location = response.headers.get('location');
+      if (location) {
+        const next = new URL(location, current);
+        if (!isHttpUrl(next)) {
+          throw new Error('Redirected to non-http URL');
+        }
+        if (!isLinkPreviewHostAllowed(next.hostname)) {
+          throw new Error('Redirected to blocked host');
+        }
+        current = next;
+        continue;
+      }
+    }
+
+    const html = await response.text();
+    const contentType = response.headers.get('content-type') || '';
+    const pageUrl = current.toString();
+    const domain = current.hostname;
+    const origin = `${current.protocol}//${current.host}`;
+
+    const title = firstNonEmpty(
+      extractMetaContent(html, 'property', 'og:title'),
+      extractMetaContent(html, 'name', 'twitter:title'),
+      extractHtmlTitle(html),
+    );
+    const description = firstNonEmpty(
+      extractMetaContent(html, 'property', 'og:description'),
+      extractMetaContent(html, 'name', 'description'),
+      extractMetaContent(html, 'name', 'twitter:description'),
+    );
+    const image = firstNonEmpty(
+      extractMetaContent(html, 'property', 'og:image'),
+      extractMetaContent(html, 'name', 'twitter:image'),
+    );
+
+    return {
+      url: pageUrl,
+      domain,
+      title: title || domain,
+      description: description || '',
+      image: image ? absolutizeMetaUrl(image, pageUrl) : undefined,
+      favicon: `${origin}/favicon.ico`,
+      contentType,
+      status: response.status,
+    };
+  }
+
+  throw new Error('Too many redirects');
+}
+
+function isHttpUrl(url: URL): boolean {
+  return url.protocol === 'http:' || url.protocol === 'https:';
+}
+
+function isRedirectStatus(status: number): boolean {
+  return status >= 300 && status < 400;
+}
+
+function isLinkPreviewHostAllowed(hostname: string): boolean {
+  const normalized = hostname.trim().replace(/\.$/, '').toLowerCase();
+  if (!normalized) return false;
+  if (normalized.endsWith('.local') || normalized.endsWith('.localhost')) return false;
+  if (LINK_PREVIEW_BLOCKED_HOSTS.has(normalized)) return false;
+
+  const unwrapped = normalized.replace(/^\[/, '').replace(/\]$/, '');
+  if (isIpv4Address(unwrapped) || isIpv6Address(unwrapped)) return false;
+
+  return true;
+}
+
+function isIpv4Address(host: string): boolean {
+  return /^(\d{1,3}\.){3}\d{1,3}$/.test(host);
+}
+
+function isIpv6Address(host: string): boolean {
+  return host.includes(':') && /^[0-9a-f:.]+$/i.test(host);
+}
+
+function extractMetaContent(
+  html: string,
+  key: 'property' | 'name',
+  expected: string,
+): string | undefined {
+  const target = expected.toLowerCase();
+  for (const match of html.matchAll(/<meta\s+[^>]*>/gi)) {
+    const attributes = parseHtmlAttributes(match[0]);
+    if ((attributes[key] || '').toLowerCase() !== target) continue;
+    const content = attributes.content?.trim();
+    if (content) return content;
+  }
+  return undefined;
+}
+
+function extractHtmlTitle(html: string): string | undefined {
+  const titleMatch = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  if (!titleMatch) return undefined;
+  return normalizeWhitespace(stripHtmlTags(decodeHtmlEntities(titleMatch[1]))).trim();
+}
+
+function absolutizeMetaUrl(value: string, baseUrl: string): string | undefined {
+  try {
+    return new URL(value, baseUrl).toString();
+  } catch {
+    return undefined;
+  }
+}
+
+function firstNonEmpty(...values: Array<string | undefined | null>): string | undefined {
+  for (const value of values) {
+    if (value && value.trim()) return value.trim();
+  }
+  return undefined;
+}
+
+function parseHtmlAttributes(tag: string): Record<string, string> {
+  const attributes: Record<string, string> = {};
+  const regex =
+    /([a-zA-Z_:][-a-zA-Z0-9_:.]*)\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'=<>`]+))/g;
+
+  let match: RegExpExecArray | null = regex.exec(tag);
+  while (match) {
+    const key = match[1].toLowerCase();
+    const value = match[3] ?? match[4] ?? match[5] ?? '';
+    attributes[key] = decodeHtmlEntities(value);
+    match = regex.exec(tag);
+  }
+
+  return attributes;
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+    .replace(/&nbsp;/gi, ' ');
+}
+
+function stripHtmlTags(value: string): string {
+  return value.replace(/<[^>]+>/g, '');
+}
+
+function normalizeWhitespace(value: string): string {
+  return value.replace(/\s+/g, ' ');
 }
