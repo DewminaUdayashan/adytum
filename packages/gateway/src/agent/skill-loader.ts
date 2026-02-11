@@ -481,6 +481,11 @@ export class SkillLoader {
     this.secrets = secrets;
   }
 
+  /** Update secrets for a single skill (hot swap before reload). */
+  setSkillSecrets(skillId: string, env: Record<string, string>): void {
+    this.secrets = { ...this.secrets, [skillId]: { ...(env || {}) } };
+  }
+
   /** Get all discovered skills (loaded + disabled + errored). */
   getAll(): LoadedSkill[] {
     return [...this.skills];

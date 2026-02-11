@@ -101,7 +101,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
     dataPath: config.dataPath,
     config,
   });
-  skillLoader.setSecrets(secretsStore.getAll ? secretsStore.getAll() : {});
+  skillLoader.setSecrets(secretsStore.getAll());
   await skillLoader.init(toolRegistry);
 
   const agent = new AgentRuntime({
@@ -131,6 +131,29 @@ export async function startGateway(projectRoot: string): Promise<void> {
     await skillLoader.reload(agent);
     agent.refreshSystemPrompt();
   };
+
+  // One-time migration: move known skill env vars into secrets store, then reload if changed.
+  const migrateSkillEnvs = async () => {
+    let changed = false;
+    for (const skill of skillLoader.getAll()) {
+      const meta = skill.manifest?.metadata;
+      const required = [
+        ...(meta?.requires?.env || []),
+        meta?.primaryEnv,
+      ].filter((v): v is string => Boolean(v));
+      for (const envName of required) {
+        if (process.env[envName] && !secretsStore.getAll()[skill.id]?.[envName]) {
+          secretsStore.setSkillSecret(skill.id, envName, process.env[envName] as string);
+          changed = true;
+        }
+      }
+    }
+    if (changed) {
+      skillLoader.setSecrets(secretsStore.getAll());
+      await skillLoader.reload(agent);
+    }
+  };
+  await migrateSkillEnvs();
 
   // ── Dreamer & Inner Monologue (Phase 3/4) ─────────────────
   const dreamer = new Dreamer(modelRouter, memoryDb, memoryStore, config.dataPath, config.workspacePath);
@@ -188,7 +211,8 @@ export async function startGateway(projectRoot: string): Promise<void> {
     cronManager,
     skillLoader,
     toolRegistry,
-    secrets: {},
+    secrets: secretsStore.getAll(),
+    secretsStore,
     onScheduleUpdate: (type, intervalMinutes) => {
       if (type === 'dreamer') scheduleDreamer(intervalMinutes);
       else if (type === 'monologue') scheduleMonologue(intervalMinutes);

@@ -65,6 +65,8 @@ type SkillRecord = {
   eligible?: boolean;
   communication?: boolean;
   install?: Array<Record<string, unknown>>;
+  requiredEnv?: string[];
+  secrets?: string[];
 };
 
 type SkillInstructionFile = {
@@ -329,6 +331,7 @@ export default function SkillsPage() {
   const [instructionOriginals, setInstructionOriginals] = useState<Record<string, string>>({});
   const [instructionLoadingSkillId, setInstructionLoadingSkillId] = useState<string | null>(null);
   const [instructionSavingSkillId, setInstructionSavingSkillId] = useState<string | null>(null);
+  const [secretDrafts, setSecretDrafts] = useState<Record<string, Record<string, string>>>({});
 
   const loadSkills = async () => {
     try {
@@ -367,6 +370,7 @@ export default function SkillsPage() {
       setOriginalConfig(nextConfig);
       setOriginalEnabled(nextEnabled);
       setOriginalInstallPerm(nextInstallPerm);
+      setSecretDrafts({});
       setSelectedSkillId((prev) => {
         if (prev && nextSkills.some((skill) => skill.id === prev)) return prev;
         return null;
@@ -471,6 +475,27 @@ export default function SkillsPage() {
           config: draftConfig[skillId] || {},
           installPermission: draftInstallPerm[skillId],
         }),
+      });
+      await loadSkills();
+    } catch (err: any) {
+      setError(err.message || String(err));
+    } finally {
+      setSavingSkillId(null);
+    }
+  };
+
+  const saveSecrets = async (skillId: string) => {
+    const secrets = secretDrafts[skillId] || {};
+    const payload: Record<string, string> = {};
+    for (const [k, v] of Object.entries(secrets)) {
+      if (v && v.trim()) payload[k] = v.trim();
+    }
+    if (Object.keys(payload).length === 0) return;
+    try {
+      setSavingSkillId(skillId);
+      await gatewayFetch(`/api/skills/${skillId}/secrets`, {
+        method: 'PUT',
+        body: JSON.stringify({ secrets: payload }),
       });
       await loadSkills();
     } catch (err: any) {
@@ -616,6 +641,8 @@ export default function SkillsPage() {
               const schema = skill.manifest?.configSchema;
               const uiHints = skill.manifest?.uiHints;
               const canRenderConfig = schema?.type === 'object' && isRecord(schema.properties);
+              const requiredEnv = skill.requiredEnv || [];
+              const secretKeys = new Set(skill.secrets || []);
 
               return (
                 <Card key={skill.id}>
@@ -679,6 +706,47 @@ export default function SkillsPage() {
                         </select>
                       </label>
                     </div>
+
+                    {requiredEnv.length > 0 && (
+                      <div className="space-y-2 rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4">
+                        <div className="flex items-center justify-between">
+                          <h3 className="text-sm font-semibold text-text-primary">Required Environment</h3>
+                          <span className="text-xs text-text-muted">
+                            {requiredEnv.filter((k) => secretKeys.has(k)).length}/{requiredEnv.length} set
+                          </span>
+                        </div>
+                        <div className="grid gap-2 md:grid-cols-2">
+                          {requiredEnv.map((envKey) => (
+                            <div key={envKey} className="space-y-1">
+                              <label className="block text-[11px] uppercase tracking-wider text-text-muted font-semibold">{envKey}</label>
+                              <input
+                                type="password"
+                                value={secretDrafts[skill.id]?.[envKey] || ''}
+                                onChange={(e) =>
+                                  setSecretDrafts((prev) => ({
+                                    ...prev,
+                                    [skill.id]: { ...(prev[skill.id] || {}), [envKey]: e.target.value },
+                                  }))
+                                }
+                                placeholder={secretKeys.has(envKey) ? '•••••• (set)' : 'Enter value'}
+                                className="w-full rounded-lg border border-border-primary bg-bg-tertiary px-3 py-2 text-sm text-text-primary focus:border-accent-primary/50 focus:outline-none"
+                              />
+                            </div>
+                          ))}
+                        </div>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            isLoading={savingSkillId === skill.id}
+                            onClick={() => saveSecrets(skill.id)}
+                            disabled={savingSkillId === skill.id}
+                          >
+                            Save Required Env
+                          </Button>
+                        </div>
+                      </div>
+                    )}
 
                     {canRenderConfig ? (
                       <div className="space-y-3 rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4">

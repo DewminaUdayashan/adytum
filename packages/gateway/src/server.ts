@@ -9,6 +9,7 @@ import { loadConfig, saveConfig } from './config.js';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { execFile } from 'node:child_process';
+import type { SecretsStore } from './security/secrets-store.js';
 import type { WebSocket } from 'ws';
 import type { PermissionManager } from './security/permission-manager.js';
 import type { HeartbeatManager } from './agent/heartbeat-manager.js';
@@ -25,6 +26,8 @@ export interface ServerConfig {
   cronManager?: CronManager;
   skillLoader?: SkillLoader;
   toolRegistry?: ToolRegistry;
+  secrets?: Record<string, Record<string, string>>;
+  secretsStore?: SecretsStore;
   /** Callback to reschedule dreamer/monologue intervals */
   onScheduleUpdate?: (type: 'dreamer' | 'monologue', intervalMinutes: number) => void;
   /** Callback to reload skills after config changes */
@@ -44,10 +47,12 @@ export class GatewayServer extends EventEmitter {
     { resolve: (v: boolean) => void; reject: (err: Error) => void; expiresAt: number; payload: any }
   > = new Map();
   private config: ServerConfig;
+  private secretsStore?: SecretsStore;
 
   constructor(config: ServerConfig) {
     super();
     this.config = config;
+    this.secretsStore = config.secretsStore;
   }
 
   async start(): Promise<void> {
@@ -265,6 +270,7 @@ export class GatewayServer extends EventEmitter {
     // ─── Skills Management ───────────────────────────────────
     this.app.get('/api/skills', async () => {
       const cfg = loadConfig();
+      const secrets = this.secretsStore?.getAll() || this.config.secrets || {};
       const skillsCfg: {
         enabled: boolean;
         allow: string[];
@@ -310,7 +316,7 @@ export class GatewayServer extends EventEmitter {
         eligible: skill.eligible,
         communication: skill.communication === true,
         install: skill.install || [],
-		    manifest: skill.manifest
+        manifest: skill.manifest
           ? {
               id: skill.manifest.id,
               name: skill.manifest.name,
@@ -321,8 +327,13 @@ export class GatewayServer extends EventEmitter {
               providers: skill.manifest.providers || [],
               configSchema: skill.manifest.configSchema,
               uiHints: skill.manifest.uiHints || {},
-            }
-          : null,
+        }
+        : null,
+        requiredEnv: [
+          ...(skill.manifest?.metadata?.requires?.env || []),
+          ...(skill.manifest?.metadata?.primaryEnv ? [skill.manifest.metadata.primaryEnv] : []),
+        ].filter(Boolean),
+        secrets: Object.keys(secrets[skill.id] || {}),
         configEntry: entries[skill.id] || {},
       }));
 
@@ -380,6 +391,39 @@ export class GatewayServer extends EventEmitter {
       } catch (err: any) {
         return reply.status(500).send({ error: 'Install failed', detail: err?.message || String(err) });
       }
+    });
+
+    // Secrets management (write-only values)
+    this.app.get('/api/skills/:id/secrets', async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const secrets = this.secretsStore?.getSkillEnv(id) || {};
+      return { keys: Object.keys(secrets) };
+    });
+
+    this.app.put('/api/skills/:id/secrets', async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const body = request.body as { secrets?: Record<string, string>; delete?: string[] };
+      if (!this.secretsStore) return reply.status(503).send({ error: 'Secrets store unavailable' });
+      if (body?.secrets) {
+        for (const [k, v] of Object.entries(body.secrets)) {
+          if (v === undefined || v === null) continue;
+          this.secretsStore.setSkillSecret(id, k, String(v));
+        }
+      }
+      if (Array.isArray(body?.delete)) {
+        for (const key of body.delete) {
+          this.secretsStore.deleteSkillSecret(id, key);
+        }
+      }
+      // refresh loader secrets and reload that skill
+      const mergedSecrets = this.secretsStore.getAll();
+      if (this.config.skillLoader) {
+        this.config.skillLoader.setSecrets(mergedSecrets);
+      }
+      if (this.config.onSkillsReload) {
+        await this.config.onSkillsReload();
+      }
+      return { success: true };
     });
 
     this.app.get('/api/skills/:id/instructions', async (request, reply) => {
