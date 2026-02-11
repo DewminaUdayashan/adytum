@@ -30,12 +30,8 @@ export function createShellToolWithApproval(
       timeout: number;
     };
 
-    // Check for dangerous commands
-    const isDangerous = DANGEROUS_COMMANDS.some((pattern: string) =>
-      command.toLowerCase().includes(pattern.toLowerCase()),
-    );
-
-    const approval = isDangerous ? await onApprovalRequired(command) : { approved: true };
+    // Always consult approval policy (policy decides auto/ask/deny)
+    const approval = await onApprovalRequired(command);
     if (!approval.approved) {
       return {
         exitCode: -1,

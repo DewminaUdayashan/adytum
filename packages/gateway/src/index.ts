@@ -268,14 +268,15 @@ export async function startGateway(projectRoot: string): Promise<void> {
     const defaultChannel = latestConfig.execution?.defaultChannel;
     const defaultCommSkillId = latestConfig.execution?.defaultCommSkillId;
 
-    if (mode === 'auto') {
-      return { approved: true, mode };
-    }
     if (mode === 'deny') {
-      return { approved: false, mode, reason: 'policy_denied', defaultChannel };
+      return { approved: false, mode, reason: 'policy_denied', defaultChannel, defaultCommSkillId };
     }
 
-    // mode === 'ask' -> request via dashboard; fallback to TTY prompt
+    if (mode === 'auto') {
+      return { approved: true, mode, defaultChannel, defaultCommSkillId };
+    }
+
+    // mode === 'ask'
     const approved = await server.requestApproval({
       kind: 'shell',
       description: `shell_execute wants to run: ${command}`,
@@ -283,7 +284,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
     });
 
     if (approved !== undefined) {
-      return { approved, mode, reason: approved ? undefined : 'user_denied', defaultChannel };
+      return { approved, mode, reason: approved ? undefined : 'user_denied', defaultChannel, defaultCommSkillId };
     }
 
     if (process.stdin.isTTY) {
@@ -292,7 +293,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
           `\n  ⚠  Tool "shell_execute" wants to execute: ${chalk.bold(JSON.stringify({ command }))}\n  Approve? [y/N]: `,
         ),
       );
-      return { approved: ttyApproved, mode, reason: ttyApproved ? undefined : 'user_denied', defaultChannel };
+      return { approved: ttyApproved, mode, reason: ttyApproved ? undefined : 'user_denied', defaultChannel, defaultCommSkillId };
     }
 
     return {
@@ -300,6 +301,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
       mode,
       reason: 'approval_required',
       defaultChannel,
+      defaultCommSkillId,
       message: 'Shell command requires approval',
     };
   });

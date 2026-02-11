@@ -53,6 +53,9 @@
       }
     }
   },
+  "metadata": {
+    "communication": true
+  },
   "uiHints": {
     "botToken": {
       "label": "Bot Token",
