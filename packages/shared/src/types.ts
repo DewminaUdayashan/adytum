@@ -236,6 +236,7 @@ export const ExecutionPermissionsSchema = z.object({
   shell: z.enum(['auto', 'ask', 'deny']).default('ask'),
   defaultChannel: z.string().optional(),
   defaultCommSkillId: z.string().optional(),
+  approvalBaseUrl: z.string().url().optional(),
 });
 export type ExecutionPermissions = z.infer<typeof ExecutionPermissionsSchema>;
 

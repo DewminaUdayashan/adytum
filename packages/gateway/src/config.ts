@@ -121,6 +121,10 @@ export function loadConfig(projectRoot?: string): AdytumConfig {
         typeof fileExecution.defaultCommSkillId === 'string'
           ? fileExecution.defaultCommSkillId
           : undefined,
+      approvalBaseUrl:
+        typeof fileExecution.approvalBaseUrl === 'string'
+          ? fileExecution.approvalBaseUrl
+          : process.env.ADYTUM_PUBLIC_URL,
     },
     skills: {
       enabled: (fileSkills.enabled as boolean | undefined) ?? envSkillsEnabled ?? true,

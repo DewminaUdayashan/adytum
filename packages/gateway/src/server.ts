@@ -897,7 +897,11 @@ export class GatewayServer extends EventEmitter {
         this.config.toolRegistry.get('discord_send');
 
       if (sendTool) {
-        const baseUrl = `http://${this.config.host}:${this.config.port}`;
+        const configuredBase =
+          cfg.execution?.approvalBaseUrl ||
+          process.env.ADYTUM_PUBLIC_URL ||
+          `http://${this.config.host}:${this.config.port}`;
+        const baseUrl = configuredBase.replace(/\/+$/, '');
         const approveUrl = `${baseUrl}/api/approvals/${id}?approved=true`;
         const denyUrl = `${baseUrl}/api/approvals/${id}?approved=false`;
         // fire and forget

@@ -32,7 +32,7 @@ const MODE_LABELS: Record<string, string> = {
   just_in_time: 'Just-in-Time',
 };
 
-type ExecutionPermissions = { shell: 'auto' | 'ask' | 'deny'; defaultChannel?: string; defaultCommSkillId?: string };
+type ExecutionPermissions = { shell: 'auto' | 'ask' | 'deny'; defaultChannel?: string; defaultCommSkillId?: string; approvalBaseUrl?: string };
 type SkillsResponse = {
   skills: Array<{ id: string; name: string; communication?: boolean }>;
   global: { permissions?: { install: 'auto' | 'ask' | 'deny'; defaultChannel?: string } };
@@ -45,7 +45,7 @@ export default function PermissionsPage() {
   const [grantMode, setGrantMode] = useState('read_only');
   const [grantDuration, setGrantDuration] = useState('');
   const [installPerm, setInstallPerm] = useState<'auto' | 'ask' | 'deny'>('ask');
-  const [execPerms, setExecPerms] = useState<ExecutionPermissions>({ shell: 'ask', defaultChannel: '' });
+  const [execPerms, setExecPerms] = useState<ExecutionPermissions>({ shell: 'ask', defaultChannel: '', approvalBaseUrl: '' });
   const [commSkills, setCommSkills] = useState<Array<{ id: string; name: string }>>([]);
 
   const permissions = data?.permissions || [];
@@ -171,6 +171,16 @@ export default function PermissionsPage() {
                 placeholder="e.g. Discord channel ID"
                 className="w-full rounded-lg bg-bg-tertiary border border-border-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-primary/50"
               />
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Public approval base URL</p>
+              <input
+                value={execPerms.approvalBaseUrl || ''}
+                onChange={(e) => setExecPerms((prev) => ({ ...prev, approvalBaseUrl: e.target.value }))}
+                placeholder="https://your-ngrok-url"
+                className="w-full rounded-lg bg-bg-tertiary border border-border-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-primary/50"
+              />
+              <p className="text-[11px] text-text-tertiary">Optional. If set, approval links use this base instead of localhost.</p>
             </div>
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Communication skill</p>
