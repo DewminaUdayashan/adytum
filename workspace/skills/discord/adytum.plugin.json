@@ -11,7 +11,7 @@
       "botToken": { "type": "string" },
       "tokenEnv": { "type": "string", "default": "ADYTUM_DISCORD_BOT_TOKEN" },
       "defaultChannelId": { "type": "string" },
-      "defaultChannelIdEnv": { "type": "string", "default": "ADYTUM_DISCORD_DEFAULT_CHANNEL_ID" },
+      "defaultChannelIdEnv": { "type": "string", "default": "ADYTUM_DISCORD_PERSONAL_CHANNEL_ID" },
       "guildId": { "type": "string" },
       "guildIdEnv": { "type": "string", "default": "ADYTUM_DISCORD_GUILD_ID" },
       "allowedChannelIds": {
