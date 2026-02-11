@@ -291,7 +291,7 @@ export class GatewayServer extends EventEmitter {
         },
       };
 
-		  const skills = (this.config.skillLoader?.getAll() || []).map((skill) => ({
+      const skills = (this.config.skillLoader?.getAll() || []).map((skill) => ({
         id: skill.id,
         name: skill.name,
         description: skill.description,
@@ -324,7 +324,7 @@ export class GatewayServer extends EventEmitter {
         configEntry: entries[skill.id] || {},
       }));
 
-		  return { skills, global };
+		  return { skills, global, execution: cfg.execution };
 		});
 
     this.app.post('/api/skills/:id/install', async (request, reply) => {

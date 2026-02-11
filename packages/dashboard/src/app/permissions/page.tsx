@@ -36,6 +36,7 @@ type ExecutionPermissions = { shell: 'auto' | 'ask' | 'deny'; defaultChannel?: s
 type SkillsResponse = {
   skills: Array<{ id: string; name: string; communication?: boolean }>;
   global: { permissions?: { install: 'auto' | 'ask' | 'deny'; defaultChannel?: string } };
+  execution?: ExecutionPermissions;
 };
 
 export default function PermissionsPage() {
@@ -59,6 +60,14 @@ export default function PermissionsPage() {
         }
         const comm = (skillsRes.skills || []).filter((s) => s.communication).map((s) => ({ id: s.id, name: s.name }));
         setCommSkills(comm);
+        if (skillsRes.execution) {
+          setExecPerms((prev) => ({
+            shell: skillsRes.execution?.shell || prev.shell,
+            defaultChannel: skillsRes.execution?.defaultChannel || prev.defaultChannel,
+            defaultCommSkillId: skillsRes.execution?.defaultCommSkillId || prev.defaultCommSkillId,
+            approvalBaseUrl: skillsRes.execution?.approvalBaseUrl || prev.approvalBaseUrl,
+          }));
+        }
       } catch {
         /* ignore */
       }
