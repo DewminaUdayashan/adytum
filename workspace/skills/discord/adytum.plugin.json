@@ -2,6 +2,13 @@
   "id": "discord",
   "name": "Discord",
   "description": "Comprehensive Discord skill for inbound and outbound messaging.",
+  "metadata": {
+    "requires": {
+      "env": ["ADYTUM_DISCORD_BOT_TOKEN", "ADYTUM_DISCORD_DEFAULT_CHANNEL_ID"]
+    },
+    "primaryEnv": "ADYTUM_DISCORD_BOT_TOKEN",
+    "communication": true
+  },
   "channels": ["discord"],
   "configSchema": {
     "type": "object",
