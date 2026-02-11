@@ -5,7 +5,7 @@ import chalk from 'chalk';
 import { ADYTUM_VERSION } from '@adytum/shared';
 import { runBirthProtocol } from './birth-protocol.js';
 import { existsSync, rmSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { confirm } from '@inquirer/prompts';
 
 const program = new Command();
@@ -101,19 +101,40 @@ program
   .action(async (action: string, url?: string) => {
     if (action === 'list') {
       const { SkillLoader } = await import('../agent/skill-loader.js');
-      const loader = new SkillLoader(join(process.cwd(), 'workspace'));
+      const { loadConfig } = await import('../config.js');
+      const config = loadConfig(process.cwd());
+      const loader = new SkillLoader(config.workspacePath, {
+        projectRoot: process.cwd(),
+        dataPath: config.dataPath,
+        config,
+      });
+      const { ToolRegistry } = await import('../tools/registry.js');
+      await loader.init(new ToolRegistry());
       const skills = loader.getAll();
 
       if (skills.length === 0) {
         console.log(chalk.dim('No skills installed.'));
-        console.log(chalk.dim('  Create a folder in workspace/skills/ with a SKILL.md'));
+        console.log(chalk.dim('  Add a plugin under workspace/skills/<id>/ with adytum.plugin.json + index.ts'));
         return;
       }
 
       console.log(chalk.bold('Installed Skills:\n'));
       for (const skill of skills) {
-        console.log(`  ${chalk.green('●')} ${chalk.white(skill.metadata.name)}`);
-        console.log(`    ${chalk.dim(skill.metadata.description)}`);
+        const marker =
+          skill.status === 'error'
+            ? chalk.red('●')
+            : skill.enabled
+              ? chalk.green('●')
+              : chalk.gray('●');
+        const statusLabel = skill.status === 'disabled' ? 'disabled' : skill.status;
+        console.log(`  ${marker} ${chalk.white(skill.name)} ${chalk.dim(`(${skill.id})`)}`);
+        if (skill.description) {
+          console.log(`    ${chalk.dim(skill.description)}`);
+        }
+        console.log(`    ${chalk.dim(`status: ${statusLabel}`)}`);
+        if (skill.error) {
+          console.log(`    ${chalk.red(skill.error)}`);
+        }
       }
     } else if (action === 'install' && url) {
       console.log(chalk.yellow(`Installing skill from ${url}...`));

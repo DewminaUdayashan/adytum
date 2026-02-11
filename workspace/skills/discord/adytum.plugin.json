@@ -1,0 +1,138 @@
+{
+  "id": "discord",
+  "name": "Discord",
+  "description": "Comprehensive Discord skill for inbound and outbound messaging.",
+  "channels": ["discord"],
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": { "type": "boolean", "default": true },
+      "botToken": { "type": "string" },
+      "tokenEnv": { "type": "string", "default": "ADYTUM_DISCORD_BOT_TOKEN" },
+      "defaultChannelId": { "type": "string" },
+      "defaultChannelIdEnv": { "type": "string", "default": "ADYTUM_DISCORD_DEFAULT_CHANNEL_ID" },
+      "guildId": { "type": "string" },
+      "guildIdEnv": { "type": "string", "default": "ADYTUM_DISCORD_GUILD_ID" },
+      "allowedChannelIds": {
+        "type": "array",
+        "items": { "type": "string" },
+        "default": []
+      },
+      "allowedUserIds": {
+        "type": "array",
+        "items": { "type": "string" },
+        "default": []
+      },
+      "allowDm": { "type": "boolean", "default": true },
+      "listenIncoming": { "type": "boolean", "default": true },
+      "respondToMentionsOnly": { "type": "boolean", "default": false },
+      "includeAttachmentLinksInInbound": { "type": "boolean", "default": true },
+      "outboundReplyPrefix": { "type": "string", "default": "" },
+      "enableMessageContentIntent": { "type": "boolean", "default": true },
+      "enableGuildMembersIntent": { "type": "boolean", "default": false },
+      "actionPermissions": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "send_message": { "type": "boolean", "default": true },
+          "read_messages": { "type": "boolean", "default": true },
+          "fetch_message": { "type": "boolean", "default": true },
+          "react": { "type": "boolean", "default": true },
+          "create_poll": { "type": "boolean", "default": true },
+          "create_thread": { "type": "boolean", "default": true },
+          "reply_thread": { "type": "boolean", "default": true },
+          "create_channel": { "type": "boolean", "default": true },
+          "pin_message": { "type": "boolean", "default": true },
+          "unpin_message": { "type": "boolean", "default": true },
+          "list_channels": { "type": "boolean", "default": true },
+          "list_guilds": { "type": "boolean", "default": true },
+          "guild_info": { "type": "boolean", "default": true },
+          "list_members": { "type": "boolean", "default": true }
+        }
+      }
+    }
+  },
+  "uiHints": {
+    "botToken": {
+      "label": "Bot Token",
+      "help": "Optional. If empty, tokenEnv will be used.",
+      "sensitive": true,
+      "placeholder": "Paste Discord bot token"
+    },
+    "tokenEnv": {
+      "label": "Bot Token Env Var",
+      "help": "Environment variable used when botToken is empty."
+    },
+    "defaultChannelId": {
+      "label": "Default Channel ID",
+      "help": "Used when a send action has no target channel."
+    },
+    "defaultChannelIdEnv": {
+      "label": "Default Channel Env Var",
+      "help": "Environment variable fallback for defaultChannelId."
+    },
+    "guildId": {
+      "label": "Default Guild ID",
+      "help": "Used for guild actions when request does not include guildId."
+    },
+    "guildIdEnv": {
+      "label": "Default Guild Env Var",
+      "help": "Environment variable fallback for guildId."
+    },
+    "allowedChannelIds": {
+      "label": "Allowed Inbound Channel IDs",
+      "help": "Optional allow-list for inbound listener. One ID per line."
+    },
+    "allowedUserIds": {
+      "label": "Allowed Inbound User IDs",
+      "help": "Optional allow-list for inbound listener. One ID per line."
+    },
+    "actionPermissions": {
+      "label": "Action Permissions",
+      "help": "Toggle individual Discord actions that tools can execute."
+    },
+    "actionPermissions.send_message": {
+      "label": "Send Message"
+    },
+    "actionPermissions.read_messages": {
+      "label": "Read Messages"
+    },
+    "actionPermissions.fetch_message": {
+      "label": "Fetch Message"
+    },
+    "actionPermissions.react": {
+      "label": "React"
+    },
+    "actionPermissions.create_poll": {
+      "label": "Create Poll"
+    },
+    "actionPermissions.create_thread": {
+      "label": "Create Thread"
+    },
+    "actionPermissions.reply_thread": {
+      "label": "Reply Thread"
+    },
+    "actionPermissions.create_channel": {
+      "label": "Create Channel"
+    },
+    "actionPermissions.pin_message": {
+      "label": "Pin Message"
+    },
+    "actionPermissions.unpin_message": {
+      "label": "Unpin Message"
+    },
+    "actionPermissions.list_channels": {
+      "label": "List Channels"
+    },
+    "actionPermissions.list_guilds": {
+      "label": "List Guilds"
+    },
+    "actionPermissions.guild_info": {
+      "label": "Guild Info"
+    },
+    "actionPermissions.list_members": {
+      "label": "List Members"
+    }
+  }
+}

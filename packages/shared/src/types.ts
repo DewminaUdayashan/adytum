@@ -181,6 +181,23 @@ export const DiscordConfigSchema = z.object({
 });
 export type DiscordConfig = z.infer<typeof DiscordConfigSchema>;
 
+export const SkillEntryConfigSchema = z.object({
+  enabled: z.boolean().optional(),
+  config: z.record(z.unknown()).optional(),
+});
+export type SkillEntryConfig = z.infer<typeof SkillEntryConfigSchema>;
+
+export const SkillsConfigSchema = z.object({
+  enabled: z.boolean().default(true),
+  allow: z.array(z.string()).default([]),
+  deny: z.array(z.string()).default([]),
+  load: z.object({
+    paths: z.array(z.string()).default([]),
+  }).optional(),
+  entries: z.record(SkillEntryConfigSchema).default({}),
+});
+export type SkillsConfig = z.infer<typeof SkillsConfigSchema>;
+
 // ─── Agent Config ─────────────────────────────────────────────
 
 export const AdytumConfigSchema = z.object({
@@ -198,6 +215,7 @@ export const AdytumConfigSchema = z.object({
   heartbeatIntervalMinutes: z.number().default(30),
   dreamerIntervalMinutes: z.number().default(30),
   monologueIntervalMinutes: z.number().default(15),
+  skills: SkillsConfigSchema.optional(),
   discord: DiscordConfigSchema.optional(),
 });
 export type AdytumConfig = z.infer<typeof AdytumConfigSchema>;

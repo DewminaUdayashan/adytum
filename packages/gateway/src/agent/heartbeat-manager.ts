@@ -57,10 +57,9 @@ export class HeartbeatManager {
       hasHeartbeatFile = true;
     }
 
-    // If no file and configured to skip? User said: 
-    // "If the file is missing, the heartbeat still runs and the model decides what to do."
-    // But then: "If HEARTBEAT.md exists but is effectively empty... OpenClaw skips."
-    // I will follow: if empty/missing file -> assume default prompt behavior.
+    // If no file and configured to skip? Behavior:
+    // - missing file: run with default prompt
+    // - empty file: skip run to save tokens
 
     const session = 'system-heartbeat';
     

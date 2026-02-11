@@ -13,3 +13,4 @@ coverage/
 adytum.config.yaml
 litellm_config.yaml
 workspace/
+reference-project/

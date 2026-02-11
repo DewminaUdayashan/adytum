@@ -3,7 +3,6 @@ import { join } from 'node:path';
 import cron from 'node-cron';
 import { z } from 'zod';
 import type { AgentRuntime } from './runtime.js';
-import type { DiscordBridge } from './discord-bridge.js';
 
 export const CronJobSchema = z.object({
   id: z.string(),
@@ -25,7 +24,6 @@ export class CronManager {
   constructor(
     private agent: AgentRuntime,
     private dataPath: string,
-    private discordBridge?: DiscordBridge | null,
   ) {
     this.filePath = join(this.dataPath, 'cron.json');
     this.load();
@@ -85,25 +83,10 @@ export class CronManager {
         }
 
         try {
-            // We use a prefix ensuring it looks like it might be related to the user,
-            // but effectively it's still a separate session. 
-            // To make it visible in "Chat", the Chat UI must be looking at this session 
-            // OR we need to broadcast the result to the main session.
-            // For now, let's keep it isolated but we might need a "broadcast" mechanism later.
-            // Wait, the user asked "The LLM must send me a message".
-            // If the agent.run() calls tool "send_message" (hypothetical) or simply returns text,
-            // that text goes to `cron-${job.id}`. The user isn't subscribed to that.
-            
-            // Temporary output: Log it. Real solution: allow agent to "push" to default channel.
             const sessionId = `cron-${job.id}`;
             const prompt = `[CRON JOB TRIGGERED: ${job.name}]\nRequired Action: ${job.task}\n\nExecute this action now. If the task involves sending a message to the user, just generate the response.`;
-            
-            const result = await this.agent.run(prompt, sessionId);
 
-            const wantsDiscord = /\bdiscord\b|\bdm\b|direct message|send (me )?a message/i.test(job.task);
-            if (wantsDiscord && this.discordBridge?.isReady() && result.response?.trim()) {
-              await this.discordBridge.sendMessage(result.response);
-            }
+            await this.agent.run(prompt, sessionId);
         } catch (err) {
             console.error(`[Cron] Job ${job.name} failed:`, err);
         }

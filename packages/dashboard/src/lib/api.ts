@@ -1,19 +1,55 @@
-const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:3001';
+const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || '/api';
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001/ws';
+
+function joinGatewayPath(base: string, path: string): string {
+  const normalizedBase = base.replace(/\/+$/, '');
+  let normalizedPath = path.startsWith('/') ? path : `/${path}`;
+
+  // Support legacy env values like ".../api" with request paths that already include "/api/*".
+  if (normalizedBase.endsWith('/api') && normalizedPath.startsWith('/api/')) {
+    normalizedPath = normalizedPath.slice('/api'.length);
+  }
+
+  return `${normalizedBase}${normalizedPath}`;
+}
 
 export async function gatewayFetch<T = unknown>(
   path: string,
   options?: RequestInit,
 ): Promise<T> {
-  const res = await fetch(`${GATEWAY_URL}${path}`, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-  });
+  const headers = new Headers(options?.headers || {});
+  const hasBody = options?.body !== undefined && options?.body !== null;
+  if (hasBody && !headers.has('Content-Type') && !(options?.body instanceof FormData)) {
+    headers.set('Content-Type', 'application/json');
+  }
+
+  let res: Response;
+  try {
+    res = await fetch(joinGatewayPath(GATEWAY_URL, path), {
+      ...options,
+      headers,
+    });
+  } catch (err: any) {
+    throw new Error(`Failed to fetch ${path}: ${err?.message || String(err)}`);
+  }
+
   if (!res.ok) {
-    throw new Error(`Gateway error: ${res.status} ${res.statusText}`);
+    let detail = '';
+    try {
+      const payload = await res.json() as { error?: string; message?: string };
+      detail = payload.error || payload.message || '';
+    } catch {
+      try {
+        detail = (await res.text()).slice(0, 300);
+      } catch {
+        detail = '';
+      }
+    }
+    throw new Error(
+      detail
+        ? `Gateway error: ${res.status} ${res.statusText} - ${detail}`
+        : `Gateway error: ${res.status} ${res.statusText}`,
+    );
   }
   return res.json();
 }

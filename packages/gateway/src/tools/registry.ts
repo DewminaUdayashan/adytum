@@ -14,6 +14,16 @@ export class ToolRegistry {
     return this.tools.get(name);
   }
 
+  unregister(name: string): void {
+    this.tools.delete(name);
+  }
+
+  unregisterMany(names: string[]): void {
+    for (const name of names) {
+      this.tools.delete(name);
+    }
+  }
+
   has(name: string): boolean {
     return this.tools.has(name);
   }

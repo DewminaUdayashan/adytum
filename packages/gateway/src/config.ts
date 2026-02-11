@@ -26,6 +26,31 @@ const parseList = (value?: string | string[]): string[] | undefined => {
   return value.split(',').map((v) => v.trim()).filter(Boolean);
 };
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === 'object' && value !== null && !Array.isArray(value);
+
+const parseSkillEntries = (
+  value: unknown,
+): Record<string, { enabled?: boolean; config?: Record<string, unknown> }> | undefined => {
+  if (!isRecord(value)) return undefined;
+
+  const entries: Record<string, { enabled?: boolean; config?: Record<string, unknown> }> = {};
+  for (const [id, rawEntry] of Object.entries(value)) {
+    if (!id.trim()) continue;
+
+    if (!isRecord(rawEntry)) {
+      entries[id] = {};
+      continue;
+    }
+
+    const enabled = typeof rawEntry.enabled === 'boolean' ? rawEntry.enabled : undefined;
+    const config = isRecord(rawEntry.config) ? { ...rawEntry.config } : undefined;
+    entries[id] = { enabled, config };
+  }
+
+  return entries;
+};
+
 export function loadConfig(projectRoot?: string): AdytumConfig {
   if (cachedConfig) return cachedConfig;
 
@@ -46,11 +71,12 @@ export function loadConfig(projectRoot?: string): AdytumConfig {
   }
 
   // Merge env + file config
-  const fileDiscord = (fileConfig.discord as Record<string, unknown> | undefined) || {};
-  const envDiscordEnabled = parseBool(process.env.ADYTUM_DISCORD_ENABLED);
-  const envAllowDm = parseBool(process.env.ADYTUM_DISCORD_ALLOW_DMS);
-  const envAllowedChannels = parseList(process.env.ADYTUM_DISCORD_ALLOWED_CHANNEL_IDS);
-  const envAllowedUsers = parseList(process.env.ADYTUM_DISCORD_ALLOWED_USER_IDS);
+  const fileSkills = isRecord(fileConfig.skills) ? fileConfig.skills : {};
+  const fileSkillsLoad = isRecord(fileSkills.load) ? fileSkills.load : {};
+  const envSkillsEnabled = parseBool(process.env.ADYTUM_SKILLS_ENABLED);
+  const envSkillsAllow = parseList(process.env.ADYTUM_SKILLS_ALLOW);
+  const envSkillsDeny = parseList(process.env.ADYTUM_SKILLS_DENY);
+  const envSkillsLoadPaths = parseList(process.env.ADYTUM_SKILLS_LOAD_PATHS);
 
   const merged = {
     agentName: fileConfig.agentName || process.env.ADYTUM_AGENT_NAME || 'Adytum',
@@ -71,16 +97,17 @@ export function loadConfig(projectRoot?: string): AdytumConfig {
     heartbeatIntervalMinutes: Number(fileConfig.heartbeatIntervalMinutes || 30),
     dreamerIntervalMinutes: Number(fileConfig.dreamerIntervalMinutes || 30),
     monologueIntervalMinutes: Number(fileConfig.monologueIntervalMinutes || 15),
-    discord: {
-      enabled: (fileDiscord.enabled as boolean | undefined)
-        ?? envDiscordEnabled
-        ?? Boolean(fileDiscord.botToken || process.env.ADYTUM_DISCORD_BOT_TOKEN),
-      botToken: (fileDiscord.botToken as string | undefined) || process.env.ADYTUM_DISCORD_BOT_TOKEN,
-      defaultChannelId: (fileDiscord.defaultChannelId as string | undefined) || process.env.ADYTUM_DISCORD_DEFAULT_CHANNEL_ID,
-      guildId: (fileDiscord.guildId as string | undefined) || process.env.ADYTUM_DISCORD_GUILD_ID,
-      allowedChannelIds: parseList(fileDiscord.allowedChannelIds as string[] | string | undefined) || envAllowedChannels,
-      allowedUserIds: parseList(fileDiscord.allowedUserIds as string[] | string | undefined) || envAllowedUsers,
-      allowDm: (fileDiscord.allowDm as boolean | undefined) ?? envAllowDm,
+    skills: {
+      enabled: (fileSkills.enabled as boolean | undefined) ?? envSkillsEnabled ?? true,
+      allow: parseList(fileSkills.allow as string[] | string | undefined) || envSkillsAllow || [],
+      deny: parseList(fileSkills.deny as string[] | string | undefined) || envSkillsDeny || [],
+      load: {
+        paths:
+          parseList(fileSkillsLoad.paths as string[] | string | undefined) ||
+          envSkillsLoadPaths ||
+          [],
+      },
+      entries: parseSkillEntries(fileSkills.entries) || {},
     },
   };
 

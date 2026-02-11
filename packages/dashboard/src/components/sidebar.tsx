@@ -13,6 +13,7 @@ import {
   Heart,
   Brain,
   Clock,
+  Puzzle,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
@@ -21,6 +22,7 @@ const NAV_ITEMS = [
   { href: '/tasks', label: 'Scheduled Tasks', icon: Clock, group: 'main' },
   { href: '/console', label: 'Console Stream', icon: Terminal, group: 'tools' },
   { href: '/tokens', label: 'Token Usage', icon: Coins, group: 'tools' },
+  { href: '/skills', label: 'Skills', icon: Puzzle, group: 'config' },
   { href: '/permissions', label: 'Access Control', icon: Shield, group: 'config' },
   { href: '/personality', label: 'Personality', icon: Sparkles, group: 'config' },
   { href: '/heartbeat', label: 'Pulse Monitor', icon: Heart, group: 'monitoring' },

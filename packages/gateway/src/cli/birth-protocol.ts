@@ -287,6 +287,13 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
     dashboardPort: 3000,
     contextSoftLimit: 40000,
     heartbeatIntervalMinutes: 30,
+    skills: {
+      enabled: true,
+      allow: [],
+      deny: [],
+      load: { paths: [] },
+      entries: {},
+    },
   };
   writeFileSync(
     join(projectRoot, 'adytum.config.yaml'),

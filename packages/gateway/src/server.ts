@@ -5,11 +5,12 @@ import { parseFrame, serializeFrame, type WebSocketFrame } from '@adytum/shared'
 import { auditLogger } from './security/audit-logger.js';
 import { tokenTracker } from './agent/token-tracker.js';
 import { EventEmitter } from 'node:events';
-import { saveConfig } from './config.js';
+import { loadConfig, saveConfig } from './config.js';
 import type { WebSocket } from 'ws';
 import type { PermissionManager } from './security/permission-manager.js';
 import type { HeartbeatManager } from './agent/heartbeat-manager.js';
 import type { CronManager } from './agent/cron-manager.js';
+import type { SkillLoader } from './agent/skill-loader.js';
 
 export interface ServerConfig {
   port: number;
@@ -18,8 +19,11 @@ export interface ServerConfig {
   workspacePath?: string;
   heartbeatManager?: HeartbeatManager;
   cronManager?: CronManager;
+  skillLoader?: SkillLoader;
   /** Callback to reschedule dreamer/monologue intervals */
   onScheduleUpdate?: (type: 'dreamer' | 'monologue', intervalMinutes: number) => void;
+  /** Callback to reload skills after config changes */
+  onSkillsReload?: () => Promise<void>;
 }
 
 /**
@@ -138,6 +142,120 @@ export class GatewayServer extends EventEmitter {
         return reply.status(400).send({ error: 'path required' });
       }
       this.config.permissionManager.revokeAccess(body.path);
+      return { success: true };
+    });
+
+    // ─── Skills Management ───────────────────────────────────
+    this.app.get('/api/skills', async () => {
+      const cfg = loadConfig();
+      const entries = cfg.skills?.entries || {};
+      const global = {
+        enabled: cfg.skills?.enabled ?? true,
+        allow: cfg.skills?.allow ?? [],
+        deny: cfg.skills?.deny ?? [],
+        loadPaths: cfg.skills?.load?.paths ?? [],
+      };
+
+      const skills = (this.config.skillLoader?.getAll() || []).map((skill) => ({
+        id: skill.id,
+        name: skill.name,
+        description: skill.description,
+        version: skill.version,
+        origin: skill.origin,
+        status: skill.status,
+        enabled: skill.enabled,
+        error: skill.error,
+        toolNames: skill.toolNames,
+        serviceIds: skill.serviceIds,
+        manifestPath: skill.manifestPath,
+        manifest: skill.manifest
+          ? {
+              id: skill.manifest.id,
+              name: skill.manifest.name,
+              description: skill.manifest.description,
+              version: skill.manifest.version,
+              kind: skill.manifest.kind,
+              channels: skill.manifest.channels || [],
+              providers: skill.manifest.providers || [],
+              configSchema: skill.manifest.configSchema,
+              uiHints: skill.manifest.uiHints || {},
+            }
+          : null,
+        configEntry: entries[skill.id] || {},
+      }));
+
+      return { skills, global };
+    });
+
+    this.app.put('/api/skills/:id', async (request, reply) => {
+      const { id } = request.params as { id: string };
+      const body = request.body as {
+        enabled?: boolean;
+        config?: Record<string, unknown>;
+      };
+
+      if (!this.config.skillLoader) {
+        return reply.status(503).send({ error: 'Skill loader not available' });
+      }
+
+      const knownSkill = this.config.skillLoader.getAll().find((skill) => skill.id === id);
+      if (!knownSkill) {
+        return reply.status(404).send({ error: `Unknown skill: ${id}` });
+      }
+
+      const hasEnabled = typeof body.enabled === 'boolean';
+      const hasConfig = body.config !== undefined;
+      if (!hasEnabled && !hasConfig) {
+        return reply.status(400).send({ error: 'Provide at least one of: enabled, config' });
+      }
+
+      if (
+        hasConfig &&
+        (typeof body.config !== 'object' || body.config === null || Array.isArray(body.config))
+      ) {
+        return reply.status(400).send({ error: 'config must be an object' });
+      }
+
+      const cfg = loadConfig();
+      const currentSkills = cfg.skills || {
+        enabled: true,
+        allow: [],
+        deny: [],
+        load: { paths: [] },
+        entries: {},
+      };
+      const currentEntries = currentSkills.entries || {};
+      const currentEntry = currentEntries[id] || {};
+
+      const nextEntry = {
+        ...currentEntry,
+        ...(hasEnabled ? { enabled: body.enabled } : {}),
+        ...(hasConfig ? { config: body.config } : {}),
+      };
+
+      const nextSkills = {
+        enabled: currentSkills.enabled ?? true,
+        allow: currentSkills.allow || [],
+        deny: currentSkills.deny || [],
+        load: { paths: currentSkills.load?.paths || [] },
+        entries: {
+          ...currentEntries,
+          [id]: nextEntry,
+        },
+      };
+
+      saveConfig({ skills: nextSkills } as any);
+
+      if (this.config.onSkillsReload) {
+        try {
+          await this.config.onSkillsReload();
+        } catch (err: any) {
+          return reply.status(500).send({
+            error: `Config saved but skill reload failed: ${err?.message || err}`,
+          });
+        }
+      }
+
       return { success: true };
     });
 

@@ -16,7 +16,6 @@ import { createMemoryTools } from './tools/memory.js';
 import { createPersonalityTools } from './tools/personality.js';
 import { PermissionManager } from './security/permission-manager.js';
 import { tokenTracker } from './agent/token-tracker.js';
-import { auditLogger } from './security/audit-logger.js';
 import { autoProvisionStorage } from './storage/provision.js';
 import { MemoryStore } from './agent/memory-store.js';
 import { MemoryDB } from './agent/memory-db.js';
@@ -25,15 +24,12 @@ import { InnerMonologue } from './agent/inner-monologue.js';
 import { HeartbeatManager } from './agent/heartbeat-manager.js';
 import { CronManager } from './agent/cron-manager.js';
 import { createCronTools } from './tools/cron.js';
-import { DiscordBridge } from './agent/discord-bridge.js';
-import { createDiscordTools } from './tools/discord.js';
 import cron from 'node-cron';
-import type { AdytumConfig } from '@adytum/shared';
 
 // ─── Direct Execution Detection ─────────────────────────────
 // If this file is run directly (e.g. `node dist/index.js start`),
 // delegate to the CLI entry point which uses Commander.
-import { resolve, dirname } from 'node:path';
+import { resolve } from 'node:path';
 
 const __filename = fileURLToPath(import.meta.url);
 const entryFile = process.argv[1] ? resolve(process.argv[1]) : '';
@@ -98,7 +94,11 @@ export async function startGateway(projectRoot: string): Promise<void> {
   console.log(chalk.green('  ✓ ') + chalk.white(`LLM: ${llmStatus}`));
 
   const soulEngine = new SoulEngine(config.workspacePath);
-  const skillLoader = new SkillLoader(config.workspacePath);
+  const skillLoader = new SkillLoader(config.workspacePath, {
+    projectRoot,
+    dataPath: config.dataPath,
+    config,
+  });
   await skillLoader.init(toolRegistry);
 
   const agent = new AgentRuntime({
@@ -119,6 +119,14 @@ export async function startGateway(projectRoot: string): Promise<void> {
   // Seed context with recent persisted messages to restore short-term memory
   const recentMessages = memoryDb.getRecentMessages(40);
   agent.seedContext(recentMessages.map((m) => ({ role: m.role as any, content: m.content })));
+  await skillLoader.start(agent);
+
+  const reloadSkills = async (): Promise<void> => {
+    const latestConfig = loadConfig(projectRoot);
+    skillLoader.updateConfig(latestConfig, projectRoot);
+    await skillLoader.reload(agent);
+    agent.refreshSystemPrompt();
+  };
 
   // ── Dreamer & Inner Monologue (Phase 3/4) ─────────────────
   const dreamer = new Dreamer(modelRouter, memoryDb, memoryStore, config.dataPath, config.workspacePath);
@@ -152,23 +160,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
   scheduleDreamer(config.dreamerIntervalMinutes);
   scheduleMonologue(config.monologueIntervalMinutes);
 
-  // ── Discord Bridge ─────────────────────────────────────────
-  const discordBridge = config.discord?.enabled && config.discord.botToken
-    ? new DiscordBridge(agent, config.discord)
-    : null;
-
-  if (discordBridge) {
-    try {
-      await discordBridge.start();
-      for (const tool of createDiscordTools(discordBridge)) {
-        toolRegistry.register(tool);
-      }
-    } catch (err: any) {
-      console.error(chalk.red(`  ✗ Discord bridge failed: ${err.message || err}`));
-    }
-  }
-
-  const cronManager = new CronManager(agent, config.dataPath, discordBridge);
+  const cronManager = new CronManager(agent, config.dataPath);
 
   // Register Cron Tools (needs agent instance)
   for (const tool of createCronTools(cronManager)) {
@@ -190,10 +182,12 @@ export async function startGateway(projectRoot: string): Promise<void> {
     workspacePath: config.workspacePath,
     heartbeatManager,
     cronManager,
+    skillLoader,
     onScheduleUpdate: (type, intervalMinutes) => {
       if (type === 'dreamer') scheduleDreamer(intervalMinutes);
       else if (type === 'monologue') scheduleMonologue(intervalMinutes);
     },
+    onSkillsReload: reloadSkills,
   });
 
   // Route WebSocket messages to agent
@@ -238,7 +232,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
     console.log(chalk.dim(`\n  ${config.agentName} is resting. Goodbye.\n`));
     rl.close();
     permissionManager.stopWatching();
-    await discordBridge?.stop();
+    await skillLoader.stop();
     await server.stop();
     process.exit(0);
   };
@@ -296,7 +290,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
     if (input.toLowerCase() === 'exit') {
       console.log(chalk.dim(`\n  ${config.agentName} is resting. Goodbye.\n`));
       permissionManager.stopWatching();
-      await discordBridge?.stop();
+      await skillLoader.stop();
       await server.stop();
       process.exit(0);
     }
@@ -316,8 +310,12 @@ export async function startGateway(projectRoot: string): Promise<void> {
     }
 
     if (input === '/reload') {
-      agent.refreshSystemPrompt();
-      console.log(chalk.dim('  SOUL.md and skills reloaded.\n'));
+      try {
+        await reloadSkills();
+        console.log(chalk.dim('  SOUL.md and skills reloaded.\n'));
+      } catch (err: any) {
+        console.log(chalk.red(`  Failed to reload skills: ${err?.message || err}\n`));
+      }
       rl.prompt();
       return;
     }
@@ -355,7 +353,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
 
   rl.on('close', async () => {
     permissionManager.stopWatching();
-    await discordBridge?.stop();
+    await skillLoader.stop();
     await server.stop();
     process.exit(0);
   });
