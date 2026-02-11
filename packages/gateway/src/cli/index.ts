@@ -53,6 +53,11 @@ program
           rmSync(litellmPath, { force: true });
           console.log(chalk.dim('   ✓ Removed litellm_config.yaml'));
         }
+        const envPath = join(projectRoot, '.env');
+        if (existsSync(envPath)) {
+          rmSync(envPath, { force: true });
+          console.log(chalk.dim('   ✓ Removed .env'));
+        }
       } catch (e) {}
     }
 
