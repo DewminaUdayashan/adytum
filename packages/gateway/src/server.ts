@@ -221,6 +221,7 @@ export class GatewayServer extends EventEmitter {
           shell: exec.shell || 'ask',
           defaultChannel: exec.defaultChannel,
           defaultCommSkillId: exec.defaultCommSkillId,
+          approvalBaseUrl: exec.approvalBaseUrl,
         },
       };
     });

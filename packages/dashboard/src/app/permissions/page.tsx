@@ -78,6 +78,7 @@ export default function PermissionsPage() {
             shell: exec.execution.shell || 'ask',
             defaultChannel: exec.execution.defaultChannel,
             defaultCommSkillId: exec.execution.defaultCommSkillId,
+            approvalBaseUrl: exec.execution.approvalBaseUrl,
           });
         }
       } catch {
