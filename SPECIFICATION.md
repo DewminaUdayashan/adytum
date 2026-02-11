@@ -17,6 +17,33 @@
 
 ---
 
+## Phase 0 — Stabilization (ASAP)
+
+**Goal**: Eliminate critical reliability issues before expanding new features.
+
+### 0.1 Model Reliability 
+- Detect and surface `finish_reason` and `refusal` from all providers (Gemini, OpenAI, Anthropic).
+- Improve empty-response handling with explicit error messages and actionable remediation.
+- Add a health check endpoint to validate model connectivity and API key validity.
+
+### 0.2 Context Safety 
+- Add a CLI command to reset conversation state without wiping config (`adytum reset`), to recover from “error-roleplay” loops.
+- Ensure error messages are not persisted into long-term memory unless explicitly marked.
+
+### 0.3 Dashboard Build Warnings
+- Move `themeColor` from metadata exports to `generateViewport` in all dashboard pages.
+- Set `outputFileTracingRoot` to suppress workspace root warnings.
+
+### 0.4 Skill System Hardening
+- Validate skill code entry points and surface load errors in the dashboard console.
+- Add a test harness for skills (load, register tools, execute a stub tool).
+
+### 0.5 Security & Dev UX
+- Add guardrails to prevent accidental commits of `.env` secrets.
+- Add clear logging for model selection and fallback chain during a run.
+
+---
+
 ## Phase 1 — Foundation & Terminal Agent
 
 **Goal**: A working terminal-first agent that can reason, use tools, and persist state.
