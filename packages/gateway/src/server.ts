@@ -845,7 +845,7 @@ export class GatewayServer extends EventEmitter {
         sendTool
           .execute({
             channelId: defaultChannel,
-            message: `Approval needed: ${payload.description}\nRequest ID: ${id}`,
+            content: `Approval needed: ${payload.description}\nRequest ID: ${id}`,
           })
           .catch((err: any) => {
             console.warn('[approval] failed to send comm notification:', err?.message || err);
