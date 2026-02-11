@@ -261,11 +261,12 @@ export async function startGateway(projectRoot: string): Promise<void> {
     });
   };
 
-  // Re-wire the shell tool's approval callback to respect execution permissions
+  // Re-wire the shell tool's approval callback to respect execution permissions and dashboard approvals
   toolRegistry.get('shell_execute')!.execute = createShellToolWithApproval(async (command) => {
     const latestConfig = loadConfig(projectRoot);
     const mode = latestConfig.execution?.shell || 'ask';
     const defaultChannel = latestConfig.execution?.defaultChannel;
+    const defaultCommSkillId = latestConfig.execution?.defaultCommSkillId;
 
     if (mode === 'auto') {
       return { approved: true, mode };
@@ -274,14 +275,24 @@ export async function startGateway(projectRoot: string): Promise<void> {
       return { approved: false, mode, reason: 'policy_denied', defaultChannel };
     }
 
-    // mode === 'ask'
+    // mode === 'ask' -> request via dashboard; fallback to TTY prompt
+    const approved = await server.requestApproval({
+      kind: 'shell',
+      description: `shell_execute wants to run: ${command}`,
+      meta: { command, defaultChannel, defaultCommSkillId },
+    });
+
+    if (approved !== undefined) {
+      return { approved, mode, reason: approved ? undefined : 'user_denied', defaultChannel };
+    }
+
     if (process.stdin.isTTY) {
-      const approved = await promptApproval(
+      const ttyApproved = await promptApproval(
         chalk.yellow(
           `\n  ⚠  Tool "shell_execute" wants to execute: ${chalk.bold(JSON.stringify({ command }))}\n  Approve? [y/N]: `,
         ),
       );
-      return { approved, mode, reason: approved ? undefined : 'user_denied', defaultChannel };
+      return { approved: ttyApproved, mode, reason: ttyApproved ? undefined : 'user_denied', defaultChannel };
     }
 
     return {
@@ -293,8 +304,13 @@ export async function startGateway(projectRoot: string): Promise<void> {
     };
   });
 
-  // Re-wire the agent's approval callback too
+  // Re-wire the agent's approval callback too (used by tools marked requiresApproval)
   agent.setApprovalHandler(async (description) => {
+    const approved = await server.requestApproval({
+      kind: 'tool',
+      description,
+    });
+    if (approved !== undefined) return approved;
     return promptApproval(
       chalk.yellow(`\n  ⚠  ${description}\n  Approve? [y/N]: `),
     );

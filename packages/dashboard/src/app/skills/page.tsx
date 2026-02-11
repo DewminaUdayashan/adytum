@@ -79,7 +79,7 @@ type SkillInstructionsResponse = {
   combined: string;
 };
 
-type ExecutionPermissions = { shell: 'auto' | 'ask' | 'deny'; defaultChannel?: string };
+type ExecutionPermissions = { shell: 'auto' | 'ask' | 'deny'; defaultChannel?: string; defaultCommSkillId?: string };
 
 type SkillsResponse = {
   skills: SkillRecord[];
@@ -323,7 +323,7 @@ export default function SkillsPage() {
   const [originalEnabled, setOriginalEnabled] = useState<Record<string, boolean>>({});
   const [originalInstallPerm, setOriginalInstallPerm] = useState<Record<string, 'auto' | 'ask' | 'deny' | undefined>>({});
   const [globalPerms, setGlobalPerms] = useState<{ install: 'auto' | 'ask' | 'deny'; defaultChannel?: string }>({ install: 'ask', defaultChannel: '' });
-  const [execPerms, setExecPerms] = useState<ExecutionPermissions>({ shell: 'ask', defaultChannel: '' });
+  const [execPerms, setExecPerms] = useState<ExecutionPermissions>({ shell: 'ask', defaultChannel: '', defaultCommSkillId: undefined });
   const [instructionFilesBySkill, setInstructionFilesBySkill] = useState<Record<string, SkillInstructionFile[]>>({});
   const [selectedInstructionFileBySkill, setSelectedInstructionFileBySkill] = useState<Record<string, string>>({});
   const [instructionDrafts, setInstructionDrafts] = useState<Record<string, string>>({});
@@ -387,6 +387,7 @@ export default function SkillsPage() {
         setExecPerms({
           shell: res.execution.shell || 'ask',
           defaultChannel: res.execution.defaultChannel,
+          defaultCommSkillId: res.execution.defaultCommSkillId,
         });
       }
     } catch (err: any) {
@@ -520,6 +521,7 @@ export default function SkillsPage() {
     () => skills.filter((skill) => skill.status === 'loaded').length,
     [skills],
   );
+  const commSkills = useMemo(() => skills.filter((s) => s.communication), [skills]);
   const selectedSkill = useMemo(
     () => skills.find((skill) => skill.id === selectedSkillId) || null,
     [skills, selectedSkillId],
@@ -640,6 +642,18 @@ export default function SkillsPage() {
                 value={execPerms.defaultChannel || ''}
                 onChange={(e) => setExecPerms((prev) => ({ ...prev, defaultChannel: e.target.value }))}
               />
+              <select
+                className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent-primary/50 focus:outline-none"
+                value={execPerms.defaultCommSkillId || ''}
+                onChange={(e) => setExecPerms((prev) => ({ ...prev, defaultCommSkillId: e.target.value || undefined }))}
+              >
+                <option value="">Comm skill for approvals (optional)</option>
+                {commSkills.map((skill) => (
+                  <option key={skill.id} value={skill.id}>
+                    {skill.name}
+                  </option>
+                ))}
+              </select>
               <Button
                 variant="primary"
                 size="sm"
@@ -650,6 +664,7 @@ export default function SkillsPage() {
                       body: JSON.stringify({
                         shell: execPerms.shell,
                         defaultChannel: execPerms.defaultChannel,
+                        defaultCommSkillId: execPerms.defaultCommSkillId,
                       }),
                     });
                     await loadExecPerms();

@@ -122,6 +122,19 @@ export const WebSocketFrameSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('disconnect'), sessionId: z.string().uuid() }),
   z.object({ type: z.literal('heartbeat_ping') }),
   z.object({ type: z.literal('heartbeat_pong') }),
+  z.object({
+    type: z.literal('approval_request'),
+    id: z.string().uuid(),
+    kind: z.string(),
+    description: z.string(),
+    meta: z.record(z.any()).optional(),
+    expiresAt: z.number().optional(),
+  }),
+  z.object({
+    type: z.literal('approval_response'),
+    id: z.string().uuid(),
+    approved: z.boolean(),
+  }),
 ]);
 export type WebSocketFrame = z.infer<typeof WebSocketFrameSchema>;
 

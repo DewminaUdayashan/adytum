@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useGatewaySocket, type StreamEvent } from '@/hooks/use-gateway-socket';
 import { Badge, Button } from '@/components/ui';
-import { Terminal, Trash2, Pause, Play } from 'lucide-react';
+import { Terminal, Trash2, Pause, Play, Check, X } from 'lucide-react';
 import { clsx } from 'clsx';
 
 const TYPE_COLORS: Record<string, string> = {
@@ -16,6 +16,7 @@ const TYPE_COLORS: Record<string, string> = {
   error: 'text-error',
   connect: 'text-success',
   message: 'text-text-primary',
+  approval_request: 'text-warning',
 };
 
 const TYPE_PREFIXES: Record<string, string> = {
@@ -28,10 +29,11 @@ const TYPE_PREFIXES: Record<string, string> = {
   error: '❌ ERROR',
   connect: '🔗 CONN',
   message: '💬 MSG',
+  approval_request: '✅ APPROVE',
 };
 
 export default function ConsolePage() {
-  const { connected, events, clearEvents } = useGatewaySocket();
+  const { connected, events, clearEvents, sendFrame } = useGatewaySocket();
   const [paused, setPaused] = useState(false);
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -79,7 +81,7 @@ export default function ConsolePage() {
           </div>
         ) : (
           displayEvents.map((event, i) => (
-            <ConsoleEntry key={i} event={event} />
+            <ConsoleEntry key={i} event={event} onApprove={(id, approved) => sendFrame({ type: 'approval_response', id, approved })} />
           ))
         )}
       </div>
@@ -93,7 +95,7 @@ export default function ConsolePage() {
   );
 }
 
-function ConsoleEntry({ event }: { event: StreamEvent }) {
+function ConsoleEntry({ event, onApprove }: { event: StreamEvent; onApprove: (id: string, approved: boolean) => void }) {
   const type = event.streamType || event.type || 'unknown';
   let color = TYPE_COLORS[type] || 'text-text-secondary';
   let prefix = TYPE_PREFIXES[type] || type.toUpperCase();
@@ -122,15 +124,41 @@ function ConsoleEntry({ event }: { event: StreamEvent }) {
     content = `channel=${event.channel} session=${String(event.sessionId || '').slice(0, 8)}`;
   } else if (event.type === 'message') {
     content = String(event.content || '').slice(0, 200);
+  } else if (event.type === 'approval_request') {
+    content = `${event.description || ''}`;
   } else {
     content = JSON.stringify(event).slice(0, 200);
   }
 
+  const isApproval = event.type === 'approval_request' && typeof event.id === 'string';
+
   return (
-    <div className="flex gap-3 hover:bg-bg-secondary/40 px-3 py-1 rounded-md transition-colors">
+    <div className="flex gap-3 hover:bg-bg-secondary/40 px-3 py-1 rounded-md transition-colors items-start">
       <span className="text-text-muted shrink-0">{time}</span>
       <span className={clsx('shrink-0 font-semibold w-20', color)}>[{prefix}]</span>
-      <span className="text-text-secondary break-all">{content}</span>
+      <div className="flex-1">
+        <span className="text-text-secondary break-all">{content}</span>
+        {isApproval && (
+          <div className="mt-2 flex gap-2">
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => onApprove(event.id as string, true)}
+            >
+              <Check className="h-3 w-3" />
+              Approve
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => onApprove(event.id as string, false)}
+            >
+              <X className="h-3 w-3" />
+              Deny
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

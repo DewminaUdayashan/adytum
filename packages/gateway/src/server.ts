@@ -37,6 +37,10 @@ export interface ServerConfig {
 export class GatewayServer extends EventEmitter {
   private app = Fastify({ logger: false });
   private connections = new Map<string, WebSocket>();
+  private pendingApprovals: Map<
+    string,
+    { resolve: (v: boolean) => void; reject: (err: Error) => void; expiresAt: number; payload: any }
+  > = new Map();
   private config: ServerConfig;
 
   constructor(config: ServerConfig) {
@@ -184,15 +188,26 @@ export class GatewayServer extends EventEmitter {
     this.app.get('/api/execution/permissions', async () => {
       const cfg = loadConfig();
       const exec = cfg.execution || { shell: 'ask' as 'auto' | 'ask' | 'deny' };
-      return { execution: { shell: exec.shell || 'ask', defaultChannel: exec.defaultChannel } };
+      return {
+        execution: {
+          shell: exec.shell || 'ask',
+          defaultChannel: exec.defaultChannel,
+          defaultCommSkillId: exec.defaultCommSkillId,
+        },
+      };
     });
 
     this.app.put('/api/execution/permissions', async (request, reply) => {
-      const body = request.body as { shell?: 'auto' | 'ask' | 'deny'; defaultChannel?: string };
+      const body = request.body as {
+        shell?: 'auto' | 'ask' | 'deny';
+        defaultChannel?: string;
+        defaultCommSkillId?: string;
+      };
       const cfg = loadConfig();
       const next = {
         shell: body.shell || cfg.execution?.shell || 'ask',
         defaultChannel: body.defaultChannel ?? cfg.execution?.defaultChannel,
+        defaultCommSkillId: body.defaultCommSkillId ?? cfg.execution?.defaultCommSkillId,
       };
       saveConfig({ execution: next } as any);
       return { success: true, execution: next };
@@ -732,6 +747,16 @@ export class GatewayServer extends EventEmitter {
             return;
           }
 
+          // Handle approval responses
+          if (frame.type === 'approval_response' && frame.id) {
+            const pending = this.pendingApprovals.get(frame.id);
+            if (pending) {
+              this.pendingApprovals.delete(frame.id);
+              pending.resolve(Boolean(frame.approved));
+              return;
+            }
+          }
+
           // Route frame to handler
           this.emit('frame', { sessionId, frame });
         } catch (error: any) {
@@ -779,6 +804,35 @@ export class GatewayServer extends EventEmitter {
     if (socket?.readyState === 1) {
       this.sendFrame(socket, frame);
     }
+  }
+
+  async requestApproval(payload: { kind: string; description: string; meta?: Record<string, unknown> }): Promise<boolean> {
+    const id = crypto.randomUUID();
+    const expiresAt = Date.now() + 60_000;
+
+    const promise = new Promise<boolean>((resolve, reject) => {
+      this.pendingApprovals.set(id, { resolve, reject, expiresAt, payload });
+    });
+
+    this.broadcastToAll({
+      type: 'approval_request',
+      id,
+      kind: payload.kind,
+      description: payload.description,
+      meta: payload.meta || {},
+      expiresAt,
+    });
+
+    // Auto-expire
+    setTimeout(() => {
+      const pending = this.pendingApprovals.get(id);
+      if (pending && Date.now() >= expiresAt) {
+        this.pendingApprovals.delete(id);
+        pending.resolve(false);
+      }
+    }, 61_000);
+
+    return promise;
   }
 
   /** Broadcast a frame to all connected clients. */

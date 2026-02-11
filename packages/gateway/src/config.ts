@@ -117,6 +117,10 @@ export function loadConfig(projectRoot?: string): AdytumConfig {
         typeof fileExecution.defaultChannel === 'string'
           ? fileExecution.defaultChannel
           : undefined,
+      defaultCommSkillId:
+        typeof fileExecution.defaultCommSkillId === 'string'
+          ? fileExecution.defaultCommSkillId
+          : undefined,
     },
     skills: {
       enabled: (fileSkills.enabled as boolean | undefined) ?? envSkillsEnabled ?? true,

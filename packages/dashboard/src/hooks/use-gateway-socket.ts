@@ -94,6 +94,12 @@ export function useGatewaySocket() {
     }
   }, []);
 
+  const sendFrame = useCallback((frame: Record<string, unknown>) => {
+    if (socketRef.current?.readyState === WebSocket.OPEN) {
+      socketRef.current.send(JSON.stringify(frame));
+    }
+  }, []);
+
   const clearEvents = useCallback(() => setEvents([]), []);
 
   useEffect(() => {
@@ -104,5 +110,5 @@ export function useGatewaySocket() {
     };
   }, [connect]);
 
-  return { connected, events, sendMessage, clearEvents, sessionId: wsSessionId || sessionIdRef.current };
+  return { connected, events, sendMessage, sendFrame, clearEvents, sessionId: wsSessionId || sessionIdRef.current };
 }
