@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { usePolling } from '@/hooks/use-polling';
 import { gatewayFetch } from '@/lib/api';
 import { Card, Badge, Spinner, EmptyState, Button } from '@/components/ui';
@@ -32,14 +32,51 @@ const MODE_LABELS: Record<string, string> = {
   just_in_time: 'Just-in-Time',
 };
 
+type ExecutionPermissions = { shell: 'auto' | 'ask' | 'deny'; defaultChannel?: string; defaultCommSkillId?: string };
+type SkillsResponse = {
+  skills: Array<{ id: string; name: string; communication?: boolean }>;
+  global: { permissions?: { install: 'auto' | 'ask' | 'deny'; defaultChannel?: string } };
+};
+
 export default function PermissionsPage() {
   const { data, loading, refresh } = usePolling<PermissionsResponse>('/api/permissions', 5000);
   const [showGrant, setShowGrant] = useState(false);
   const [grantPath, setGrantPath] = useState('');
   const [grantMode, setGrantMode] = useState('read_only');
   const [grantDuration, setGrantDuration] = useState('');
+  const [installPerm, setInstallPerm] = useState<'auto' | 'ask' | 'deny'>('ask');
+  const [execPerms, setExecPerms] = useState<ExecutionPermissions>({ shell: 'ask', defaultChannel: '' });
+  const [commSkills, setCommSkills] = useState<Array<{ id: string; name: string }>>([]);
 
   const permissions = data?.permissions || [];
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const skillsRes = await gatewayFetch<SkillsResponse>('/api/skills');
+        if (skillsRes.global?.permissions) {
+          setInstallPerm(skillsRes.global.permissions.install || 'ask');
+        }
+        const comm = (skillsRes.skills || []).filter((s) => s.communication).map((s) => ({ id: s.id, name: s.name }));
+        setCommSkills(comm);
+      } catch {
+        /* ignore */
+      }
+      try {
+        const exec = await gatewayFetch<{ execution: ExecutionPermissions }>('/api/execution/permissions');
+        if (exec.execution) {
+          setExecPerms({
+            shell: exec.execution.shell || 'ask',
+            defaultChannel: exec.execution.defaultChannel,
+            defaultCommSkillId: exec.execution.defaultCommSkillId,
+          });
+        }
+      } catch {
+        /* ignore */
+      }
+    };
+    load();
+  }, []);
 
   const handleGrant = async () => {
     if (!grantPath) return;
@@ -96,6 +133,80 @@ export default function PermissionsPage() {
             Grant Access
           </Button>
         </div>
+      </div>
+
+      <div className="px-8 pb-4">
+        <Card>
+          <h3 className="text-sm font-semibold text-text-primary mb-3">Agent Settings</h3>
+          <div className="grid gap-3 md:grid-cols-2">
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Install permissions</p>
+              <select
+                value={installPerm}
+                onChange={(e) => setInstallPerm(e.target.value as 'auto' | 'ask' | 'deny')}
+                className="w-full rounded-lg bg-bg-tertiary border border-border-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-primary/50"
+              >
+                <option value="auto">Auto</option>
+                <option value="ask">Ask</option>
+                <option value="deny">Deny</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Terminal commands</p>
+              <select
+                value={execPerms.shell}
+                onChange={(e) => setExecPerms((prev) => ({ ...prev, shell: e.target.value as 'auto' | 'ask' | 'deny' }))}
+                className="w-full rounded-lg bg-bg-tertiary border border-border-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-primary/50"
+              >
+                <option value="auto">Auto</option>
+                <option value="ask">Ask</option>
+                <option value="deny">Deny</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Default approval channel</p>
+              <input
+                value={execPerms.defaultChannel || ''}
+                onChange={(e) => setExecPerms((prev) => ({ ...prev, defaultChannel: e.target.value }))}
+                placeholder="e.g. Discord channel ID"
+                className="w-full rounded-lg bg-bg-tertiary border border-border-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-primary/50"
+              />
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Communication skill</p>
+              <select
+                value={execPerms.defaultCommSkillId || ''}
+                onChange={(e) => setExecPerms((prev) => ({ ...prev, defaultCommSkillId: e.target.value || undefined }))}
+                className="w-full rounded-lg bg-bg-tertiary border border-border-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-primary/50"
+              >
+                <option value="">None</option>
+                {commSkills.map((skill) => (
+                  <option key={skill.id} value={skill.id}>
+                    {skill.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+          <div className="flex gap-2 mt-4">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={async () => {
+                await gatewayFetch('/api/skills/permissions', {
+                  method: 'PUT',
+                  body: JSON.stringify({ install: installPerm, defaultChannel: execPerms.defaultChannel }),
+                });
+                await gatewayFetch('/api/execution/permissions', {
+                  method: 'PUT',
+                  body: JSON.stringify(execPerms),
+                });
+              }}
+            >
+              Save Settings
+            </Button>
+          </div>
+        </Card>
       </div>
 
       <div className="flex-1 overflow-auto px-8 py-4 space-y-4">

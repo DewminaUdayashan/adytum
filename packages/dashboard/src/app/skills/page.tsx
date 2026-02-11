@@ -323,7 +323,6 @@ export default function SkillsPage() {
   const [originalEnabled, setOriginalEnabled] = useState<Record<string, boolean>>({});
   const [originalInstallPerm, setOriginalInstallPerm] = useState<Record<string, 'auto' | 'ask' | 'deny' | undefined>>({});
   const [globalPerms, setGlobalPerms] = useState<{ install: 'auto' | 'ask' | 'deny'; defaultChannel?: string }>({ install: 'ask', defaultChannel: '' });
-  const [execPerms, setExecPerms] = useState<ExecutionPermissions>({ shell: 'ask', defaultChannel: '', defaultCommSkillId: undefined });
   const [instructionFilesBySkill, setInstructionFilesBySkill] = useState<Record<string, SkillInstructionFile[]>>({});
   const [selectedInstructionFileBySkill, setSelectedInstructionFileBySkill] = useState<Record<string, string>>({});
   const [instructionDrafts, setInstructionDrafts] = useState<Record<string, string>>({});
@@ -337,12 +336,12 @@ export default function SkillsPage() {
       const res = await gatewayFetch<SkillsResponse>('/api/skills');
       const nextSkills = res.skills;
       setSkills(nextSkills);
-      if (res.global?.permissions) {
-        setGlobalPerms({
-          install: res.global.permissions.install || 'ask',
-          defaultChannel: res.global.permissions.defaultChannel,
-        });
-      }
+    if (res.global?.permissions) {
+      setGlobalPerms({
+        install: res.global.permissions.install || 'ask',
+        defaultChannel: res.global.permissions.defaultChannel,
+      });
+    }
 
       const nextConfig: Record<string, Record<string, unknown>> = {};
       const nextEnabled: Record<string, boolean> = {};
@@ -382,14 +381,7 @@ export default function SkillsPage() {
 
   const loadExecPerms = async () => {
     try {
-      const res = await gatewayFetch<{ execution: ExecutionPermissions }>('/api/execution/permissions');
-      if (res.execution) {
-        setExecPerms({
-          shell: res.execution.shell || 'ask',
-          defaultChannel: res.execution.defaultChannel,
-          defaultCommSkillId: res.execution.defaultCommSkillId,
-        });
-      }
+      // no-op (execution settings now live in Permissions page)
     } catch (err: any) {
       setError(err.message || String(err));
     }
@@ -573,111 +565,6 @@ export default function SkillsPage() {
             {error}
           </div>
         )}
-
-        <div className="px-8 pb-4">
-          <div className="grid gap-3 lg:grid-cols-2">
-            <div className="rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4 flex flex-wrap items-center gap-4">
-              <div>
-                <p className="text-sm font-semibold text-text-primary">Install permissions</p>
-                <p className="text-xs text-text-muted">Controls whether skills may run install commands.</p>
-              </div>
-              <select
-                className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent-primary/50 focus:outline-none"
-                value={globalPerms.install}
-                onChange={(e) =>
-                  setGlobalPerms((prev) => ({ ...prev, install: e.target.value as 'auto' | 'ask' | 'deny' }))
-                }
-              >
-                <option value="auto">Auto</option>
-                <option value="ask">Ask</option>
-                <option value="deny">Deny</option>
-              </select>
-              <input
-                className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent-primary/50 focus:outline-none flex-1 min-w-[180px]"
-                placeholder="Default channel (optional)"
-                value={globalPerms.defaultChannel || ''}
-                onChange={(e) => setGlobalPerms((prev) => ({ ...prev, defaultChannel: e.target.value }))}
-              />
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={async () => {
-                  try {
-                    await gatewayFetch('/api/skills/permissions', {
-                      method: 'PUT',
-                      body: JSON.stringify({
-                        install: globalPerms.install,
-                        defaultChannel: globalPerms.defaultChannel,
-                      }),
-                    });
-                    await loadSkills();
-                  } catch (err: any) {
-                    setError(err.message || String(err));
-                  }
-                }}
-              >
-                Save
-              </Button>
-            </div>
-
-            <div className="rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4 flex flex-wrap items-center gap-4">
-              <div>
-                <p className="text-sm font-semibold text-text-primary">Shell commands</p>
-                <p className="text-xs text-text-muted">Control automatic terminal execution by the agent.</p>
-              </div>
-              <select
-                className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent-primary/50 focus:outline-none"
-                value={execPerms.shell}
-                onChange={(e) =>
-                  setExecPerms((prev) => ({ ...prev, shell: e.target.value as 'auto' | 'ask' | 'deny' }))
-                }
-              >
-                <option value="auto">Auto</option>
-                <option value="ask">Ask</option>
-                <option value="deny">Deny</option>
-              </select>
-              <input
-                className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent-primary/50 focus:outline-none flex-1 min-w-[180px]"
-                placeholder="Default channel for approvals (optional)"
-                value={execPerms.defaultChannel || ''}
-                onChange={(e) => setExecPerms((prev) => ({ ...prev, defaultChannel: e.target.value }))}
-              />
-              <select
-                className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent-primary/50 focus:outline-none"
-                value={execPerms.defaultCommSkillId || ''}
-                onChange={(e) => setExecPerms((prev) => ({ ...prev, defaultCommSkillId: e.target.value || undefined }))}
-              >
-                <option value="">Comm skill for approvals (optional)</option>
-                {commSkills.map((skill) => (
-                  <option key={skill.id} value={skill.id}>
-                    {skill.name}
-                  </option>
-                ))}
-              </select>
-              <Button
-                variant="primary"
-                size="sm"
-                onClick={async () => {
-                  try {
-                    await gatewayFetch('/api/execution/permissions', {
-                      method: 'PUT',
-                      body: JSON.stringify({
-                        shell: execPerms.shell,
-                        defaultChannel: execPerms.defaultChannel,
-                        defaultCommSkillId: execPerms.defaultCommSkillId,
-                      }),
-                    });
-                    await loadExecPerms();
-                  } catch (err: any) {
-                    setError(err.message || String(err));
-                  }
-                }}
-              >
-                Save
-              </Button>
-            </div>
-          </div>
-        </div>
 
         <div className="flex-1 overflow-auto px-8 pb-8">
         {skills.length === 0 ? (

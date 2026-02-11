@@ -40,6 +40,7 @@ export function createShellToolWithApproval(
         approved: false,
         approvalRequired: true,
         defaultChannel: approval.defaultChannel,
+        defaultCommSkillId: approval.defaultCommSkillId,
         reason: approval.reason,
         mode: approval.mode,
       };

@@ -23,6 +23,7 @@ export interface ServerConfig {
   heartbeatManager?: HeartbeatManager;
   cronManager?: CronManager;
   skillLoader?: SkillLoader;
+  toolRegistry?: ToolRegistry;
   /** Callback to reschedule dreamer/monologue intervals */
   onScheduleUpdate?: (type: 'dreamer' | 'monologue', intervalMinutes: number) => void;
   /** Callback to reload skills after config changes */
@@ -822,6 +823,25 @@ export class GatewayServer extends EventEmitter {
       meta: payload.meta || {},
       expiresAt,
     });
+
+    // Notify via communication skill if configured
+    const defaultCommSkillId = this.config.config.execution?.defaultCommSkillId;
+    const defaultChannel = this.config.config.execution?.defaultChannel;
+    if (defaultCommSkillId && defaultChannel && this.config.toolRegistry) {
+      const sendTool =
+        this.config.toolRegistry.get('discord_send') ||
+        this.config.toolRegistry.get('slack_send') ||
+        null;
+      if (sendTool) {
+        // fire and forget
+        sendTool
+          .execute({
+            channelId: defaultChannel,
+            message: `Approval needed: ${payload.description}\nRequest ID: ${id}`,
+          })
+          .catch(() => undefined);
+      }
+    }
 
     // Auto-expire
     setTimeout(() => {

@@ -277,6 +277,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
     }
 
     // mode === 'ask'
+    console.log(chalk.yellow(`  ⚠ shell approval required: ${command}`));
     const approved = await server.requestApproval({
       kind: 'shell',
       description: `shell_execute wants to run: ${command}`,
