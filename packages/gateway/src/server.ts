@@ -16,6 +16,7 @@ import type { HeartbeatManager } from './agent/heartbeat-manager.js';
 import type { CronManager } from './agent/cron-manager.js';
 import type { SkillLoader } from './agent/skill-loader.js';
 import type { ToolRegistry } from './tools/registry.js';
+import type { MemoryDB } from './agent/memory-db.js';
 
 export interface ServerConfig {
   port: number;
@@ -26,6 +27,7 @@ export interface ServerConfig {
   cronManager?: CronManager;
   skillLoader?: SkillLoader;
   toolRegistry?: ToolRegistry;
+  memoryDb?: MemoryDB;
   secrets?: Record<string, Record<string, string>>;
   secretsStore?: SecretsStore;
   /** Callback to reschedule dreamer/monologue intervals */
@@ -48,11 +50,13 @@ export class GatewayServer extends EventEmitter {
   > = new Map();
   private config: ServerConfig;
   private secretsStore?: SecretsStore;
+  private memoryDb?: MemoryDB;
 
   constructor(config: ServerConfig) {
     super();
     this.config = config;
     this.secretsStore = config.secretsStore;
+    this.memoryDb = config.memoryDb;
   }
 
   async start(): Promise<void> {
@@ -131,6 +135,56 @@ export class GatewayServer extends EventEmitter {
         total: logs.length,
         hasMore: skip + count < logs.length,
       };
+    });
+
+    // ─── Memories (dreamer / monologue) ─────────────────────
+    this.app.get('/api/memories', async (request, reply) => {
+      if (!this.memoryDb) return reply.status(503).send({ error: 'Memory DB unavailable' });
+      const { category, limit, offset } = request.query as { category?: string | string[]; limit?: string; offset?: string };
+      const categories = Array.isArray(category)
+        ? category
+        : category
+          ? category.split(',').map((c) => c.trim()).filter(Boolean)
+          : [];
+      const count = Math.min(Number(limit) || 50, 200);
+      const skip = Math.max(Number(offset) || 0, 0);
+      const items = this.memoryDb.getMemoriesFiltered(categories, count, skip);
+      const total = this.memoryDb.countMemories(categories);
+      return {
+        items,
+        total,
+        hasMore: skip + count < total,
+      };
+    });
+
+    this.app.patch('/api/memories/:id', async (request, reply) => {
+      if (!this.memoryDb) return reply.status(503).send({ error: 'Memory DB unavailable' });
+      const { id } = request.params as { id: string };
+      const body = request.body as {
+        content?: string;
+        category?: string;
+        tags?: string[];
+        metadata?: Record<string, unknown>;
+      };
+      if (!id) return reply.status(400).send({ error: 'id required' });
+      if (body.tags && !Array.isArray(body.tags)) return reply.status(400).send({ error: 'tags must be array of strings' });
+      const updated = this.memoryDb.updateMemory(id, {
+        content: typeof body.content === 'string' ? body.content : undefined,
+        category: typeof body.category === 'string' ? body.category : undefined,
+        tags: Array.isArray(body.tags) ? body.tags.map(String) : undefined,
+        metadata: body.metadata && typeof body.metadata === 'object' ? body.metadata : undefined,
+      });
+      if (!updated) return reply.status(404).send({ error: 'not_found' });
+      return { memory: updated };
+    });
+
+    this.app.delete('/api/memories/:id', async (request, reply) => {
+      if (!this.memoryDb) return reply.status(503).send({ error: 'Memory DB unavailable' });
+      const { id } = request.params as { id: string };
+      if (!id) return reply.status(400).send({ error: 'id required' });
+      const ok = this.memoryDb.deleteMemory(id);
+      if (!ok) return reply.status(404).send({ error: 'not_found' });
+      return { success: true };
     });
 
     // ─── Approval Resolution (for comm channels) ────────────

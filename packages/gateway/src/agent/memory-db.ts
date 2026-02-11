@@ -245,14 +245,126 @@ export class MemoryDB {
     stmt.run(crypto.randomUUID(), updateType, content, Date.now(), 'pending');
   }
 
-  getMeta(key: string): string | null {
-    const stmt = this.db.prepare('SELECT value FROM meta WHERE key = ?');
-    const row = stmt.get(key) as { value: string } | undefined;
-    return row?.value ?? null;
+  getMemoriesFiltered(
+    categories: string[] = [],
+    limit: number = 50,
+    offset: number = 0,
+  ): MemoryRow[] {
+    const filteredCategories = categories.filter(Boolean);
+    const clauses: string[] = [];
+    const params: any[] = [];
+    if (filteredCategories.length > 0) {
+      clauses.push(`category IN (${filteredCategories.map(() => '?').join(',')})`);
+      params.push(...filteredCategories);
+    }
+    const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+    const stmt = this.db.prepare(
+      `SELECT id, content, source, category, tags, metadata, created_at as createdAt
+       FROM memories
+       ${where}
+       ORDER BY created_at DESC
+       LIMIT ?
+       OFFSET ?`,
+    );
+    const rows = stmt.all(...params, limit, offset) as Array<
+      Omit<MemoryRow, 'tags' | 'metadata'> & { tags?: string; metadata?: string }
+    >;
+    return rows.map((r) => ({
+      ...r,
+      tags: r.tags ? JSON.parse(r.tags) : undefined,
+      metadata: r.metadata ? JSON.parse(r.metadata) : undefined,
+    }));
+  }
+
+  countMemories(categories: string[] = []): number {
+    const filteredCategories = categories.filter(Boolean);
+    const clauses: string[] = [];
+    const params: any[] = [];
+    if (filteredCategories.length > 0) {
+      clauses.push(`category IN (${filteredCategories.map(() => '?').join(',')})`);
+      params.push(...filteredCategories);
+    }
+    const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+    const stmt = this.db.prepare(`SELECT COUNT(*) as c FROM memories ${where}`);
+    const row = stmt.get(...params) as { c: number };
+    return row?.c || 0;
+  }
+
+  getMemory(id: string): MemoryRow | null {
+    const stmt = this.db.prepare(
+      'SELECT id, content, source, category, tags, metadata, created_at as createdAt FROM memories WHERE id = ?',
+    );
+    const row = stmt.get(id) as
+      | (Omit<MemoryRow, 'tags' | 'metadata'> & { tags?: string; metadata?: string })
+      | undefined;
+    if (!row) return null;
+    return {
+      ...row,
+      tags: row.tags ? JSON.parse(row.tags) : undefined,
+      metadata: row.metadata ? JSON.parse(row.metadata) : undefined,
+    };
+  }
+
+  updateMemory(
+    id: string,
+    updates: {
+      content?: string;
+      category?: string;
+      tags?: string[];
+      metadata?: Record<string, unknown>;
+    },
+  ): MemoryRow | null {
+    const existing = this.getMemory(id);
+    if (!existing) return null;
+
+    const next = {
+      ...existing,
+      content: updates.content ?? existing.content,
+      category: updates.category ?? existing.category,
+      tags: updates.tags ?? existing.tags,
+      metadata: updates.metadata ?? existing.metadata,
+    };
+
+    const stmt = this.db.prepare(
+      `UPDATE memories
+       SET content = ?, category = ?, tags = ?, metadata = ?
+       WHERE id = ?`,
+    );
+    stmt.run(
+      next.content,
+      next.category,
+      next.tags ? JSON.stringify(next.tags) : null,
+      next.metadata ? JSON.stringify(next.metadata) : null,
+      id,
+    );
+
+    try {
+      this.db.prepare('DELETE FROM memories_fts WHERE memory_id = ?').run(id);
+      this.db.prepare('INSERT INTO memories_fts (content, memory_id) VALUES (?, ?)').run(next.content, id);
+    } catch {
+      // ignore if FTS unavailable
+    }
+
+    return next;
+  }
+
+  deleteMemory(id: string): boolean {
+    const stmt = this.db.prepare('DELETE FROM memories WHERE id = ?');
+    const result = stmt.run(id);
+    try {
+      this.db.prepare('DELETE FROM memories_fts WHERE memory_id = ?').run(id);
+    } catch {
+      // ignore if FTS unavailable
+    }
+    return result.changes > 0;
   }
 
   setMeta(key: string, value: string): void {
-    const stmt = this.db.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value');
-    stmt.run(key, value);
+    this.db.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run(key, value);
+  }
+
+  getMeta(key: string): string | null {
+    const row = this.db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as { value?: string } | undefined;
+    return row?.value ?? null;
   }
 }

@@ -211,6 +211,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
     cronManager,
     skillLoader,
     toolRegistry,
+    memoryDb,
     secrets: secretsStore.getAll(),
     secretsStore,
     onScheduleUpdate: (type, intervalMinutes) => {
