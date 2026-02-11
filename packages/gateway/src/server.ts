@@ -225,12 +225,14 @@ export class GatewayServer extends EventEmitter {
         shell?: 'auto' | 'ask' | 'deny';
         defaultChannel?: string;
         defaultCommSkillId?: string;
+        approvalBaseUrl?: string;
       };
       const cfg = loadConfig();
       const next = {
         shell: body.shell || cfg.execution?.shell || 'ask',
         defaultChannel: body.defaultChannel ?? cfg.execution?.defaultChannel,
         defaultCommSkillId: body.defaultCommSkillId ?? cfg.execution?.defaultCommSkillId,
+        approvalBaseUrl: body.approvalBaseUrl ?? cfg.execution?.approvalBaseUrl,
       };
       saveConfig({ execution: next } as any);
       return { success: true, execution: next };
