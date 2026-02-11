@@ -1,0 +1,49 @@
+{
+  "id": "weather",
+  "name": "Weather",
+  "description": "Current weather and short forecast using free public weather endpoints (no API key required).",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "defaultLocation": {
+        "type": "string",
+        "default": ""
+      },
+      "defaultUnits": {
+        "type": "string",
+        "enum": ["metric", "us"],
+        "default": "metric"
+      },
+      "requestTimeoutMs": {
+        "type": "integer",
+        "default": 8000
+      },
+      "preferProvider": {
+        "type": "string",
+        "enum": ["wttr", "open-meteo"],
+        "default": "wttr"
+      }
+    }
+  },
+  "uiHints": {
+    "defaultLocation": {
+      "label": "Default Location",
+      "help": "Used when the user asks for weather without a location."
+    },
+    "defaultUnits": {
+      "label": "Default Units"
+    },
+    "requestTimeoutMs": {
+      "label": "Request Timeout (ms)"
+    },
+    "preferProvider": {
+      "label": "Preferred Provider",
+      "help": "wttr is used first by default; open-meteo is used as fallback if needed."
+    }
+  }
+}
