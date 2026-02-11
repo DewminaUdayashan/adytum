@@ -884,6 +884,14 @@ export class SkillLoader {
     if (primaryEnv) {
       setIfAbsent(primaryEnv, secrets[primaryEnv] || entry?.apiKey);
     }
+
+    // If secrets include keys that look like bot token / default channel for Discord, set those too.
+    if (skill.id === 'discord') {
+      const token = secrets['ADYTUM_DISCORD_BOT_TOKEN'];
+      const chan = secrets['ADYTUM_DISCORD_DEFAULT_CHANNEL_ID'];
+      if (token && !process.env.ADYTUM_DISCORD_BOT_TOKEN) process.env.ADYTUM_DISCORD_BOT_TOKEN = token;
+      if (chan && !process.env.ADYTUM_DISCORD_DEFAULT_CHANNEL_ID) process.env.ADYTUM_DISCORD_DEFAULT_CHANNEL_ID = chan;
+    }
   }
 
   private resolveSkillModule(rawModule: unknown):

@@ -666,9 +666,9 @@ class DiscordService {
 function resolveConfig(rawConfig: unknown): DiscordPluginConfig {
   const parsed = DiscordPluginConfigSchema.parse(rawConfig || {});
 
-  const resolvedToken = parsed.botToken?.trim();
-  const resolvedDefaultChannel = parsed.defaultChannelId?.trim();
-  const resolvedGuildId = parsed.guildId?.trim();
+  const resolvedToken = parsed.botToken?.trim() || readEnv(parsed.tokenEnv);
+  const resolvedDefaultChannel = parsed.defaultChannelId?.trim() || readEnv(parsed.defaultChannelIdEnv);
+  const resolvedGuildId = parsed.guildId?.trim() || readEnv(parsed.guildIdEnv);
 
   return {
     ...parsed,
@@ -703,6 +703,11 @@ function isDisallowedIntentsError(error: any): boolean {
 
 function resolveActionPermissions(value: DiscordActionPermissions): DiscordActionPermissions {
   return DiscordActionPermissionsSchema.parse(value || {});
+}
+
+function readEnv(key: string): string | undefined {
+  const value = process.env[key];
+  return value && value.trim() ? value.trim() : undefined;
 }
 
 function splitMessage(content: string): string[] {
