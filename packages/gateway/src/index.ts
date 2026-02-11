@@ -15,6 +15,7 @@ import { createWebFetchTool } from './tools/web-fetch.js';
 import { createMemoryTools } from './tools/memory.js';
 import { createPersonalityTools } from './tools/personality.js';
 import { PermissionManager } from './security/permission-manager.js';
+import { SecretsStore } from './security/secrets-store.js';
 import { tokenTracker } from './agent/token-tracker.js';
 import { autoProvisionStorage } from './storage/provision.js';
 import { MemoryStore } from './agent/memory-store.js';
@@ -56,6 +57,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
   // ── Security Layer ────────────────────────────────────────
   const permissionManager = new PermissionManager(config.workspacePath, config.dataPath);
   permissionManager.startWatching();
+  const secretsStore = new SecretsStore(config.dataPath);
 
   // ── Tool Registry ─────────────────────────────────────────
   const toolRegistry = new ToolRegistry();
@@ -99,6 +101,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
     dataPath: config.dataPath,
     config,
   });
+  skillLoader.setSecrets(secretsStore.getAll ? secretsStore.getAll() : {});
   await skillLoader.init(toolRegistry);
 
   const agent = new AgentRuntime({
@@ -124,6 +127,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
   const reloadSkills = async (): Promise<void> => {
     const latestConfig = loadConfig(projectRoot);
     skillLoader.updateConfig(latestConfig, projectRoot);
+    skillLoader.setSecrets(secretsStore.getAll());
     await skillLoader.reload(agent);
     agent.refreshSystemPrompt();
   };
@@ -184,6 +188,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
     cronManager,
     skillLoader,
     toolRegistry,
+    secrets: {},
     onScheduleUpdate: (type, intervalMinutes) => {
       if (type === 'dreamer') scheduleDreamer(intervalMinutes);
       else if (type === 'monologue') scheduleMonologue(intervalMinutes);

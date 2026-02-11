@@ -251,6 +251,7 @@ export class SkillLoader {
   private toolRegistry: ToolRegistry | null = null;
   private services: ServiceRegistration[] = [];
   private activeAgent: AgentRuntime | null = null;
+  private secrets: Record<string, Record<string, string>> = {};
   private jiti = createJiti(__filename, {
     interopDefault: true,
     extensions: ['.ts', '.tsx', '.mts', '.cts', '.js', '.mjs', '.cjs', '.json'],
@@ -474,6 +475,10 @@ export class SkillLoader {
     await this.stop();
     await this.init(this.toolRegistry);
     await this.start(agent);
+  }
+
+  setSecrets(secrets: Record<string, Record<string, string>>): void {
+    this.secrets = secrets;
   }
 
   /** Get all discovered skills (loaded + disabled + errored). */
@@ -851,16 +856,28 @@ export class SkillLoader {
 
   private applyEnvOverrides(skill: LoadedSkill) {
     const entry = this.config.skills?.entries?.[skill.id];
-    if (!entry) return;
-    if (entry.env) {
-      for (const [key, val] of Object.entries(entry.env)) {
-        if (!val || process.env[key]) continue;
+    const secrets = this.secrets[skill.id] || {};
+
+    const setIfAbsent = (key: string, val?: string) => {
+      if (!key || !val) return;
+      if (!process.env[key]) {
         process.env[key] = val;
       }
+    };
+
+    if (entry?.env) {
+      for (const [key, val] of Object.entries(entry.env)) {
+        setIfAbsent(key, val as string);
+      }
     }
+
+    for (const [key, val] of Object.entries(secrets)) {
+      setIfAbsent(key, val);
+    }
+
     const primaryEnv = skill.manifest?.metadata?.primaryEnv;
-    if (primaryEnv && entry.apiKey && !process.env[primaryEnv]) {
-      process.env[primaryEnv] = entry.apiKey;
+    if (primaryEnv) {
+      setIfAbsent(primaryEnv, secrets[primaryEnv] || entry?.apiKey);
     }
   }
 
