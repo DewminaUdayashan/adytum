@@ -827,17 +827,39 @@ export class GatewayServer extends EventEmitter {
 
     // Notify via communication skill if configured
     const cfg = loadConfig();
+    const resolveChannelId = (raw?: string): string | undefined => {
+      if (!raw) return undefined;
+      const trimmed = raw.trim();
+      if (!trimmed) return undefined;
+      if (/^[A-Z0-9_]+$/.test(trimmed) && process.env[trimmed]) {
+        return process.env[trimmed];
+      }
+      return trimmed;
+    };
+
     const defaultCommSkillId =
       cfg.execution?.defaultCommSkillId ||
       this.config.skillLoader?.getAll().find((s) => s.communication)?.id;
 
-    const defaultChannel =
-      payload.meta?.defaultChannel ||
-      cfg.execution?.defaultChannel ||
-      cfg.skills?.permissions?.defaultChannel ||
-      cfg.skills?.entries?.[defaultCommSkillId || '']?.config?.defaultChannelId ||
-      cfg.skills?.entries?.[defaultCommSkillId || '']?.config?.defaultChannel;
-    if (defaultCommSkillId && defaultChannel && this.config.toolRegistry) {
+    let channelId =
+      resolveChannelId(payload.meta?.defaultChannel as string | undefined) ||
+      resolveChannelId(cfg.execution?.defaultChannel) ||
+      resolveChannelId(cfg.skills?.permissions?.defaultChannel);
+
+    if (!channelId && defaultCommSkillId && cfg.skills?.entries?.[defaultCommSkillId]) {
+      const entryCfg = cfg.skills.entries[defaultCommSkillId].config as Record<string, any> | undefined;
+      channelId =
+        resolveChannelId(entryCfg?.defaultChannelId) ||
+        resolveChannelId(entryCfg?.defaultChannel) ||
+        resolveChannelId(entryCfg?.defaultChannelIdEnv && process.env[entryCfg.defaultChannelIdEnv]) ||
+        resolveChannelId(entryCfg?.defaultChannelEnv && process.env[entryCfg.defaultChannelEnv]);
+    }
+
+    if (!channelId && defaultCommSkillId === 'discord') {
+      channelId = resolveChannelId(process.env.ADYTUM_DISCORD_DEFAULT_CHANNEL_ID);
+    }
+
+    if (defaultCommSkillId && channelId && this.config.toolRegistry) {
       let sendTool =
         this.config.toolRegistry.get(`${defaultCommSkillId}_send`) ||
         (defaultCommSkillId === 'discord' ? this.config.toolRegistry.get('discord_send') : null) ||
@@ -848,7 +870,7 @@ export class GatewayServer extends EventEmitter {
         // fire and forget
         sendTool
           .execute({
-            channelId: defaultChannel,
+            channelId,
             content: `Approval needed: ${payload.description}\nRequest ID: ${id}`,
           })
           .catch((err: any) => {
