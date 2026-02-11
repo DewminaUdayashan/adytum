@@ -1,0 +1,24 @@
+{
+  "id": "notion",
+  "name": "Notion",
+  "description": "Create/search pages and append blocks in Notion via official API.",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": { "type": "boolean", "default": true },
+      "apiKey": { "type": "string" },
+      "defaultParentPageId": { "type": "string" },
+      "defaultDatabaseId": { "type": "string" },
+      "notionVersion": { "type": "string", "default": "2025-09-03" },
+      "baseUrl": { "type": "string", "default": "https://api.notion.com" }
+    }
+  },
+  "uiHints": {
+    "apiKey": { "label": "Notion API Key", "help": "Secret from Notion integrations (starts with secret_ or ntn_)", "sensitive": true, "placeholder": "secret_xxx" },
+    "defaultParentPageId": { "label": "Default Parent Page ID", "help": "Used when creating pages if parentId is not provided." },
+    "defaultDatabaseId": { "label": "Default Database ID", "help": "Optional database to create pages into." },
+    "notionVersion": { "label": "API Version" },
+    "baseUrl": { "label": "API Base URL" }
+  }
+}

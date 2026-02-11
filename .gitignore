@@ -12,5 +12,5 @@ coverage/
 .turbo/
 adytum.config.yaml
 litellm_config.yaml
-workspace/
+# workspace holds user skills and should be tracked
 reference-project/
