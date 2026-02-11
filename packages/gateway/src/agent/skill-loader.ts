@@ -890,13 +890,17 @@ export class SkillLoader {
     if (skill.id === 'discord') {
       const token = secrets['ADYTUM_DISCORD_BOT_TOKEN'];
       const chan = secrets['ADYTUM_DISCORD_DEFAULT_CHANNEL_ID'];
+      const user = secrets['ADYTUM_DISCORD_DEFAULT_USER_ID'];
       const cfgToken = entryConfig.botToken as string | undefined;
       const cfgChan = entryConfig.defaultChannelId as string | undefined;
+      const cfgUser = (entryConfig as any).defaultUserId as string | undefined;
       const cfgGuild = entryConfig.guildId as string | undefined;
       if (token && !process.env.ADYTUM_DISCORD_BOT_TOKEN) process.env.ADYTUM_DISCORD_BOT_TOKEN = token;
       if (chan && !process.env.ADYTUM_DISCORD_DEFAULT_CHANNEL_ID) process.env.ADYTUM_DISCORD_DEFAULT_CHANNEL_ID = chan;
+      if (user && !process.env.ADYTUM_DISCORD_DEFAULT_USER_ID) process.env.ADYTUM_DISCORD_DEFAULT_USER_ID = user;
       if (cfgToken && !process.env.ADYTUM_DISCORD_BOT_TOKEN) process.env.ADYTUM_DISCORD_BOT_TOKEN = cfgToken;
       if (cfgChan && !process.env.ADYTUM_DISCORD_DEFAULT_CHANNEL_ID) process.env.ADYTUM_DISCORD_DEFAULT_CHANNEL_ID = cfgChan;
+      if (cfgUser && !process.env.ADYTUM_DISCORD_DEFAULT_USER_ID) process.env.ADYTUM_DISCORD_DEFAULT_USER_ID = cfgUser;
       if (cfgGuild && !process.env.ADYTUM_DISCORD_GUILD_ID) process.env.ADYTUM_DISCORD_GUILD_ID = cfgGuild;
     }
   }

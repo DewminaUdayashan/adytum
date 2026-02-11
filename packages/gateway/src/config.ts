@@ -117,6 +117,10 @@ export function loadConfig(projectRoot?: string): AdytumConfig {
         typeof fileExecution.defaultChannel === 'string'
           ? fileExecution.defaultChannel
           : undefined,
+      defaultUser:
+        typeof (fileExecution as any).defaultUser === 'string'
+          ? (fileExecution as any).defaultUser
+          : undefined,
       defaultCommSkillId:
         typeof fileExecution.defaultCommSkillId === 'string'
           ? fileExecution.defaultCommSkillId
@@ -144,6 +148,10 @@ export function loadConfig(projectRoot?: string): AdytumConfig {
         defaultChannel:
           typeof fileSkillsPermissions.defaultChannel === 'string'
             ? fileSkillsPermissions.defaultChannel
+            : undefined,
+        defaultUser:
+          typeof (fileSkillsPermissions as any).defaultUser === 'string'
+            ? (fileSkillsPermissions as any).defaultUser
             : undefined,
       },
       entries: parseSkillEntries(fileSkills.entries) || {},

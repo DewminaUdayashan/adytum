@@ -3,10 +3,6 @@
   "name": "Discord",
   "description": "Comprehensive Discord skill for inbound and outbound messaging.",
   "metadata": {
-    "requires": {
-      "env": ["ADYTUM_DISCORD_BOT_TOKEN", "ADYTUM_DISCORD_DEFAULT_CHANNEL_ID"]
-    },
-    "primaryEnv": "ADYTUM_DISCORD_BOT_TOKEN",
     "communication": true
   },
   "channels": ["discord"],
@@ -18,7 +14,9 @@
       "botToken": { "type": "string" },
       "tokenEnv": { "type": "string", "default": "ADYTUM_DISCORD_BOT_TOKEN" },
       "defaultChannelId": { "type": "string" },
-      "defaultChannelIdEnv": { "type": "string", "default": "ADYTUM_DISCORD_PERSONAL_CHANNEL_ID" },
+      "defaultChannelIdEnv": { "type": "string", "default": "ADYTUM_DISCORD_DEFAULT_CHANNEL_ID" },
+      "defaultUserId": { "type": "string" },
+      "defaultUserIdEnv": { "type": "string", "default": "ADYTUM_DISCORD_DEFAULT_USER_ID" },
       "guildId": { "type": "string" },
       "guildIdEnv": { "type": "string", "default": "ADYTUM_DISCORD_GUILD_ID" },
       "allowedChannelIds": {
@@ -60,9 +58,6 @@
       }
     }
   },
-  "metadata": {
-    "communication": true
-  },
   "uiHints": {
     "botToken": {
       "label": "Bot Token",
@@ -75,6 +70,11 @@
       "help": "Used when a send action has no target channel."
     },
     "defaultChannelIdEnv": { "advanced": true },
+    "defaultUserId": {
+      "label": "Default User ID",
+      "help": "Optional. If set, outbound messages without a channel will DM this user."
+    },
+    "defaultUserIdEnv": { "advanced": true },
     "guildId": { "advanced": true },
     "guildIdEnv": { "advanced": true },
     "allowedChannelIds": { "advanced": true },

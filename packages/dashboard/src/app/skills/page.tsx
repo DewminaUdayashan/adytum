@@ -81,7 +81,12 @@ type SkillInstructionsResponse = {
   combined: string;
 };
 
-type ExecutionPermissions = { shell: 'auto' | 'ask' | 'deny'; defaultChannel?: string; defaultCommSkillId?: string };
+type ExecutionPermissions = {
+  shell: 'auto' | 'ask' | 'deny';
+  defaultChannel?: string;
+  defaultUser?: string;
+  defaultCommSkillId?: string;
+};
 
 type SkillsResponse = {
   skills: SkillRecord[];
@@ -91,7 +96,7 @@ type SkillsResponse = {
     deny: string[];
     loadPaths: string[];
     extraDirs?: string[];
-    permissions?: { install: 'auto' | 'ask' | 'deny'; defaultChannel?: string };
+    permissions?: { install: 'auto' | 'ask' | 'deny'; defaultChannel?: string; defaultUser?: string };
   };
 };
 
@@ -326,7 +331,11 @@ export default function SkillsPage() {
   const [originalConfig, setOriginalConfig] = useState<Record<string, Record<string, unknown>>>({});
   const [originalEnabled, setOriginalEnabled] = useState<Record<string, boolean>>({});
   const [originalInstallPerm, setOriginalInstallPerm] = useState<Record<string, 'auto' | 'ask' | 'deny' | undefined>>({});
-  const [globalPerms, setGlobalPerms] = useState<{ install: 'auto' | 'ask' | 'deny'; defaultChannel?: string }>({ install: 'ask', defaultChannel: '' });
+  const [globalPerms, setGlobalPerms] = useState<{ install: 'auto' | 'ask' | 'deny'; defaultChannel?: string; defaultUser?: string }>({
+    install: 'ask',
+    defaultChannel: '',
+    defaultUser: '',
+  });
   const [instructionFilesBySkill, setInstructionFilesBySkill] = useState<Record<string, SkillInstructionFile[]>>({});
   const [selectedInstructionFileBySkill, setSelectedInstructionFileBySkill] = useState<Record<string, string>>({});
   const [instructionDrafts, setInstructionDrafts] = useState<Record<string, string>>({});
@@ -345,6 +354,7 @@ export default function SkillsPage() {
       setGlobalPerms({
         install: res.global.permissions.install || 'ask',
         defaultChannel: res.global.permissions.defaultChannel,
+        defaultUser: res.global.permissions.defaultUser,
       });
     }
 

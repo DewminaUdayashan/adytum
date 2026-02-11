@@ -197,6 +197,7 @@ export const DiscordConfigSchema = z.object({
   enabled: z.boolean().default(false),
   botToken: z.string().optional(),
   defaultChannelId: z.string().optional(),
+  defaultUserId: z.string().optional(),
   guildId: z.string().optional(),
   allowedChannelIds: z.array(z.string()).optional(),
   allowedUserIds: z.array(z.string()).optional(),
@@ -216,6 +217,7 @@ export type SkillEntryConfig = z.infer<typeof SkillEntryConfigSchema>;
 export const SkillsPermissionsSchema = z.object({
   install: z.enum(['auto', 'ask', 'deny']).default('ask'),
   defaultChannel: z.string().optional(),
+  defaultUser: z.string().optional(),
 });
 export type SkillsPermissions = z.infer<typeof SkillsPermissionsSchema>;
 
@@ -235,6 +237,7 @@ export type SkillsConfig = z.infer<typeof SkillsConfigSchema>;
 export const ExecutionPermissionsSchema = z.object({
   shell: z.enum(['auto', 'ask', 'deny']).default('ask'),
   defaultChannel: z.string().optional(),
+  defaultUser: z.string().optional(),
   defaultCommSkillId: z.string().optional(),
   approvalBaseUrl: z.string().url().optional(),
 });

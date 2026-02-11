@@ -32,7 +32,13 @@ const MODE_LABELS: Record<string, string> = {
   just_in_time: 'Just-in-Time',
 };
 
-type ExecutionPermissions = { shell: 'auto' | 'ask' | 'deny'; defaultChannel?: string; defaultCommSkillId?: string; approvalBaseUrl?: string };
+type ExecutionPermissions = {
+  shell: 'auto' | 'ask' | 'deny';
+  defaultChannel?: string;
+  defaultUser?: string;
+  defaultCommSkillId?: string;
+  approvalBaseUrl?: string;
+};
 type SkillsResponse = {
   skills: Array<{ id: string; name: string; communication?: boolean }>;
   global: { permissions?: { install: 'auto' | 'ask' | 'deny'; defaultChannel?: string } };
@@ -46,7 +52,12 @@ export default function PermissionsPage() {
   const [grantMode, setGrantMode] = useState('read_only');
   const [grantDuration, setGrantDuration] = useState('');
   const [installPerm, setInstallPerm] = useState<'auto' | 'ask' | 'deny'>('ask');
-  const [execPerms, setExecPerms] = useState<ExecutionPermissions>({ shell: 'ask', defaultChannel: '', approvalBaseUrl: '' });
+  const [execPerms, setExecPerms] = useState<ExecutionPermissions>({
+    shell: 'ask',
+    defaultChannel: '',
+    defaultUser: '',
+    approvalBaseUrl: '',
+  });
   const [commSkills, setCommSkills] = useState<Array<{ id: string; name: string }>>([]);
 
   const permissions = data?.permissions || [];
@@ -64,6 +75,7 @@ export default function PermissionsPage() {
           setExecPerms((prev) => ({
             shell: skillsRes.execution?.shell || prev.shell,
             defaultChannel: skillsRes.execution?.defaultChannel || prev.defaultChannel,
+            defaultUser: (skillsRes.execution as any)?.defaultUser || prev.defaultUser,
             defaultCommSkillId: skillsRes.execution?.defaultCommSkillId || prev.defaultCommSkillId,
             approvalBaseUrl: skillsRes.execution?.approvalBaseUrl || prev.approvalBaseUrl,
           }));
@@ -77,6 +89,7 @@ export default function PermissionsPage() {
           setExecPerms({
             shell: exec.execution.shell || 'ask',
             defaultChannel: exec.execution.defaultChannel,
+            defaultUser: (exec.execution as any).defaultUser,
             defaultCommSkillId: exec.execution.defaultCommSkillId,
             approvalBaseUrl: exec.execution.approvalBaseUrl,
           });
@@ -183,6 +196,16 @@ export default function PermissionsPage() {
               />
             </div>
             <div className="space-y-2">
+              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Default approval user</p>
+              <input
+                value={execPerms.defaultUser || ''}
+                onChange={(e) => setExecPerms((prev) => ({ ...prev, defaultUser: e.target.value }))}
+                placeholder="e.g. Discord user ID (DM)"
+                className="w-full rounded-lg bg-bg-tertiary border border-border-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-primary/50"
+              />
+              <p className="text-[11px] text-text-tertiary">If set, approval notices will also be sent via DM.</p>
+            </div>
+            <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Public approval base URL</p>
               <input
                 value={execPerms.approvalBaseUrl || ''}
@@ -215,7 +238,11 @@ export default function PermissionsPage() {
               onClick={async () => {
                 await gatewayFetch('/api/skills/permissions', {
                   method: 'PUT',
-                  body: JSON.stringify({ install: installPerm, defaultChannel: execPerms.defaultChannel }),
+                  body: JSON.stringify({
+                    install: installPerm,
+                    defaultChannel: execPerms.defaultChannel,
+                    defaultUser: execPerms.defaultUser,
+                  }),
                 });
                 await gatewayFetch('/api/execution/permissions', {
                   method: 'PUT',

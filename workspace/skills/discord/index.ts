@@ -68,6 +68,8 @@ const DiscordPluginConfigSchema = z.object({
   tokenEnv: z.string().default('ADYTUM_DISCORD_BOT_TOKEN'),
   defaultChannelId: z.string().optional(),
   defaultChannelIdEnv: z.string().default('ADYTUM_DISCORD_DEFAULT_CHANNEL_ID'),
+  defaultUserId: z.string().optional(),
+  defaultUserIdEnv: z.string().default('ADYTUM_DISCORD_DEFAULT_USER_ID'),
   guildId: z.string().optional(),
   guildIdEnv: z.string().default('ADYTUM_DISCORD_GUILD_ID'),
   allowedChannelIds: z.array(z.string()).default([]),
@@ -134,6 +136,8 @@ type OutboundTarget =
   | { type: 'channel'; id: string }
   | { type: 'thread'; id: string }
   | { type: 'user'; id: string };
+
+const isSnowflake = (value?: string): boolean => typeof value === 'string' && /^\d{17,20}$/.test(value.trim());
 
 class DiscordService {
   private client: Client | null = null;
@@ -234,18 +238,30 @@ class DiscordService {
       throw new Error('Discord client is not connected');
     }
 
+    // Normalize IDs: if caller passed a non-numeric userId, prefer defaultUserId; otherwise reject.
+    const normalizedUserId =
+      (params.userId && isSnowflake(params.userId) && params.userId.trim()) ||
+      (this.config.defaultUserId && isSnowflake(this.config.defaultUserId) ? this.config.defaultUserId.trim() : undefined) ||
+      (params.userId ? undefined : undefined);
+
     const target =
       params.target ||
       parseTarget({
         target: undefined,
         channelId: params.channelId,
-        userId: params.userId,
+        userId: normalizedUserId,
         threadId: params.threadId,
       }) ||
-      (this.config.defaultChannelId ? ({ type: 'channel', id: this.config.defaultChannelId } as OutboundTarget) : null);
+      (this.config.defaultChannelId
+        ? ({ type: 'channel', id: this.config.defaultChannelId } as OutboundTarget)
+        : this.config.defaultUserId
+          ? ({ type: 'user', id: this.config.defaultUserId } as OutboundTarget)
+          : null);
 
     if (!target) {
-      throw new Error('No target provided. Use target/channelId/userId/threadId or configure defaultChannelId.');
+      throw new Error(
+        'No target provided. Use target/channelId/userId/threadId or configure defaultChannelId/defaultUserId.',
+      );
     }
 
     const channel = await this.resolveSendChannel(target);
@@ -446,13 +462,13 @@ class DiscordService {
     const channels = await guild.channels.fetch();
 
     return channels
-      .filter((channel: { type: ChannelType; }) => {
+      .filter((channel) => {
         if (!channel) return false;
         if (channel.type === ChannelType.GuildVoice && !input?.includeVoiceChannels) return false;
         if (channel.type === ChannelType.GuildCategory && !input?.includeCategories) return false;
         return true;
       })
-      .map((channel: any) => ({
+      .map((channel) => ({
         id: channel!.id,
         name: channel!.name,
         type: ChannelType[channel!.type] || String(channel!.type),
@@ -512,7 +528,7 @@ class DiscordService {
       limit: input?.limit ?? 25,
     });
 
-    return members.map((member: { id: any; user: { username: any; bot: any; }; displayName: any; }) => ({
+    return members.map((member) => ({
       id: member.id,
       username: member.user?.username,
       displayName: member.displayName,
@@ -555,11 +571,17 @@ class DiscordService {
     if (!this.client) throw new Error('Discord client is not connected');
 
     if (target.type === 'user') {
+      if (!isSnowflake(target.id)) {
+        throw new Error('Discord userId must be a numeric snowflake.');
+      }
       const user = await this.client.users.fetch(target.id);
       const dm = await user.createDM();
       return dm as unknown as DiscordSendChannel;
     }
 
+    if (!isSnowflake(target.id)) {
+      throw new Error('Discord channel/thread ID must be a numeric snowflake.');
+    }
     const channel = await this.getTextChannel(target.id);
     if (!channel) {
       throw new Error(`Target channel/thread not found or not text-based: ${target.id}`);
@@ -668,12 +690,14 @@ function resolveConfig(rawConfig: unknown): DiscordPluginConfig {
 
   const resolvedToken = parsed.botToken?.trim() || readEnv(parsed.tokenEnv);
   const resolvedDefaultChannel = parsed.defaultChannelId?.trim() || readEnv(parsed.defaultChannelIdEnv);
+  const resolvedDefaultUser = parsed.defaultUserId?.trim() || readEnv(parsed.defaultUserIdEnv);
   const resolvedGuildId = parsed.guildId?.trim() || readEnv(parsed.guildIdEnv);
 
   return {
     ...parsed,
     botToken: resolvedToken,
     defaultChannelId: resolvedDefaultChannel,
+    defaultUserId: resolvedDefaultUser,
     guildId: resolvedGuildId,
     actionPermissions: resolveActionPermissions(parsed.actionPermissions),
   };
@@ -806,10 +830,19 @@ const discordPlugin = {
 
         service.assertActionEnabled('send_message');
 
+        // Prefer numeric userId; if caller passed a non-snowflake string, fall back to configured defaultUserId when present.
+        let effectiveUserId = userId;
+        if (effectiveUserId && !isSnowflake(effectiveUserId) && service['config'].defaultUserId && isSnowflake(service['config'].defaultUserId)) {
+          effectiveUserId = service['config'].defaultUserId;
+        }
+        if (effectiveUserId && !isSnowflake(effectiveUserId)) {
+          throw new Error('userId must be a numeric snowflake (17–20 digits).');
+        }
+
         const result = await service.sendMessage({
           content,
           channelId,
-          userId,
+          userId: effectiveUserId,
           threadId,
           replyToMessageId,
         });

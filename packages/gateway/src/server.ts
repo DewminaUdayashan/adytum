@@ -220,6 +220,7 @@ export class GatewayServer extends EventEmitter {
         execution: {
           shell: exec.shell || 'ask',
           defaultChannel: exec.defaultChannel,
+          defaultUser: (exec as any).defaultUser,
           defaultCommSkillId: exec.defaultCommSkillId,
           approvalBaseUrl: exec.approvalBaseUrl,
         },
@@ -230,6 +231,7 @@ export class GatewayServer extends EventEmitter {
       const body = request.body as {
         shell?: 'auto' | 'ask' | 'deny';
         defaultChannel?: string;
+        defaultUser?: string;
         defaultCommSkillId?: string;
         approvalBaseUrl?: string;
       };
@@ -237,6 +239,7 @@ export class GatewayServer extends EventEmitter {
       const next = {
         shell: body.shell || cfg.execution?.shell || 'ask',
         defaultChannel: body.defaultChannel ?? cfg.execution?.defaultChannel,
+        defaultUser: body.defaultUser ?? (cfg.execution as any)?.defaultUser,
         defaultCommSkillId: body.defaultCommSkillId ?? cfg.execution?.defaultCommSkillId,
         approvalBaseUrl: body.approvalBaseUrl ?? cfg.execution?.approvalBaseUrl,
       };
@@ -246,7 +249,7 @@ export class GatewayServer extends EventEmitter {
 
     // Skills permissions (global)
     this.app.put('/api/skills/permissions', async (request, reply) => {
-      const body = request.body as { install?: 'auto' | 'ask' | 'deny'; defaultChannel?: string };
+      const body = request.body as { install?: 'auto' | 'ask' | 'deny'; defaultChannel?: string; defaultUser?: string };
       const cfg = loadConfig();
       const skills =
         cfg.skills || {
@@ -254,7 +257,7 @@ export class GatewayServer extends EventEmitter {
           allow: [],
           deny: [],
           load: { paths: [], extraDirs: [] },
-          permissions: { install: 'ask' as 'auto' | 'ask' | 'deny', defaultChannel: undefined },
+          permissions: { install: 'ask' as 'auto' | 'ask' | 'deny', defaultChannel: undefined, defaultUser: undefined },
           entries: {},
         };
       const next = {
@@ -262,6 +265,7 @@ export class GatewayServer extends EventEmitter {
         permissions: {
           install: body.install || skills.permissions?.install || 'ask',
           defaultChannel: body.defaultChannel ?? skills.permissions?.defaultChannel,
+          defaultUser: body.defaultUser ?? (skills.permissions as any)?.defaultUser,
         },
       };
       saveConfig({ skills: next } as any);
@@ -297,6 +301,7 @@ export class GatewayServer extends EventEmitter {
         permissions: {
           install: skillsCfg.permissions?.install ?? 'ask',
           defaultChannel: skillsCfg.permissions?.defaultChannel,
+          defaultUser: (skillsCfg.permissions as any)?.defaultUser,
         },
       };
 
@@ -904,7 +909,7 @@ export class GatewayServer extends EventEmitter {
 
     // Notify via communication skill if configured
     const cfg = loadConfig();
-    const resolveChannelId = (raw?: string): string | undefined => {
+    const resolveId = (raw?: string): string | undefined => {
       if (!raw) return undefined;
       const trimmed = raw.trim();
       if (!trimmed) return undefined;
@@ -919,24 +924,37 @@ export class GatewayServer extends EventEmitter {
       this.config.skillLoader?.getAll().find((s) => s.communication)?.id;
 
     let channelId =
-      resolveChannelId(payload.meta?.defaultChannel as string | undefined) ||
-      resolveChannelId(cfg.execution?.defaultChannel) ||
-      resolveChannelId(cfg.skills?.permissions?.defaultChannel);
+      resolveId(payload.meta?.defaultChannel as string | undefined) ||
+      resolveId(cfg.execution?.defaultChannel) ||
+      resolveId(cfg.skills?.permissions?.defaultChannel);
+    let userId =
+      resolveId((payload.meta as any)?.defaultUser as string | undefined) ||
+      resolveId((cfg.execution as any)?.defaultUser) ||
+      resolveId((cfg.skills?.permissions as any)?.defaultUser);
 
     if (!channelId && defaultCommSkillId && cfg.skills?.entries?.[defaultCommSkillId]) {
       const entryCfg = cfg.skills.entries[defaultCommSkillId].config as Record<string, any> | undefined;
       channelId =
-        resolveChannelId(entryCfg?.defaultChannelId) ||
-        resolveChannelId(entryCfg?.defaultChannel) ||
-        resolveChannelId(entryCfg?.defaultChannelIdEnv && process.env[entryCfg.defaultChannelIdEnv]) ||
-        resolveChannelId(entryCfg?.defaultChannelEnv && process.env[entryCfg.defaultChannelEnv]);
+        resolveId(entryCfg?.defaultChannelId) ||
+        resolveId(entryCfg?.defaultChannel) ||
+        resolveId(entryCfg?.defaultChannelIdEnv && process.env[entryCfg.defaultChannelIdEnv]) ||
+        resolveId(entryCfg?.defaultChannelEnv && process.env[entryCfg.defaultChannelEnv]);
+      userId =
+        resolveId(entryCfg?.defaultUserId) ||
+        resolveId(entryCfg?.defaultUser) ||
+        resolveId(entryCfg?.defaultUserIdEnv && process.env[entryCfg.defaultUserIdEnv]) ||
+        resolveId(entryCfg?.defaultUserEnv && process.env[entryCfg.defaultUserEnv]);
     }
 
     if (!channelId && defaultCommSkillId === 'discord') {
-      channelId = resolveChannelId(process.env.ADYTUM_DISCORD_DEFAULT_CHANNEL_ID);
+      channelId = resolveId(process.env.ADYTUM_DISCORD_DEFAULT_CHANNEL_ID);
     }
 
-    if (defaultCommSkillId && channelId && this.config.toolRegistry) {
+    if (!userId && defaultCommSkillId === 'discord') {
+      userId = resolveId(process.env.ADYTUM_DISCORD_DEFAULT_USER_ID);
+    }
+
+    if (defaultCommSkillId && (channelId || userId) && this.config.toolRegistry) {
       let sendTool =
         this.config.toolRegistry.get(`${defaultCommSkillId}_send`) ||
         (defaultCommSkillId === 'discord' ? this.config.toolRegistry.get('discord_send') : null) ||
@@ -951,15 +969,22 @@ export class GatewayServer extends EventEmitter {
         const baseUrl = configuredBase.replace(/\/+$/, '');
         const approveUrl = `${baseUrl}/api/approvals/${id}?approved=true`;
         const denyUrl = `${baseUrl}/api/approvals/${id}?approved=false`;
-        // fire and forget
-        sendTool
-          .execute({
-            channelId,
-            content: `Approval needed: ${payload.description}\nRequest ID: ${id}\nApprove: ${approveUrl}\nDeny: ${denyUrl}`,
-          })
-          .catch((err: any) => {
-            console.warn('[approval] failed to send comm notification:', err?.message || err);
-          });
+        const content = `Approval needed: ${payload.description}\nRequest ID: ${id}\nApprove: ${approveUrl}\nDeny: ${denyUrl}`;
+
+        const targets: Array<Record<string, string>> = [];
+        if (channelId) targets.push({ channelId });
+        if (userId) targets.push({ userId });
+
+        targets.forEach((target) => {
+          sendTool
+            .execute({
+              ...target,
+              content,
+            })
+            .catch((err: any) => {
+              console.warn('[approval] failed to send comm notification:', err?.message || err);
+            });
+        });
       } else {
         console.warn('[approval] no send tool found for comm skill', defaultCommSkillId);
       }
