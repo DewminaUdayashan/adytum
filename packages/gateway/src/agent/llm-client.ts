@@ -32,6 +32,7 @@ export interface LLMChatResult {
     totalTokens: number;
   };
   model: string;
+  finishReason?: string;
 }
 
 interface ProviderEndpoint {
@@ -270,6 +271,7 @@ export class LLMClient {
         totalTokens: (data.usage?.input_tokens || 0) + (data.usage?.output_tokens || 0),
       },
       model: data.model || model,
+      finishReason: data.stop_reason,
     };
   }
 
@@ -348,6 +350,7 @@ export class LLMClient {
         completionTokens: data.usage?.completion_tokens || 0,
         totalTokens: data.usage?.total_tokens || 0,
       },
+      finishReason: choice.finish_reason,
       model: data.model || model,
     };
   }

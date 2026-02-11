@@ -99,6 +99,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
 
   const soulEngine = new SoulEngine(config.workspacePath);
   const skillLoader = new SkillLoader(config.workspacePath);
+  await skillLoader.init(toolRegistry);
 
   const agent = new AgentRuntime({
     modelRouter,

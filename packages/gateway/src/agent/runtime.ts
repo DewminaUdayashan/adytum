@@ -99,6 +99,7 @@ export class AgentRuntime extends EventEmitter {
     const allToolCalls: ToolCall[] = [];
     let finalResponse = '';
     let iterations = 0;
+    let lastMessage: any = null;
 
     try {
       while (iterations < this.config.maxIterations) {
@@ -142,6 +143,7 @@ export class AgentRuntime extends EventEmitter {
             temperature: 0.7,
           },
         );
+        lastMessage = message;
 
         // Track tokens
         tokenTracker.record(usage, sessionId);
@@ -269,7 +271,21 @@ export class AgentRuntime extends EventEmitter {
       }
 
       if (!finalResponse.trim()) {
-        finalResponse = 'I did not receive a usable response from the model. Please try again.';
+        const rawMsg = JSON.stringify(lastMessage || {}, null, 2);
+        console.warn('⚠️ Warning: Received empty response from model.');
+        console.warn('Raw message received:', rawMsg);
+
+        // Check for refusal (OpenAI/Gemini safety)
+        if ((lastMessage as any)?.refusal) {
+          finalResponse = `Model refused to answer: ${(lastMessage as any).refusal}`;
+        } 
+        // Check for thinking content (DeepSeek/Reasoning models)
+        else if ((lastMessage as any)?.reasoning_content) {
+             finalResponse = (lastMessage as any).reasoning_content;
+        }
+        else {
+          finalResponse = 'I did not receive a usable response from the model. Please check the terminal logs for details.';
+        }
       }
 
       trace.endTime = Date.now();

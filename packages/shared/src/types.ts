@@ -164,6 +164,7 @@ export const SkillMetadataSchema = z.object({
     bins: z.array(z.string()).optional(),
     env: z.array(z.string()).optional(),
   }).optional(),
+  adytum: z.record(z.unknown()).optional(),
 });
 export type SkillMetadata = z.infer<typeof SkillMetadataSchema>;
 
@@ -200,3 +201,19 @@ export const AdytumConfigSchema = z.object({
   discord: DiscordConfigSchema.optional(),
 });
 export type AdytumConfig = z.infer<typeof AdytumConfigSchema>;
+
+// ─── Skill & Tool Definitions ────────────────────────────────
+
+export interface ToolDefinition {
+  name: string;
+  description: string;
+  parameters: z.ZodObject<any>;
+  requiresApproval?: boolean;
+  execute: (args: any) => Promise<unknown>;
+}
+
+export interface AdytumSkill {
+  tools?: ToolDefinition[];
+  onLoad?: () => Promise<void>;
+  onUnload?: () => Promise<void>;
+}

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
-import type { ToolDefinition } from './registry.js';
+import type { ToolDefinition } from '@adytum/shared';
 import type { PermissionManager } from '../security/permission-manager.js';
 
 export function createFileSystemTools(permissionManager: PermissionManager): ToolDefinition[] {
@@ -14,7 +14,7 @@ export function createFileSystemTools(permissionManager: PermissionManager): Too
 
         encoding: z.string().default('utf-8').describe('File encoding'),
       }),
-      execute: async (args) => {
+      execute: async (args: any) => {
         const { path, encoding } = args as { path: string; encoding: string };
         const resolved = permissionManager.validatePath(path, 'read');
         const content = readFileSync(resolved, encoding as BufferEncoding);
@@ -35,7 +35,7 @@ export function createFileSystemTools(permissionManager: PermissionManager): Too
         content: z.string().describe('Content to write'),
         createDirs: z.boolean().default(true).describe('Create parent directories if missing'),
       }),
-      execute: async (args) => {
+      execute: async (args: any) => {
         const { path, content, createDirs } = args as {
           path: string;
           content: string;
@@ -61,7 +61,7 @@ export function createFileSystemTools(permissionManager: PermissionManager): Too
         recursive: z.boolean().default(false).describe('List recursively'),
         maxDepth: z.number().default(3).describe('Max depth for recursive listing'),
       }),
-      execute: async (args) => {
+      execute: async (args: any) => {
         const { path, recursive, maxDepth } = args as {
           path: string;
           recursive: boolean;
@@ -100,7 +100,7 @@ export function createFileSystemTools(permissionManager: PermissionManager): Too
         extensions: z.array(z.string()).optional().describe('File extensions to include'),
         maxResults: z.number().default(20).describe('Maximum number of results'),
       }),
-      execute: async (args) => {
+      execute: async (args: any) => {
         const { path, query, extensions, maxResults } = args as {
           path: string;
           query: string;

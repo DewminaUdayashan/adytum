@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ToolDefinition } from './registry.js';
+import type { ToolDefinition } from '@adytum/shared';
 import type { MemoryStore } from '../agent/memory-store.js';
 
 export function createMemoryTools(memoryStore: MemoryStore): ToolDefinition[] {
@@ -12,7 +12,7 @@ export function createMemoryTools(memoryStore: MemoryStore): ToolDefinition[] {
         tags: z.array(z.string()).optional().describe('Optional tags for the memory'),
         category: z.string().optional().describe('Memory category (episodic_raw, episodic_summary, dream, monologue, curiosity, general, user_fact)'),
       }),
-      execute: async (args) => {
+      execute: async (args: any) => {
         const { content, tags, category } = args as { content: string; tags?: string[]; category?: string };
         const record = memoryStore.add(content, 'user', tags, undefined, (category as any) || 'general');
         return { success: true, memory: record };
@@ -25,7 +25,7 @@ export function createMemoryTools(memoryStore: MemoryStore): ToolDefinition[] {
         query: z.string().describe('Search query'),
         topK: z.number().default(3).describe('Number of results to return'),
       }),
-      execute: async (args) => {
+      execute: async (args: any) => {
         const { query, topK } = args as { query: string; topK: number };
         const results = memoryStore.search(query, topK);
         return { query, results };
@@ -37,7 +37,7 @@ export function createMemoryTools(memoryStore: MemoryStore): ToolDefinition[] {
       parameters: z.object({
         limit: z.number().default(20).describe('Number of memories to return'),
       }),
-      execute: async (args) => {
+      execute: async (args: any) => {
         const { limit } = args as { limit: number };
         const results = memoryStore.list(limit);
         return { results };

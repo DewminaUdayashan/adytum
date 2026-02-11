@@ -1,15 +1,5 @@
 import { z } from 'zod';
-import type { ToolCall, ToolResult } from '@adytum/shared';
-
-// ─── Tool Definition ──────────────────────────────────────────
-
-export interface ToolDefinition {
-  name: string;
-  description: string;
-  parameters: z.ZodObject<any>;
-  requiresApproval?: boolean;
-  execute: (args: Record<string, unknown>) => Promise<unknown>;
-}
+import type { ToolCall, ToolResult, ToolDefinition } from '@adytum/shared';
 
 // ─── Tool Registry ────────────────────────────────────────────
 

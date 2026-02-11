@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ToolDefinition } from './registry.js';
+import type { ToolDefinition } from '@adytum/shared';
 
 export function createWebFetchTool(): ToolDefinition {
   return {
@@ -12,7 +12,7 @@ export function createWebFetchTool(): ToolDefinition {
       body: z.string().optional().describe('Request body (for POST)'),
       maxLength: z.number().default(20000).describe('Max response length in characters'),
     }),
-    execute: async (args) => {
+    execute: async (args: any) => {
       const { url, method, headers, body, maxLength } = args as {
         url: string;
         method: string;

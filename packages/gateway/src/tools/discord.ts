@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ToolDefinition } from './registry.js';
+import type { ToolDefinition } from '@adytum/shared';
 import type { DiscordBridge } from '../agent/discord-bridge.js';
 
 const DiscordSendSchema = z.object({

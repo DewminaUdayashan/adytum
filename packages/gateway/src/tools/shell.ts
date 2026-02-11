@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { DANGEROUS_COMMANDS } from '@adytum/shared';
-import type { ToolDefinition } from './registry.js';
+import type { ToolDefinition } from '@adytum/shared';
 
 const execAsync = promisify(exec);
 
@@ -13,7 +13,7 @@ const execAsync = promisify(exec);
 export function createShellToolWithApproval(
   onApprovalRequired: (command: string) => Promise<boolean>,
 ): ToolDefinition['execute'] {
-  return async (args) => {
+  return async (args: any) => {
     const { command, cwd, timeout } = args as {
       command: string;
       cwd?: string;

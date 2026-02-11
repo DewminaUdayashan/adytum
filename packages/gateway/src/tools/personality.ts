@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ToolDefinition } from './registry.js';
+import type { ToolDefinition } from '@adytum/shared';
 import type { MemoryDB } from '../agent/memory-db.js';
 
 export function createPersonalityTools(memoryDb: MemoryDB): ToolDefinition[] {
@@ -10,7 +10,7 @@ export function createPersonalityTools(memoryDb: MemoryDB): ToolDefinition[] {
       parameters: z.object({
         content: z.string().describe('Proposed SOUL.md update or instruction'),
       }),
-      execute: async (args) => {
+      execute: async (args: any) => {
         const { content } = args as { content: string };
         memoryDb.addPendingUpdate('soul', content);
         return { success: true, queued: true };
@@ -22,7 +22,7 @@ export function createPersonalityTools(memoryDb: MemoryDB): ToolDefinition[] {
       parameters: z.object({
         content: z.string().describe('Proposed guideline update'),
       }),
-      execute: async (args) => {
+      execute: async (args: any) => {
         const { content } = args as { content: string };
         memoryDb.addPendingUpdate('guidelines', content);
         return { success: true, queued: true };

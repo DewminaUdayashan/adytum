@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { ToolDefinition } from './registry.js';
+import type { ToolDefinition } from '@adytum/shared';
 import type { CronManager } from '../agent/cron-manager.js';
 import cron from 'node-cron';
 
