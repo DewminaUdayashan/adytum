@@ -43,6 +43,16 @@ program
           rmSync(dataPath, { recursive: true, force: true });
           console.log(chalk.dim('   ✓ Cleared data/ directory (memory, logs, cron jobs)'));
         }
+        const configPath = join(projectRoot, 'adytum.config.yaml');
+        if (existsSync(configPath)) {
+          rmSync(configPath, { force: true });
+          console.log(chalk.dim('   ✓ Removed adytum.config.yaml'));
+        }
+        const litellmPath = join(projectRoot, 'litellm_config.yaml');
+        if (existsSync(litellmPath)) {
+          rmSync(litellmPath, { force: true });
+          console.log(chalk.dim('   ✓ Removed litellm_config.yaml'));
+        }
       } catch (e) {}
     }
 
