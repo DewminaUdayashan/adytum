@@ -15,7 +15,9 @@ import {
   Clock,
   Puzzle,
   History,
+  Cpu,
 } from 'lucide-react';
+
 
 const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: Brain, group: 'main' },
@@ -24,11 +26,13 @@ const NAV_ITEMS = [
   { href: '/console', label: 'Console Stream', icon: Terminal, group: 'tools' },
   { href: '/memories', label: 'Logs & Memories', icon: History, group: 'tools' },
   { href: '/tokens', label: 'Token Usage', icon: Coins, group: 'tools' },
+  { href: '/settings/llm', label: 'Model Settings', icon: Cpu, group: 'config' },
   { href: '/skills', label: 'Skills', icon: Puzzle, group: 'config' },
   { href: '/permissions', label: 'Access Control', icon: Shield, group: 'config' },
   { href: '/personality', label: 'Personality', icon: Sparkles, group: 'config' },
   { href: '/heartbeat', label: 'Pulse Monitor', icon: Heart, group: 'monitoring' },
 ];
+
 
 const GROUPS: Record<string, string> = {
   main: 'Platform',
