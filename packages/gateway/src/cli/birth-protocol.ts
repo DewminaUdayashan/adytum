@@ -3,8 +3,9 @@ import figlet from 'figlet';
 import gradient from 'gradient-string';
 import ora from 'ora';
 import { select, input, confirm } from '@inquirer/prompts';
-import { MODEL_PROVIDERS, PROVIDER_MODELS, MODEL_ROLES, MODEL_ROLE_DESCRIPTIONS, ADYTUM_VERSION } from '@adytum/shared';
+import { MODEL_ROLES, MODEL_ROLE_DESCRIPTIONS, ADYTUM_VERSION } from '@adytum/shared';
 import { SoulEngine } from '../agent/soul-engine.js';
+import { ModelCatalog } from '../agent/model-catalog.js';
 import { saveConfig } from '../config.js';
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -146,50 +147,75 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
     default: '',
   });
 
-  // ── Stage 5: Model Binding ──────────────────────────────
+  // ─── Stage 5: Model Binding ──────────────────────────────
   console.log();
   console.log(gradient.vice('\n═══ Model Configuration ═══\n'));
+
+  // Initialize catalog to get providers/models
+  // We make a temporary catalog just for this wizard
+  const tempConfig: any = { workspacePath: resolve(workspacePath) };
+  const catalog = new ModelCatalog(tempConfig); 
+  // Scan for local models too
+  await catalog.scanLocalModels();
+
+  const allModels = catalog.getAll();
+  const providers = Array.from(new Set(allModels.map(m => m.provider))).sort();
 
   const models: Array<{ role: string; provider: string; model: string; apiKey?: string; baseUrl?: string }> = [];
 
   for (const role of MODEL_ROLES) {
     console.log(chalk.dim(`\n${MODEL_ROLE_DESCRIPTIONS[role]}`));
 
+    // Provider selection
     const provider = (await select({
       message: chalk.yellow(`[${role.toUpperCase()}] Select provider:`),
-      choices: MODEL_PROVIDERS.map((p: any) => ({
-        value: p.id,
-        name: `${p.name}${p.requiresKey ? '' : ' (No API key needed)'}`,
-      })),
+      choices: [
+          ...providers.map(p => ({ value: p, name: p })),
+          { value: 'custom', name: 'Custom (OpenAI Compatible)' }
+      ]
     })) as string;
 
-    const providerModels = PROVIDER_MODELS[provider] || ['custom-model'];
-    const model = (await select({
-      message: chalk.yellow(`[${role.toUpperCase()}] Select model:`),
-      choices: providerModels.map((m: string) => ({ value: m, name: m })),
-    })) as string;
-
-    const providerInfo = MODEL_PROVIDERS.find((p: any) => p.id === provider);
+    let model: string;
     let apiKey: string | undefined;
     let baseUrl: string | undefined;
 
-    if (providerInfo?.requiresKey) {
-      apiKey = await input({
-        message: chalk.yellow(`API key for ${providerInfo.name}:`),
-      });
+    if (provider === 'custom') {
+        const customModelName = await input({ message: chalk.yellow('Model ID:') });
+        model = customModelName;
+        baseUrl = await input({ message: chalk.yellow('Base URL:'), default: 'http://localhost:8080/v1' });
+    } else {
+        // Filter models for this provider
+        const providerModels = allModels.filter(m => m.provider === provider).sort((a, b) => a.name.localeCompare(b.name));
+        
+        if (providerModels.length > 0) {
+            model = (await select({
+                message: chalk.yellow(`[${role.toUpperCase()}] Select model:`),
+                choices: providerModels.map(m => ({ value: m.model, name: m.name })),
+            })) as string;
+        } else {
+             // Fallback if no models known for provider (shouldn't happen with pi-ai usually)
+             model = await input({ message: chalk.yellow('Model ID:') });
+        }
+        
+        // Find selected entry to see if we have defaults
+        const selectedEntry = providerModels.find(m => m.model === model);
+        if (selectedEntry?.baseUrl) {
+            baseUrl = selectedEntry.baseUrl;
+        }
     }
 
-    if (['ollama', 'lmstudio', 'vllm', 'custom'].includes(provider)) {
-      const defaults: Record<string, string> = {
-        ollama: 'http://localhost:11434',
-        lmstudio: 'http://localhost:1234/v1',
-        vllm: 'http://localhost:8000/v1',
-        custom: 'http://localhost:8080/v1',
-      };
-      baseUrl = await input({
-        message: chalk.yellow('Base URL:'),
-        default: defaults[provider],
+    // Ask for API key if it's a cloud provider (heuristic: not ollama/lmstudio/vllm/local)
+    // or if we decide all providers might need keys except strictly local ones.
+    const isLocal = ['ollama', 'lmstudio', 'vllm', 'local'].includes(provider);
+    if (!isLocal && provider !== 'custom') { // Custom might need key too but usually we ask base url
+       apiKey = await input({
+        message: chalk.yellow(`API key for ${provider}:`),
       });
+    } else if (provider === 'custom') {
+        const needKey = await confirm({ message: 'Does this endpoint require an API key?', default: false });
+        if (needKey) {
+            apiKey = await input({ message: chalk.yellow('API Key:') });
+        }
     }
 
     models.push({ role, provider, model, apiKey, baseUrl });
