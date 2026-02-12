@@ -25,8 +25,8 @@ The fastest way to get Adytum up and running is our zero-config setup script:
 
 1.  **Clone the Repository**:
     ```bash
-    git clone https://github.com/your-username/project-adytum.git
-    cd project-adytum
+    git clone https://github.com/dewminaudayashan/adytum.git
+    cd adytum
     ```
 
 2.  **Run the Installer**:
