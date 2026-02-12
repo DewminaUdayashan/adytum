@@ -1,15 +1,24 @@
-import { resolve, relative, sep } from 'node:path';
-import { existsSync, readFileSync } from 'node:fs';
+import { resolve, relative, sep, basename } from 'node:path';
+import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import type { AccessMode, PermissionEntry } from '@adytum/shared';
 
 export class PathValidator {
   private workspaceRoot: string;
   private whitelist: PermissionEntry[] = [];
   private securityManifestPath: string;
+  // Critical files that cannot be written to, even if they are in the workspace/data path
+  private criticalFiles = [
+    'adytum.config.yaml',
+    'litellm_config.yaml',
+    '.env',
+    'security.json',
+    'package.json',
+  ];
 
   constructor(workspaceRoot: string, dataPath: string) {
     this.workspaceRoot = resolve(workspaceRoot);
     this.securityManifestPath = resolve(dataPath, 'security.json');
+    this.criticalFiles.push(this.securityManifestPath); // explicit absolute path
     this.loadWhitelist();
   }
 
@@ -18,10 +27,46 @@ export class PathValidator {
    * Returns the resolved absolute path if valid, throws if blocked.
    */
   validate(targetPath: string, operation: 'read' | 'write' = 'read'): string {
-    // Resolve relative paths against workspace root, not process.cwd()
-    const resolved = resolve(this.workspaceRoot, targetPath);
+    // 1. Resolve relative paths against workspace root
+    let resolved = resolve(this.workspaceRoot, targetPath);
 
-    // Always block known sensitive paths
+    // 2. Resolve Symlinks (REALPATH check)
+    // We try to get the real path. If file doesn't exist, we resolve the parent's real path.
+    // This prevents "ln -s /etc/passwd ./passwd" attacks.
+    if (existsSync(resolved)) {
+      try {
+        resolved = realpathSync(resolved);
+      } catch (err) {
+        throw new PathSecurityError(
+          `Access denied: Could not check real path of "${resolved}"`,
+          resolved,
+          'realpath_failed',
+        );
+      }
+    } else {
+      // For new files, check the parent directory
+      const parent = resolve(resolved, '..');
+      if (existsSync(parent)) {
+        try {
+          const realParent = realpathSync(parent);
+          resolved = resolve(realParent, basename(resolved));
+        } catch {
+           // Parent might be restricted or invalid, let specific checks handle it
+        }
+      }
+    }
+
+    // 3. Blacklist Check (Critical Config Files)
+    // We block writing to these files to prevent privilege escalation or breaking the agent.
+    if (this.isCriticalPath(resolved) && operation === 'write') {
+        throw new PathSecurityError(
+            `Access denied: "${basename(resolved)}" is a critical system file and cannot be modified.`,
+            resolved,
+            'critical_file'
+        );
+    }
+
+    // 4. Sensitive System Path Check
     if (this.isSensitivePath(resolved)) {
       throw new PathSecurityError(
         `Access denied: "${resolved}" is a protected system path`,
@@ -30,12 +75,13 @@ export class PathValidator {
       );
     }
 
-    // Check if within workspace (always allowed)
+    // 5. Workspace Sandbox Check
+    // Must be INSIDE the workspace root (not just starting with it string-wise, though resolve handles that)
     if (resolved.startsWith(this.workspaceRoot + sep) || resolved === this.workspaceRoot) {
       return resolved;
     }
 
-    // Check whitelist
+    // 6. Whitelist Check
     const permission = this.findPermission(resolved);
     if (!permission) {
       throw new PathSecurityError(
@@ -45,7 +91,7 @@ export class PathValidator {
       );
     }
 
-    // Check access mode
+    // 7. Permission Mode Check
     if (operation === 'write' && permission.mode === 'read_only') {
       throw new PathSecurityError(
         `Write access denied: "${resolved}" is read-only`,
@@ -54,7 +100,7 @@ export class PathValidator {
       );
     }
 
-    // Check expiration for JIT permissions
+    // 8. Expiration Check
     if (permission.mode === 'just_in_time' && permission.expiresAt) {
       if (Date.now() > permission.expiresAt) {
         throw new PathSecurityError(
@@ -73,6 +119,11 @@ export class PathValidator {
       const entryPath = resolve(entry.path);
       return targetPath.startsWith(entryPath + sep) || targetPath === entryPath;
     });
+  }
+
+  private isCriticalPath(p: string): boolean {
+    const filename = basename(p);
+    return this.criticalFiles.includes(filename) || p === this.securityManifestPath;
   }
 
   private isSensitivePath(p: string): boolean {
@@ -112,6 +163,7 @@ export class PathValidator {
   }
 
   private saveWhitelist(): void {
+    // We use basic fs imports here to avoid circular dep issues if any
     const { writeFileSync, mkdirSync } = require('node:fs');
     const { dirname } = require('node:path');
     mkdirSync(dirname(this.securityManifestPath), { recursive: true });

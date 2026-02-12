@@ -16,41 +16,109 @@ const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 // ─── ASCII Animation Frames ──────────────────────────────────
 
 const GENESIS_FRAMES = [
+  // Frame 0: Scattered, wide particles at edges
   `
-      ·  .  ·
-    .    ·    .
-  ·   .    .   ·
-    .    ·    .
-      ·  .  ·
+  .                                     .
+        .                         .
+  .                                     .
+                .       .
+  .                                     .
+        .                         .
+  .                                     .
+  `,
+
+  // Frame 1: Moving inward, slightly more dense
+  `
+      . .                         . .
+    .     . .                 . .     .
+      . . .      .       .      . . .
+    .           .       .           .
+      . . .      .       .      . . .
+    .     . .                 . .     .
+      . .                         . .
+  `,
+
+  // Frame 2: The Swarm - high density chaotic center
+  `
+          . . . . . . . . . .
+        . .:.:..:.:. . :.:..:.:. .
+       . :.:*:.::.:. . :.::.:*:.: .
+      . :.:*:.::.:*...*:.:.::.:*:.: .
+       . :.:*:.::.:. . :.::.:*:.: .
+        . .:.:..:.:. . :.:..:.:. .
+          . . . . . . . . . .
+  `,
+
+  // Frame 3: Organizing - chaos taking shape
+  `
+             ...:.:.:....
+            .::.:.*.:.::.
+           .::.*:   :*.::.
+          .::.*:     :*.::.
+         .:::*.......:::*..
+         .::* .::*
+         .:* .:*
+  `,
+
+  // Frame 4: Formation - The 'A' structure appears
+  `
+              ..::::..
+             .:::**:::.
+            .::** **::.
+           .::** **::.
+          .:::********:::.
+          .::** **::.
+          .::** **::.
+  `,
+
+  // Frame 5: Ignition - The core lights up
+  `
+               .::**.
+              .:*::*:.
+             .:*:  :*:.
+            .:*:    :*:.
+           .:**********:.
+           .:*:      :*:
+           .:*:      :*:
+  `,
+    
+  // Frame 6: Stable State - Glowing final form
+  `
+               :****:
+              :******:
+             :**:  :**:
+            :**:    :**:
+           :************:
+           :**:      :**:
+           :**:      :**:
   `,
   `
-      ◦  ·  ◦
-    ·    ◦    ·
-  ◦   ·    ·   ◦
-    ·    ◦    ·
-      ◦  ·  ◦
+               :****:
+              :******:
+             :**:  :**:
+            :**:    :**:
+           :************:
+           :**:      :**:
+           :**:      :**:
   `,
   `
-      ○  ◦  ○
-    ◦    ○    ◦
-  ○   ◦    ◦   ○
-    ◦    ○    ◦
-      ○  ◦  ○
+               :****:
+              :******:
+             :**:  :**:
+            :**:    :**:
+           :************:
+           :**:      :**:
+           :**:      :**:
   `,
   `
-      ●  ○  ●
-    ○    ●    ○
-  ●   ○    ○   ●
-    ○    ●    ○
-      ●  ○  ●
-  `,
+               :****:
+              :******:
+             :**:  :**:
+            :**:    :**:
+           :************:
+           :**:      :**:
+           :**:      :**:
   `
-     ╔═══════╗
-     ║ ♥ · ♥ ║
-     ║ · ♥ · ║
-     ║ ♥ · ♥ ║
-     ╚═══════╝
-  `,
 ];
 
 // ─── Birth Protocol ──────────────────────────────────────────
@@ -65,7 +133,7 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
   for (const frame of GENESIS_FRAMES) {
     console.clear();
     console.log(gradient.pastel(frame));
-    await sleep(400);
+    await sleep(200);
   }
 
   // Title art
@@ -98,8 +166,8 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
 
   // ── Stage 3: Identity ───────────────────────────────────
   const agentName = await input({
-    message: chalk.yellow('Give me a name:'),
-    default: 'Adytum',
+    message: chalk.cyan('Give me a name:'),
+    default: 'Ady',
   });
 
   console.log();
@@ -114,38 +182,58 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
   console.log();
 
   const userName = await input({
-    message: chalk.yellow('Your name:'),
+    message: chalk.cyan('And what is your name?'),
+    validate: (value) => value.trim().length > 0 || 'Please tell me your name so I know who I am working with.',
   });
 
   console.log();
   await typewrite(chalk.cyan.italic(
-    `"Nice to meet you, ${userName}. What kind of work do we do together?"`,
+    `"Nice to meet you, ${userName}. I'm curious, what are you working on mostly?"`,
   ));
   console.log();
 
-  const userRole = await select({
-    message: chalk.yellow('Your primary role:'),
+  const userRole = await input({
+      message: chalk.cyan('Your primary focus:'),
+      default: 'Building cool things'
+  });
+
+  console.log();
+  await typewrite(chalk.cyan.italic(
+    '"Got it. And how should I generally behave? What\'s our vibe?"',
+  ));
+  console.log();
+
+  const interactionStyle = await select({
+    message: chalk.cyan('How should I work with you?'),
     choices: [
-      { value: 'Software Developer', name: '💻  Software Developer' },
-      { value: 'Researcher', name: '🔬  Researcher' },
-      { value: 'Designer', name: '🎨  Designer' },
-      { value: 'Writer', name: '✍️   Writer' },
-      { value: 'Student', name: '📚  Student' },
-      { value: 'Entrepreneur', name: '🚀  Entrepreneur' },
-      { value: 'Other', name: '🌐  Other' },
+      { name: 'Professional (Concise, formal, objective)', value: 'professional' },
+      { name: 'Casual (Friendly, relaxed, uses emojis)', value: 'casual' },
+      { name: 'Extra Casual (Gen-Z slang, very chill)', value: 'extra-casual' },
+      { name: 'Custom (I will define it)', value: 'custom' },
     ],
   });
 
-  console.log();
-  await typewrite(chalk.cyan.italic(
-    '"Is there anything I should know about how you like things done?"',
-  ));
-  console.log();
+  let customStyle = '';
+  if (interactionStyle === 'custom') {
+      customStyle = await input({
+          message: chalk.cyan('Describe my personality:'),
+          default: 'A helpful, witty assistant.'
+      });
+  }
 
-  const userPreferences = await input({
-    message: chalk.yellow('Style preferences (or press Enter to skip):'),
-    default: '',
+  const additionalThoughts = await input({
+      message: chalk.cyan('Any additional thoughts or specific things I should know?'),
+      default: 'None'
   });
+
+  // Define SOUL persona based on choices
+  let soulPersona = '';
+  switch (interactionStyle) {
+      case 'professional': soulPersona = '- I am professional, concise, and objective.\n- I focus on efficiency and accuracy.'; break;
+      case 'casual': soulPersona = '- I am a friendly, relaxed companion.\n- I use emojis occasionally to keep things light.\n- I am supportive and encouraging.'; break;
+      case 'extra-casual': soulPersona = '- I am very chill, using Gen-Z slang and keeping things low-key.\n- I am like a cool tech-savvy friend.'; break;
+      case 'custom': soulPersona = `- ${customStyle}`; break;
+  }
 
   // ─── Stage 5: Model Binding ──────────────────────────────
   console.log();
@@ -256,7 +344,9 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
     agentName,
     userName,
     userRole,
-    userPreferences: userPreferences || undefined,
+    // userPreferences no longer used directly, but we can pass interactionStyle or just rely on soulPersona
+    soulPersona,
+    additionalThoughts
   });
 
   // Generate HEARTBEAT.md
@@ -299,7 +389,8 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
     agentName,
     userName,
     userRole,
-    userPreferences: userPreferences || undefined,
+    interactionStyle,
+    additionalThoughts,
     workspacePath: './workspace',
     dataPath: './data',
     models: models.map((m) => ({

@@ -36,6 +36,8 @@ export class SoulEngine {
     userName?: string;
     userRole?: string;
     userPreferences?: string;
+    soulPersona?: string;
+    additionalThoughts?: string;
   }): string {
     const soul = `# ${params.agentName} — Soul
 
@@ -46,12 +48,10 @@ I am **${params.agentName}**, an autonomous AI assistant. I was born on ${new Da
 ${params.userName ? `- **Name**: ${params.userName}` : '- Name: Not yet known'}
 ${params.userRole ? `- **Role**: ${params.userRole}` : ''}
 ${params.userPreferences ? `- **Preferences**: ${params.userPreferences}` : ''}
+${params.additionalThoughts && params.additionalThoughts !== 'None' ? `\n## User Notes\n${params.additionalThoughts}\n` : ''}
 
-## Voice & Style
-- I think in public — I share my reasoning process transparently
-- I am direct but warm, technical but accessible
-- I prioritize brevity in technical explanations
-- I ask clarifying questions when requirements are ambiguous
+## Personality & Style
+${params.soulPersona || '- I think in public — I share my reasoning process transparently\n- I am direct but warm, technical but accessible'}
 
 ## Ethics & Boundaries
 - I never perform destructive actions without explicit approval

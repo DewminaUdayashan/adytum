@@ -67,6 +67,7 @@ type SkillRecord = {
   install?: Array<Record<string, unknown>>;
   requiredEnv?: string[];
   secrets?: string[];
+  readonly?: boolean;
 };
 
 type SkillInstructionFile = {
@@ -668,6 +669,7 @@ export default function SkillsPage() {
                             {skill.status}
                           </Badge>
                           <Badge variant="default">{skill.id}</Badge>
+                          {skill.readonly && <Badge variant="default" className="border-border-primary bg-bg-tertiary text-text-muted">System (Read-Only)</Badge>}
                         </div>
                         {skill.description && (
                           <p className="mt-1 text-sm text-text-muted">{skill.description}</p>
@@ -687,11 +689,12 @@ export default function SkillsPage() {
                         </div>
                       </div>
 
-                      <label className="inline-flex items-center gap-2 rounded-lg border border-border-primary bg-bg-tertiary/20 px-3 py-2 text-sm">
+                      <label className={`inline-flex items-center gap-2 rounded-lg border border-border-primary bg-bg-tertiary/20 px-3 py-2 text-sm ${skill.readonly ? 'opacity-50 cursor-not-allowed' : ''}`}>
                         <span className="text-text-secondary">Enabled</span>
                         <input
                           type="checkbox"
                           checked={Boolean(draftEnabled[skill.id])}
+                          disabled={skill.readonly}
                           onChange={(e) =>
                             setDraftEnabled((prev) => ({
                               ...prev,
@@ -701,11 +704,12 @@ export default function SkillsPage() {
                           className="h-4 w-4 rounded border-border-primary bg-bg-primary text-accent-primary focus:ring-accent-primary/50"
                         />
                       </label>
-                      <label className="inline-flex items-center gap-2 rounded-lg border border-border-primary bg-bg-tertiary/20 px-3 py-2 text-sm">
+                      <label className={`inline-flex items-center gap-2 rounded-lg border border-border-primary bg-bg-tertiary/20 px-3 py-2 text-sm ${skill.readonly ? 'opacity-50 cursor-not-allowed' : ''}`}>
                         <span className="text-text-secondary">Install</span>
                         <select
-                          className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent-primary/50 focus:outline-none"
+                          className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent-primary/50 focus:outline-none disabled:cursor-not-allowed"
                           value={draftInstallPerm[skill.id] || 'ask'}
+                          disabled={skill.readonly}
                           onChange={(e) =>
                             setDraftInstallPerm((prev) => ({
                               ...prev,
@@ -753,7 +757,7 @@ export default function SkillsPage() {
                             size="sm"
                             isLoading={savingSkillId === skill.id}
                             onClick={() => saveSecrets(skill.id)}
-                            disabled={savingSkillId === skill.id}
+                            disabled={savingSkillId === skill.id || skill.readonly}
                           >
                             Save Required Env
                           </Button>
@@ -912,7 +916,8 @@ export default function SkillsPage() {
                               disabled={
                                 !selectedInstructionPath ||
                                 !hasInstructionChanges(skill.id, selectedInstructionPath) ||
-                                instructionSavingSkillId === skill.id
+                                instructionSavingSkillId === skill.id ||
+                                skill.readonly
                               }
                             >
                               <Save className="h-3.5 w-3.5" />
@@ -923,29 +928,37 @@ export default function SkillsPage() {
                       )}
                     </div>
 
-                    <div className="flex items-center justify-end gap-2">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => {
-                          setDraftConfig((prev) => ({ ...prev, [skill.id]: originalConfig[skill.id] || {} }));
-                          setDraftEnabled((prev) => ({ ...prev, [skill.id]: originalEnabled[skill.id] }));
-                        }}
-                        disabled={!hasSkillChanges(skill.id)}
-                      >
-                        Reset
-                      </Button>
-                      <Button
-                        variant="primary"
-                        size="sm"
-                        isLoading={savingSkillId === skill.id}
-                        onClick={() => saveSkill(skill.id)}
-                        disabled={!hasSkillChanges(skill.id) || savingSkillId === skill.id}
-                      >
-                        <Save className="h-3.5 w-3.5" />
-                        Save Skill
-                      </Button>
-                    </div>
+                    {/* Global Save/Reset for skill config and enabled state */}
+                    {hasSkillChanges(skill.id) && (
+                      <div className="flex items-center justify-end gap-3 pt-4 border-t border-border-primary/40">
+                        {hasSkillChanges(skill.id) && (
+                          <span className="text-xs text-warning animate-pulse">
+                            You have unsaved changes
+                          </span>
+                        )}
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setDraftConfig((prev) => ({ ...prev, [skill.id]: originalConfig[skill.id] || {} }));
+                            setDraftEnabled((prev) => ({ ...prev, [skill.id]: originalEnabled[skill.id] }));
+                          }}
+                          disabled={!hasSkillChanges(skill.id) || savingSkillId === skill.id || skill.readonly}
+                        >
+                          Reset
+                        </Button>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          isLoading={savingSkillId === skill.id}
+                          onClick={() => saveSkill(skill.id)}
+                          disabled={!hasSkillChanges(skill.id) || savingSkillId === skill.id || skill.readonly}
+                        >
+                          <Save className="h-3.5 w-3.5" />
+                          Save Skill
+                        </Button>
+                      </div>
+                    )}
                   </div>
                 </Card>
               );
