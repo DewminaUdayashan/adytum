@@ -172,6 +172,48 @@ program
     }
   });
 
+// ─── adytum reset ─────────────────────────────────────────────
+program
+  .command('reset')
+  .description('Reset all configurations and data (Danger!)')
+  .action(async () => {
+    const projectRoot = process.cwd();
+    
+    const sure = await confirm({
+       message: chalk.red('Are you absolutely sure you want to reset Adytum? This will delete all configuration and memory.'),
+       default: false
+    });
+
+    if (!sure) {
+        console.log(chalk.dim('  Reset cancelled.'));
+        return;
+    }
+
+    console.log(chalk.yellow('\n⚠  Resetting Adytum...'));
+
+    try {
+        const pathsToCleanup = [
+            join(projectRoot, 'adytum.config.yaml'),
+            join(projectRoot, '.env'),
+            join(projectRoot, 'data'),
+            join(projectRoot, 'models.json'),
+            join(projectRoot, 'litellm_config.yaml')
+        ];
+
+        for (const p of pathsToCleanup) {
+            if (existsSync(p)) {
+                rmSync(p, { recursive: true, force: true });
+                console.log(chalk.dim(`   ✓ Removed ${p.split('/').pop()}`));
+            }
+        }
+
+        console.log(chalk.green('\n✓  Adytum has been reset to its initial state.'));
+        console.log(chalk.dim('   Run `adytum init` to start fresh.\n'));
+    } catch (err: any) {
+        console.error(chalk.red(`\n  ❌ Reset failed: ${err.message}`));
+    }
+  });
+
 // ─── adytum skill install ─────────────────────────────────────
 program
   .command('skill')
