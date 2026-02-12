@@ -6,6 +6,8 @@ import { loadConfig } from './config.js';
 import { GatewayServer } from './server.js';
 import { AgentRuntime } from './agent/runtime.js';
 import { ModelRouter } from './agent/model-router.js';
+import { ModelCatalog } from './agent/model-catalog.js';
+
 import { SoulEngine } from './agent/soul-engine.js';
 import { SkillLoader } from './agent/skill-loader.js';
 import { ToolRegistry } from './tools/registry.js';
@@ -85,11 +87,15 @@ export async function startGateway(projectRoot: string): Promise<void> {
     toolRegistry.register(pTool);
   }
 
-  // ── Agent Runtime ─────────────────────────────────────────
+  // ─── Agent Runtime ─────────────────────────────────────────
+  const modelCatalog = new ModelCatalog(config);
+
   const modelRouter = new ModelRouter({
     litellmBaseUrl: `http://localhost:${config.litellmPort}/v1`,
     models: config.models,
+    modelCatalog,
   });
+
 
   // Detect LiteLLM vs direct API mode
   const llmStatus = await modelRouter.initialize();
@@ -219,7 +225,9 @@ export async function startGateway(projectRoot: string): Promise<void> {
       else if (type === 'monologue') scheduleMonologue(intervalMinutes);
     },
     onSkillsReload: reloadSkills,
+    modelCatalog,
   });
+
 
   // Route WebSocket messages to agent
   server.on('frame', async ({ sessionId, frame }) => {

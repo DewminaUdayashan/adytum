@@ -17,6 +17,7 @@ import type { CronManager } from './agent/cron-manager.js';
 import type { SkillLoader } from './agent/skill-loader.js';
 import type { ToolRegistry } from './tools/registry.js';
 import type { MemoryDB } from './agent/memory-db.js';
+import type { ModelCatalog } from './agent/model-catalog.js';
 
 export interface ServerConfig {
   port: number;
@@ -28,6 +29,7 @@ export interface ServerConfig {
   skillLoader?: SkillLoader;
   toolRegistry?: ToolRegistry;
   memoryDb?: MemoryDB;
+  modelCatalog?: ModelCatalog;
   secrets?: Record<string, Record<string, string>>;
   secretsStore?: SecretsStore;
   /** Callback to reschedule dreamer/monologue intervals */
@@ -51,12 +53,14 @@ export class GatewayServer extends EventEmitter {
   private config: ServerConfig;
   private secretsStore?: SecretsStore;
   private memoryDb?: MemoryDB;
+  private modelCatalog?: ModelCatalog;
 
   constructor(config: ServerConfig) {
     super();
     this.config = config;
     this.secretsStore = config.secretsStore;
     this.memoryDb = config.memoryDb;
+    this.modelCatalog = config.modelCatalog;
   }
 
   async start(): Promise<void> {
@@ -66,8 +70,48 @@ export class GatewayServer extends EventEmitter {
       methods: ['GET', 'POST', 'PUT', 'DELETE'],
     });
 
+    this.app.get('/api/models', async (request, reply) => {
+      if (!this.modelCatalog) return reply.status(503).send({ error: 'Model Catalog unavailable' });
+      return { models: this.modelCatalog.getAll() };
+    });
+
+    this.app.post('/api/models', async (request, reply) => {
+      if (!this.modelCatalog) return reply.status(503).send({ error: 'Model Catalog unavailable' });
+      const body = request.body as any;
+      if (!body.id || !body.provider || !body.model) {
+        return reply.status(400).send({ error: 'id, provider, and model required' });
+      }
+      this.modelCatalog.add({
+        id: body.id,
+        name: body.name || body.id,
+        provider: body.provider,
+        model: body.model,
+        source: 'user',
+        baseUrl: body.baseUrl,
+        apiKey: body.apiKey,
+      });
+      return { success: true };
+    });
+
+    this.app.delete('/api/models/:id', async (request, reply) => {
+      if (!this.modelCatalog) return reply.status(503).send({ error: 'Model Catalog unavailable' });
+      const { id } = request.params as { id: string };
+      // Handle encoded IDs if necessary, though typical usage might verify.
+      // E.g. "ollama/llama3" -> "ollama%2Fllama3"
+      const decodedId = decodeURIComponent(id);
+      this.modelCatalog.remove(decodedId);
+      return { success: true };
+    });
+
+    this.app.post('/api/models/scan', async (request, reply) => {
+      if (!this.modelCatalog) return reply.status(503).send({ error: 'Model Catalog unavailable' });
+      const discovered = await this.modelCatalog.scanLocalModels();
+      return { discovered };
+    });
+
     // ─── REST Routes ────────────────────────────────────────
     this.app.get('/api/health', async () => ({
+
       status: 'alive',
       version: '0.1.0',
       connections: this.connections.size,
