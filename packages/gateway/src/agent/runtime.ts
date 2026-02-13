@@ -410,6 +410,12 @@ Do NOT use absolute paths unless explicitly asked.
 ### File System
 - **read_file**, **write_file**, **list_dir**, etc.: Use these to manage project files.
 
+## Skill Authoring Standards
+- Skills live in \`workspace/skills/<skill-id>/\` and must include: \`adytum.plugin.json\`, \`index.ts\`, and (recommended) \`SKILL.md\`. Use TypeScript, not Python, for new skills.
+- Follow existing examples in \`workspace/skills/*\` (e.g., hello-world, notion) and the reference set in \`reference-project/openclaw/skills\` for structure and naming.
+- Default to registering tools via \`register(api)\`; include minimal configSchema in the manifest. Keep SKILL.md concise with YAML frontmatter (name + description) and short guidance; put heavy docs under \`references/\` if needed.
+- When asked to create a skill, place files under \`workspace/skills/<id>/\` unless the user specifies otherwise, and wire any required API keys via \`metadata.requires.env\` or configSchema, not .env.
+
 ${skills}
 
 ## Behavior
