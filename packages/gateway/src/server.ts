@@ -95,21 +95,24 @@ export class GatewayServer extends EventEmitter {
         apiKey: body.apiKey,
       });
 
-      // Also persist to adytum.config.yaml
+      // Also persist to adytum.config.yaml (add or update)
       try {
         const cfg = loadConfig();
         const existingModels = Array.isArray(cfg.models) ? [...cfg.models] : [];
-        // Avoid duplicates
-        if (!existingModels.some((m: any) => `${m.provider}/${m.model}` === body.id)) {
-          existingModels.push({
-            role: 'fast' as const, // Default role, user can change via chains
-            provider: body.provider,
-            model: body.model,
-            baseUrl: body.baseUrl,
-            apiKey: body.apiKey,
-          });
-          saveConfig({ models: existingModels } as any);
+        const idx = existingModels.findIndex((m: any) => `${m.provider}/${m.model}` === body.id);
+        const patch = {
+          role: (existingModels[idx]?.role as any) || ('fast' as const), // preserve role if present
+          provider: body.provider,
+          model: body.model,
+          baseUrl: body.baseUrl,
+          apiKey: body.apiKey,
+        };
+        if (idx >= 0) {
+          existingModels[idx] = { ...existingModels[idx], ...patch };
+        } else {
+          existingModels.push(patch);
         }
+        saveConfig({ models: existingModels } as any);
       } catch (e) {
         console.error('Failed to persist model to config', e);
       }
@@ -129,7 +132,7 @@ export class GatewayServer extends EventEmitter {
       });
       if (!updated) return reply.status(404).send({ error: 'Model not found' });
 
-      // Also persist to adytum.config.yaml
+      // Also persist to adytum.config.yaml (merge)
       try {
         const cfg = loadConfig();
         const existingModels = Array.isArray(cfg.models) ? [...cfg.models] : [];
@@ -137,8 +140,18 @@ export class GatewayServer extends EventEmitter {
         if (idx >= 0) {
           if (body.baseUrl !== undefined) existingModels[idx] = { ...existingModels[idx], baseUrl: body.baseUrl };
           if (body.apiKey !== undefined) existingModels[idx] = { ...existingModels[idx], apiKey: body.apiKey };
-          saveConfig({ models: existingModels } as any);
+        } else {
+          // If not present (e.g., built-in), add a config record to persist creds
+          const [provider, ...rest] = decodedId.split('/');
+          existingModels.push({
+            role: 'fast' as const,
+            provider: provider || decodedId,
+            model: rest.join('/') || decodedId,
+            baseUrl: body.baseUrl,
+            apiKey: body.apiKey,
+          });
         }
+        saveConfig({ models: existingModels } as any);
       } catch (e) {
         console.error('Failed to persist model update to config', e);
       }
