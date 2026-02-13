@@ -166,6 +166,10 @@ export class ModelRouter {
           this.modelMap.set(id, model);
         }
       }
+
+      if (model) {
+        model = this.mergeCatalogDetails(id, model);
+      }
       return model;
     }).filter(Boolean) as ModelConfig[];
   }
@@ -177,7 +181,7 @@ export class ModelRouter {
 
     // 1) Config models
     const configModel = this.modelMap.get(id);
-    if (configModel) return configModel;
+    if (configModel) return this.mergeCatalogDetails(id, configModel);
 
     // 2) Catalog models
     const catalogEntry = this.modelCatalog.get(id);
@@ -189,11 +193,22 @@ export class ModelRouter {
         baseUrl: catalogEntry.baseUrl,
         apiKey: catalogEntry.apiKey,
       } as ModelConfig;
-      this.modelMap.set(id, model);
-      return model;
+      const merged = this.mergeCatalogDetails(id, model);
+      this.modelMap.set(id, merged);
+      return merged;
     }
 
     return null;
+  }
+
+  /** Merge missing apiKey/baseUrl from catalog into a ModelConfig */
+  private mergeCatalogDetails(id: string, model: ModelConfig): ModelConfig {
+    const entry = this.modelCatalog.get(id);
+    if (!entry) return model;
+    const updated: ModelConfig = { ...model };
+    if (!updated.apiKey && entry.apiKey) updated.apiKey = entry.apiKey;
+    if (!updated.baseUrl && entry.baseUrl) updated.baseUrl = entry.baseUrl;
+    return updated;
   }
 
   private isRateLimited(modelId: string): boolean {
