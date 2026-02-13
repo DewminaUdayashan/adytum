@@ -69,7 +69,7 @@ export class AgentRuntime extends EventEmitter {
   }
 
   /** Run a full agent turn (user message → response). */
-  async run(userMessage: string, sessionId: string): Promise<AgentTurnResult> {
+  async run(userMessage: string, sessionId: string, overrides?: { modelRole?: string; modelId?: string }): Promise<AgentTurnResult> {
     const traceId = uuid();
     const trace: Trace = {
       id: traceId,
@@ -110,11 +110,13 @@ export class AgentRuntime extends EventEmitter {
           await this.compactContext(traceId, sessionId);
         }
 
+        const roleToUse = overrides?.modelRole || this.config.defaultModelRole;
+
         // Call the model
-        auditLogger.logModelCall(traceId, this.config.defaultModelRole, this.context.getMessageCount());
+        auditLogger.logModelCall(traceId, roleToUse, this.context.getMessageCount());
         if (this.config.memoryDb) {
           this.config.memoryDb.addActionLog(traceId, 'model_call', {
-            role: this.config.defaultModelRole,
+            role: roleToUse,
             messageCount: this.context.getMessageCount(),
           }, 'success');
         }
@@ -136,7 +138,7 @@ export class AgentRuntime extends EventEmitter {
           : baseMessages;
 
         const { message, usage } = await this.config.modelRouter.chat(
-          this.config.defaultModelRole,
+          overrides?.modelId || roleToUse,
           modelMessages,
           {
             tools: this.config.toolRegistry.toOpenAITools(),

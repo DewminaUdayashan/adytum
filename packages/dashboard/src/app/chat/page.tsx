@@ -10,6 +10,7 @@ import {
   ThinkingIndicator,
   type ThinkingActivityEntry,
 } from '@/components/chat/thinking-indicator';
+import { ChatModelSelector } from '@/components/chat/model-selector';
 
 interface ChatMessage {
   id: string;
@@ -41,6 +42,9 @@ export default function ChatPage() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const processedApprovalsRef = useRef<Set<string>>(new Set());
+
+  const [selectedRole, setSelectedRole] = useState('thinking');
+  const [selectedModelId, setSelectedModelId] = useState('');
 
   // Restore chat history from localStorage
   useEffect(() => {
@@ -295,7 +299,10 @@ export default function ChatPage() {
     };
 
     setMessages((prev) => [...prev, msg]);
-    sendMessage(text, sessionId);
+    sendMessage(text, sessionId, {
+      modelRole: selectedRole,
+      modelId: selectedModelId || undefined,
+    });
     setInput('');
     pendingToolsRef.current = [];
     setPendingTools([]);
@@ -368,6 +375,14 @@ export default function ChatPage() {
 
       {/* Input */}
       <div className="border-t border-border-primary px-8 py-5">
+        <div className="mb-3">
+          <ChatModelSelector
+            selectedRole={selectedRole}
+            selectedModelId={selectedModelId}
+            onRoleChange={setSelectedRole}
+            onModelChange={setSelectedModelId}
+          />
+        </div>
         <div className="flex items-center gap-3">
           <div className="flex-1 flex items-center rounded-xl bg-bg-secondary border border-border-primary px-4 py-2.5 focus-within:border-accent-primary/50 transition-colors duration-150">
             <input

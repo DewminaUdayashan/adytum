@@ -7,6 +7,8 @@ import type { ModelCatalog } from './model-catalog.js';
 interface ModelRouterConfig {
   litellmBaseUrl: string;
   models: AdytumConfig['models'];
+  modelChains: AdytumConfig['modelChains'];
+  taskOverrides: AdytumConfig['taskOverrides'];
   modelCatalog: ModelCatalog;
 }
 
@@ -14,22 +16,30 @@ interface ModelRouterConfig {
  * Routes LLM requests to the correct model.
  *
  * Strategy:
- *   1. If LiteLLM proxy is reachable → route everything through it (OpenAI SDK).
- *   2. Otherwise → call providers directly via LLMClient.
- *
- * Supports thinking/fast/local roles with automatic fallback.
+ *   1. Resolve the "chain" of models to try (based on role or task override).
+ *   2. Iterate through the chain:
+ *      a. If LiteLLM proxy is reachable → route through it.
+ *      b. Otherwise → call providers directly.
+ *   3. If all models in the chain fail, throw an error.
  */
 export class ModelRouter {
   private openaiClient: OpenAI;
   private llmClient: LLMClient;
+  private modelCatalog: ModelCatalog;
   private roleMap: Map<string, ModelConfig>;
-  private fallbackChain: ModelRole[] = ['thinking', 'fast', 'local'];
+  // Map modelId -> ModelConfig for quick lookup
+  private modelMap: Map<string, ModelConfig>;
+  private modelChains: Partial<Record<ModelRole, string[]>>;
+  private taskOverrides: Record<string, string>;
   private litellmBaseUrl: string;
   private useProxy: boolean = false;
   private initialized: boolean = false;
 
   constructor(config: ModelRouterConfig) {
     this.litellmBaseUrl = config.litellmBaseUrl;
+    this.modelChains = config.modelChains || { thinking: [], fast: [], local: [] };
+    this.taskOverrides = config.taskOverrides || {};
+    this.modelCatalog = config.modelCatalog;
 
     this.openaiClient = new OpenAI({
       apiKey: 'not-needed',
@@ -39,11 +49,24 @@ export class ModelRouter {
     this.llmClient = new LLMClient(config.modelCatalog);
 
     this.roleMap = new Map();
+    this.modelMap = new Map();
     for (const model of config.models) {
       this.roleMap.set(model.role, model);
+      // Create a unique ID for the model (e.g. "anthropic/claude-3-5-sonnet")
+      // If the ID isn't explicitly in the config, we construct it or use provider/model
+      const id = `${model.provider}/${model.model}`;
+      this.modelMap.set(id, model);
+      // Also map by just the model name for convenience if unique
+      this.modelMap.set(model.model, model);
     }
   }
 
+  /**
+   * Update model chains at runtime (called when dashboard saves chains).
+   */
+  updateChains(chains: Partial<Record<ModelRole, string[]>>): void {
+    this.modelChains = chains;
+  }
 
   /**
    * Initialize: detect whether LiteLLM proxy is available.
@@ -62,8 +85,6 @@ export class ModelRouter {
     const missing: string[] = [];
 
     for (const [role, mc] of this.roleMap) {
-      // Simplification: Assume available if configured. 
-      // Detailed check requires calling pi-ai or checking env vars which is done at runtime now.
       available.push(`${role}→${mc.provider}/${mc.model}`);
     }
 
@@ -79,11 +100,66 @@ export class ModelRouter {
   }
 
   /**
+   * Resolve the list of models (the chain) to use for a given request.
+   */
+  private resolveChain(roleOrTask: string): ModelConfig[] {
+    let chainIds: string[] = [];
+
+    // 1. Check for task override
+    if (this.taskOverrides[roleOrTask]) {
+      const override = this.taskOverrides[roleOrTask];
+      // The override could be a single model ID or a chain ID?
+      // For now assume it points to a model ID or a role name that has a chain.
+      const lookup = this.modelChains[override as ModelRole];
+      if (lookup && lookup.length > 0) {
+         chainIds = lookup;
+      } else {
+         chainIds = [override];
+      }
+    } 
+    // 2. Check if it's a known role with a configured chain
+    else {
+      const lookup = this.modelChains[roleOrTask as ModelRole];
+      if (lookup && lookup.length > 0) {
+        chainIds = lookup;
+      }
+      // 3. Fallback to the single model configured for this role (Legacy/Default)
+      else if (this.roleMap.has(roleOrTask)) {
+         const m = this.roleMap.get(roleOrTask);
+         if (m) return [m];
+      }
+    }
+
+    // Resolve IDs to ModelConfig objects
+    return chainIds.map(id => {
+      // 1. Try fast map (config models)
+      let model = this.modelMap.get(id);
+      
+      // 2. If not in map, try catalog (e.g. models only in catalog but referenced in chain)
+      if (!model) {
+        const entry = this.modelCatalog.get(id);
+        if (entry) {
+          model = {
+            provider: entry.provider,
+            model: entry.model,
+            role: 'fast', // Default role for ad-hoc resolution
+            baseUrl: entry.baseUrl,
+            apiKey: entry.apiKey,
+          } as ModelConfig;
+          // Cache it
+          this.modelMap.set(id, model);
+        }
+      }
+      return model;
+    }).filter(Boolean) as ModelConfig[];
+  }
+
+  /**
    * Send a chat completion request to the specified model role.
    * Falls back to other roles on failure.
    */
   async chat(
-    role: ModelRole,
+    roleOrTask: string,
     messages: OpenAI.ChatCompletionMessageParam[],
     options: {
       tools?: OpenAI.ChatCompletionTool[];
@@ -100,40 +176,48 @@ export class ModelRouter {
     }
 
     const errors: Error[] = [];
+    
+    // Resolve the chain of models to try
+    let chain = this.resolveChain(roleOrTask);
+    
+    // If no chain found (e.g. invalid role), try to find ANY model as a last ditch fallback
+    if (chain.length === 0) {
+        // Fallback: Try 'thinking' -> 'fast' -> 'local' legacy roles
+        const legacyRoles: ModelRole[] = ['thinking', 'fast', 'local'];
+        for (const r of legacyRoles) {
+            const m = this.roleMap.get(r);
+            if (m) chain.push(m);
+        }
+    }
 
-    // Try the requested role first, then fall back
-    const rolesToTry = [role, ...this.fallbackChain.filter((r) => r !== role)];
+    if (chain.length === 0) {
+        throw new Error(`No models configured for role/task "${roleOrTask}" and no fallbacks available.`);
+    }
 
-    for (const tryRole of rolesToTry) {
-      const modelConfig = this.roleMap.get(tryRole);
-      if (!modelConfig) continue;
-
+    for (const modelConfig of chain) {
       try {
+        console.log(`[ModelRouter] Trying ${modelConfig.model} for role ${roleOrTask}...`);
         if (this.useProxy) {
-          return await this.chatViaProxy(modelConfig, tryRole, messages, options);
+          return await this.chatViaProxy(modelConfig, roleOrTask as ModelRole, messages, options);
         } else {
-          return await this.chatDirect(modelConfig, tryRole, messages, options);
+          return await this.chatDirect(modelConfig, roleOrTask as ModelRole, messages, options);
         }
       } catch (error: any) {
-        errors.push(error);
-        // Continue to next fallback
+        console.warn(`[ModelRouter] Model ${modelConfig.model} failed: ${error.message}`);
+        errors.push(new Error(`[${modelConfig.model}] ${error.message}`));
+        // Continue to next model in chain
       }
     }
 
     // Build a helpful error message
     const errorDetails = errors.map((e) => `  • ${e.message}`).join('\n');
-    const configuredModels = Array.from(this.roleMap.entries())
-      .map(([r, mc]) => `${r}→${mc.provider}/${mc.model}`)
-      .join(', ');
+    const triedModels = chain.map(m => `${m.provider}/${m.model}`).join(', ');
 
     throw new Error(
-      `All models failed.\n` +
-      `Configured: ${configuredModels || 'none'}\n` +
+      `All models in chain failed for "${roleOrTask}".\n` +
+      `Tried: ${triedModels}\n` +
       `Errors:\n${errorDetails}\n\n` +
-      `Troubleshooting:\n` +
-      `  1. Check your API key is set in .env (e.g. ANTHROPIC_API_KEY=sk-ant-...)\n` +
-      `  2. Or start the LiteLLM proxy: docker compose up -d litellm\n` +
-      `  3. Or run a local model: ollama run llama3.2`,
+      `Check your configuration, API keys, or LiteLLM proxy status.`
     );
   }
 
@@ -227,39 +311,73 @@ export class ModelRouter {
     toolCalls?: OpenAI.ChatCompletionChunk.Choice.Delta.ToolCall[];
     done: boolean;
   }> {
-    const modelConfig = this.roleMap.get(role);
-    if (!modelConfig) throw new Error(`No model configured for role: ${role}`);
-
-    if (!this.useProxy) {
-      // Fallback: do a non-streaming call and yield the full result
-      const result = await this.chatDirect(modelConfig, role, messages, options);
-      yield {
-        delta: result.message.content || '',
-        toolCalls: result.message.tool_calls as any,
-        done: true,
-      };
-      return;
+    // Resolve the chain of models to try (reuse logic from chat())
+    let chain = this.resolveChain(role);
+    
+    // If no chain found, fallback
+    if (chain.length === 0) {
+        const legacyRoles: ModelRole[] = ['thinking', 'fast', 'local'];
+        for (const r of legacyRoles) {
+            const m = this.roleMap.get(r);
+            if (m) chain.push(m);
+        }
     }
 
-    const stream = await this.openaiClient.chat.completions.create({
-      model: modelConfig.model,
-      messages,
-      tools: options.tools,
-      temperature: options.temperature ?? 0.7,
-      max_tokens: options.maxTokens,
-      stream: true,
-    });
-
-    for await (const chunk of stream) {
-      const delta = chunk.choices[0]?.delta;
-      if (!delta) continue;
-
-      yield {
-        delta: delta.content || '',
-        toolCalls: delta.tool_calls,
-        done: chunk.choices[0]?.finish_reason !== null && chunk.choices[0]?.finish_reason !== undefined,
-      };
+    if (chain.length === 0) {
+        throw new Error(`No models configured for role "${role}" and no fallbacks available.`);
     }
+
+    const errors: Error[] = [];
+
+    for (const modelConfig of chain) {
+      try {
+        console.log(`[ModelRouter] Streaming with ${modelConfig.model} for role ${role}...`);
+        
+        if (!this.useProxy) {
+          // Fallback: do a non-streaming call and yield the full result
+          const result = await this.chatDirect(modelConfig, role, messages, options);
+          yield {
+            delta: result.message.content || '',
+            toolCalls: result.message.tool_calls as any,
+            done: true,
+          };
+          return;
+        }
+
+        const stream = await this.openaiClient.chat.completions.create({
+          model: modelConfig.model,
+          messages,
+          tools: options.tools,
+          temperature: options.temperature ?? 0.7,
+          max_tokens: options.maxTokens,
+          stream: true,
+        });
+
+        for await (const chunk of stream) {
+          const delta = chunk.choices[0]?.delta;
+          if (!delta) continue;
+
+          yield {
+            delta: delta.content || '',
+            toolCalls: delta.tool_calls,
+            done: chunk.choices[0]?.finish_reason !== null && chunk.choices[0]?.finish_reason !== undefined,
+          };
+        }
+        return; // Success, exit chain loop
+
+      } catch (error: any) {
+          console.warn(`[ModelRouter] Stream model ${modelConfig.model} failed: ${error.message}`);
+          errors.push(new Error(`[${modelConfig.model}] ${error.message}`));
+          // Continue to next model
+      }
+    }
+
+    // If we get here, all models failed
+    const errorDetails = errors.map((e) => `  • ${e.message}`).join('\n');
+    throw new Error(
+      `All models in chain failed for streaming "${role}".\n` +
+      `Errors:\n${errorDetails}`
+    );
   }
 
   getModelForRole(role: ModelRole): string | undefined {

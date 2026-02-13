@@ -93,6 +93,8 @@ export async function startGateway(projectRoot: string): Promise<void> {
   const modelRouter = new ModelRouter({
     litellmBaseUrl: `http://localhost:${config.litellmPort}/v1`,
     models: config.models,
+    modelChains: config.modelChains,
+    taskOverrides: config.taskOverrides,
     modelCatalog,
   });
 
@@ -162,7 +164,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
   await migrateSkillEnvs();
 
   // ── Dreamer & Inner Monologue (Phase 3/4) ─────────────────
-  const dreamer = new Dreamer(modelRouter, memoryDb, memoryStore, config.dataPath, config.workspacePath);
+  const dreamer = new Dreamer(modelRouter, memoryDb, memoryStore, soulEngine, config.dataPath, config.workspacePath);
   const monologue = new InnerMonologue(modelRouter, memoryDb, memoryStore);
   const heartbeatManager = new HeartbeatManager(agent, config.workspacePath);
 
@@ -225,6 +227,9 @@ export async function startGateway(projectRoot: string): Promise<void> {
       else if (type === 'monologue') scheduleMonologue(intervalMinutes);
     },
     onSkillsReload: reloadSkills,
+    onChainsUpdate: (chains) => {
+      modelRouter.updateChains(chains);
+    },
     modelCatalog,
   });
 
@@ -232,7 +237,10 @@ export async function startGateway(projectRoot: string): Promise<void> {
   // Route WebSocket messages to agent
   server.on('frame', async ({ sessionId, frame }) => {
     if (frame.type === 'message') {
-      const result = await agent.run(frame.content, sessionId);
+      const result = await agent.run(frame.content, sessionId, {
+        modelRole: frame.modelRole,
+        modelId: frame.modelId,
+      });
       server.sendToSession(sessionId, {
         type: 'message',
         sessionId,

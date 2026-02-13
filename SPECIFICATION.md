@@ -176,11 +176,47 @@ The user should **never** have to install PostgreSQL manually. `adytum start` ha
 
 **Goal**: Communication channels as installable plugins.
 
----
+## Phase 5 — Version 0.2.0 (Evolution & Control)
 
-## Phase 6 — Hardening & Production
+**Goal**: Empower the user with granular control over model usage and enable true agent evolution.
 
-**Goal**: Security hardening, Docker deployment, and production readiness.
+### 5.1 Soul Evolution
+- **Mechanism**: The `Dreamer` process now analyzes daily summaries against the current `SOUL.md`.
+- **Auto-Update**: If the agent's behavior/personality has shifted, `Dreamer` proposes a patch to `SOUL.md`.
+- **Control**: 
+    - Configuration option: `soul.autoUpdate` (boolean). 
+    - If `false`, updates are queued as "Pending Reviews" in the dashboard.
+    - If `true`, updates are applied automatically with a log entry.
+
+### 5.2 Advanced Model Routing
+- **Concept**: Dissociate "roles" from single models. Introduce **Fallback Chains**.
+- **Config Structure**:
+    ```yaml
+    model_chains:
+      thinking: ["anthropic/claude-3-5-sonnet", "openai/gpt-4o"]
+      fast: ["openai/gpt-4o-mini", "google/gemini-2.0-flash"]
+      local: ["ollama/llama3"]
+    ```
+- **Task Mapping**: allow specific system tasks to override the default chain.
+    - `heartbeat`: uses `thinking` chain by default.
+    - `dreamer`: uses `fast` chain by default.
+    - `monologue`: uses `fast` chain by default.
+- **UI**: 
+    - Draggable list to reorder models in a chain.
+    - "Test Chain" button to verify fallback logic.
+
+### 5.3 Dashboard Overhaul
+- **Model Settings (`/settings/llm`)**:
+    - **Provider-First View**: Group models by provider (OpenAI, Anthropic, Ollama, etc.).
+    - **Chain Editor**: Visual interface to define `thinking`, `fast`, and `local` chains.
+- **Agent Settings (`/settings/agent`)**:
+    - **Task Configuration**: Dedicated card for Heartbeat, Dreamer, Monologue.
+    - **Model Selector**: Dropdown to choose which chain (or specific model) each task uses.
+    - **Soul Control**: Toggle for "Auto-approve Soul Updates".
+
+### 5.4 Heartbeat Refinement
+- **Silence**: Heartbeat "OK" checks are logged to `stdout` only, keeping the chat clean.
+- **Active Goals**: The agent is explicitly prompted to **read and update** `HEARTBEAT.md`, turning it into a live task list.
 
 ---
 
@@ -260,3 +296,4 @@ erDiagram
 | CLI | Ink (React for CLI) | Rich terminal interface |
 | Scheduler | node-cron | Heartbeat and autonomy loops |
 | Testing | Vitest | Unit and integration tests |
+

@@ -33,17 +33,21 @@ export function Card({
   children,
   className,
   hover = false,
+  onClick,
 }: {
   children: React.ReactNode;
   className?: string;
   hover?: boolean;
+  onClick?: (e: React.MouseEvent) => void;
 }) {
   return (
     <div
+      onClick={onClick}
       className={clsx(
-        'relative overflow-hidden rounded-xl border border-border-primary bg-bg-secondary p-5 shadow-sm',
+        'relative rounded-xl border border-border-primary bg-bg-secondary p-5 shadow-sm',
         hover &&
           'group cursor-pointer transition-all duration-300 hover:border-accent-primary/40 hover:shadow-md hover:shadow-accent-primary/5',
+        onClick && 'cursor-pointer',
         className,
       )}
     >
@@ -186,3 +190,5 @@ export function Button({
     </button>
   );
 }
+/* ─────────────────────────── Select ─────────────────────────── */
+export { Select } from './ui/select';

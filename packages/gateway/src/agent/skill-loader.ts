@@ -283,6 +283,9 @@ export class SkillLoader {
         heartbeatIntervalMinutes: 30,
         dreamerIntervalMinutes: 30,
         monologueIntervalMinutes: 15,
+        modelChains: { thinking: [], fast: [], local: [] },
+        taskOverrides: {},
+        soul: { autoUpdate: true },
       } as AdytumConfig);
 
     this.discover();
