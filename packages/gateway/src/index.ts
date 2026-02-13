@@ -34,8 +34,6 @@ import cron from 'node-cron';
 // ─── Direct Execution Detection ─────────────────────────────
 // If this file is run directly (e.g. `node dist/index.js start`),
 // delegate to the CLI entry point which uses Commander.
-import { resolve } from 'node:path';
-
 const __filename = fileURLToPath(import.meta.url);
 const entryFile = process.argv[1] ? resolve(process.argv[1]) : '';
 
