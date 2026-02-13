@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { usePolling } from '@/hooks/use-polling';
 import { gatewayFetch } from '@/lib/api';
-import { Card, Badge, Spinner, EmptyState, Button } from '@/components/ui';
+import { Card, Badge, Spinner, EmptyState, Button, Select } from '@/components/ui';
 import { Shield, Plus, Trash2, Clock, Lock, Unlock } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 
@@ -164,27 +164,29 @@ export default function PermissionsPage() {
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Install permissions</p>
-              <select
+              <Select
                 value={installPerm}
-                onChange={(e) => setInstallPerm(e.target.value as 'auto' | 'ask' | 'deny')}
-                className="w-full rounded-lg bg-bg-tertiary border border-border-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-primary/50"
-              >
-                <option value="auto">Auto</option>
-                <option value="ask">Ask</option>
-                <option value="deny">Deny</option>
-              </select>
+                onChange={(val) => setInstallPerm(val as 'auto' | 'ask' | 'deny')}
+                options={[
+                  { value: 'auto', label: 'Auto' },
+                  { value: 'ask', label: 'Ask' },
+                  { value: 'deny', label: 'Deny' },
+                ]}
+                className="w-full"
+              />
             </div>
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Terminal commands</p>
-              <select
+              <Select
                 value={execPerms.shell}
-                onChange={(e) => setExecPerms((prev) => ({ ...prev, shell: e.target.value as 'auto' | 'ask' | 'deny' }))}
-                className="w-full rounded-lg bg-bg-tertiary border border-border-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-primary/50"
-              >
-                <option value="auto">Auto</option>
-                <option value="ask">Ask</option>
-                <option value="deny">Deny</option>
-              </select>
+                onChange={(val) => setExecPerms((prev) => ({ ...prev, shell: val as 'auto' | 'ask' | 'deny' }))}
+                options={[
+                  { value: 'auto', label: 'Auto' },
+                  { value: 'ask', label: 'Ask' },
+                  { value: 'deny', label: 'Deny' },
+                ]}
+                className="w-full"
+              />
             </div>
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Default approval channel</p>
@@ -217,18 +219,18 @@ export default function PermissionsPage() {
             </div>
             <div className="space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Communication skill</p>
-              <select
+              <Select
                 value={execPerms.defaultCommSkillId || ''}
-                onChange={(e) => setExecPerms((prev) => ({ ...prev, defaultCommSkillId: e.target.value || undefined }))}
-                className="w-full rounded-lg bg-bg-tertiary border border-border-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-primary/50"
-              >
-                <option value="">None</option>
-                {commSkills.map((skill) => (
-                  <option key={skill.id} value={skill.id}>
-                    {skill.name}
-                  </option>
-                ))}
-              </select>
+                onChange={(val) => setExecPerms((prev) => ({ ...prev, defaultCommSkillId: val || undefined }))}
+                options={[
+                  { value: '', label: 'None' },
+                  ...commSkills.map((skill) => ({
+                    value: skill.id,
+                    label: skill.name,
+                  })),
+                ]}
+                className="w-full"
+              />
             </div>
           </div>
           <div className="flex gap-2 mt-4">
@@ -274,15 +276,16 @@ export default function PermissionsPage() {
               </div>
               <div>
                 <label className="block text-[11px] text-text-muted mb-1.5 font-medium uppercase tracking-wider">Mode</label>
-                <select
+                <Select
                   value={grantMode}
-                  onChange={(e) => setGrantMode(e.target.value)}
-                  className="w-full rounded-lg bg-bg-tertiary border border-border-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-primary/50 transition-colors"
-                >
-                  <option value="read_only">Read Only</option>
-                  <option value="full_access">Full Access</option>
-                  <option value="just_in_time">Just-in-Time</option>
-                </select>
+                  onChange={(val) => setGrantMode(val)}
+                  options={[
+                    { value: 'read_only', label: 'Read Only' },
+                    { value: 'full_access', label: 'Full Access' },
+                    { value: 'just_in_time', label: 'Just-in-Time' },
+                  ]}
+                  className="w-full"
+                />
               </div>
               <div>
                 <label className="block text-[11px] text-text-muted mb-1.5 font-medium uppercase tracking-wider">Duration (mins)</label>

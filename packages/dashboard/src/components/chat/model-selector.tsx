@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { clsx } from 'clsx';
-import { ChevronDown, Brain, Zap, Cpu } from 'lucide-react';
-import { Select } from '@/components/ui/select';
+import { Brain, Zap, Cpu } from 'lucide-react';
+import { Select } from '@/components/ui';
 import { gatewayFetch } from '@/lib/api';
 
 interface ChatModelSelectorProps {
@@ -57,13 +57,15 @@ export function ChatModelSelector({
   if (!config) return null;
 
   const currentChain = config.chains[selectedRole] || [];
+  const modelOptions = currentChain.map((modelId) => {
+    const [provider, ...rest] = modelId.split('/');
+    return {
+      value: modelId,
+      label: rest.length ? rest.join('/') : modelId,
+      description: provider || undefined,
+    };
+  });
   
-  // Format model ID for display (provider/model -> model)
-  const formatModelName = (id: string) => {
-    const parts = id.split('/');
-    return parts.length > 1 ? parts.slice(1).join('/') : id;
-  };
-
   return (
     <div className="flex items-center gap-3 py-1.5 px-1 animate-fade-in">
       {/* Role Pills */}
@@ -91,21 +93,15 @@ export function ChatModelSelector({
       </div>
 
       {/* Model Dropdown */}
-      <div className="relative">
-         <select
-            value={selectedModelId}
-            onChange={(e) => onModelChange(e.target.value)}
-            className="appearance-none bg-transparent text-xs font-medium text-text-secondary hover:text-text-primary py-1 pr-6 cursor-pointer focus:outline-none"
-         >
-            {currentChain.map((modelId) => (
-              <option key={modelId} value={modelId}>
-                {formatModelName(modelId)}
-              </option>
-            ))}
-            {currentChain.length === 0 && <option disabled>No models configured</option>}
-         </select>
-         <ChevronDown size={12} className="absolute right-0 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none" />
-      </div>
+      <Select
+        value={selectedModelId}
+        onChange={(val) => onModelChange(val)}
+        options={modelOptions}
+        placeholder="No models configured"
+        disabled={currentChain.length === 0}
+        className="min-w-[190px] text-xs"
+        placement="up"
+      />
     </div>
   );
 }

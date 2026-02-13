@@ -17,6 +17,7 @@ interface SelectProps {
   placeholder?: string;
   className?: string;
   disabled?: boolean;
+  placement?: 'down' | 'up';
 }
 
 export function Select({
@@ -26,9 +27,10 @@ export function Select({
   placeholder = 'Select...',
   className,
   disabled = false,
+  placement = 'down',
 }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [position, setPosition] = useState({ top: 0, left: 0, width: 0 });
+  const [position, setPosition] = useState({ topDown: 0, topUp: 0, left: 0, width: 0 });
   const containerRef = useRef<HTMLDivElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -74,7 +76,8 @@ export function Select({
       if (containerRef.current) {
           const rect = containerRef.current.getBoundingClientRect();
           setPosition({
-              top: rect.bottom + window.scrollY + 4,
+              topDown: rect.bottom + window.scrollY + 4,
+              topUp: rect.top + window.scrollY - 4,
               left: rect.left + window.scrollX,
               width: rect.width
           });
@@ -123,12 +126,16 @@ export function Select({
         <div 
             ref={dropdownRef}
             style={{ 
-                top: position.top, 
+                top: placement === 'down' ? position.topDown : position.topUp, 
                 left: position.left, 
                 width: position.width,
+                transform: placement === 'up' ? 'translateY(-100%)' : undefined,
                 zIndex: 9999 
             }}
-            className="fixed mt-1 max-h-60 overflow-auto rounded-lg border border-border-primary bg-bg-secondary py-1 shadow-xl animate-in fade-in zoom-in-95 duration-100"
+            className={clsx(
+              'fixed max-h-60 overflow-auto rounded-lg border border-border-primary bg-bg-secondary py-1 shadow-xl animate-in fade-in zoom-in-95 duration-100',
+              placement === 'down' ? 'mt-1' : 'mb-1'
+            )}
         >
           {options.map((option) => (
             <button
