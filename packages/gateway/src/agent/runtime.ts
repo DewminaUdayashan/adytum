@@ -285,6 +285,10 @@ export class AgentRuntime extends EventEmitter {
         else if ((lastMessage as any)?.reasoning_content) {
              finalResponse = (lastMessage as any).reasoning_content;
         }
+        // If model returned text content but we never surfaced it
+        else if (typeof (lastMessage as any)?.content === 'string' && (lastMessage as any).content.trim()) {
+             finalResponse = (lastMessage as any).content.trim();
+        }
         else {
           finalResponse = 'I did not receive a usable response from the model. Please check the terminal logs for details.';
         }

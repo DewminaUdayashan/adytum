@@ -34,6 +34,7 @@ export class ModelRouter {
   private litellmBaseUrl: string;
   private useProxy: boolean = false;
   private initialized: boolean = false;
+  private cooldowns = new Map<string, number>(); // modelId -> timestamp until which it is cooled down
 
   constructor(config: ModelRouterConfig) {
     this.litellmBaseUrl = config.litellmBaseUrl;
@@ -103,6 +104,10 @@ export class ModelRouter {
    * Resolve the list of models (the chain) to use for a given request.
    */
   private resolveChain(roleOrTask: string): ModelConfig[] {
+    // Fast path: explicit model ID override (e.g., "provider/model" or with suffix)
+    const direct = this.resolveDirectModel(roleOrTask);
+    if (direct) return [direct];
+
     let chainIds: string[] = [];
 
     // 1. Check for task override
@@ -154,6 +159,51 @@ export class ModelRouter {
     }).filter(Boolean) as ModelConfig[];
   }
 
+  /** Try to resolve a direct model ID (when user forces a specific model). */
+  private resolveDirectModel(id: string): ModelConfig | null {
+    // Only treat strings with provider/model or provider:model as explicit IDs
+    if (!id.includes('/') && !id.includes(':')) return null;
+
+    // 1) Config models
+    const configModel = this.modelMap.get(id);
+    if (configModel) return configModel;
+
+    // 2) Catalog models
+    const catalogEntry = this.modelCatalog.get(id);
+    if (catalogEntry) {
+      const model: ModelConfig = {
+        provider: catalogEntry.provider,
+        model: catalogEntry.model,
+        role: 'fast', // default role for direct lookup
+        baseUrl: catalogEntry.baseUrl,
+        apiKey: catalogEntry.apiKey,
+      } as ModelConfig;
+      this.modelMap.set(id, model);
+      return model;
+    }
+
+    return null;
+  }
+
+  private isRateLimited(modelId: string): boolean {
+    const until = this.cooldowns.get(modelId);
+    if (!until) return false;
+    if (Date.now() > until) {
+      this.cooldowns.delete(modelId);
+      return false;
+    }
+    return true;
+  }
+
+  private setRateLimited(modelId: string, ttlMs: number = 60_000) {
+    this.cooldowns.set(modelId, Date.now() + ttlMs);
+  }
+
+  private isRateLimitError(err: any): boolean {
+    const msg = String(err?.message || '').toLowerCase();
+    return msg.includes('429') || msg.includes('rate limit') || msg.includes('rate-limit');
+  }
+
   /**
    * Send a chat completion request to the specified model role.
    * Falls back to other roles on failure.
@@ -195,14 +245,24 @@ export class ModelRouter {
     }
 
     for (const modelConfig of chain) {
+      const modelId = `${modelConfig.provider}/${modelConfig.model}`;
+
+      if (this.isRateLimited(modelId)) {
+        errors.push(new Error(`[${modelConfig.model}] skipped (recently rate-limited)`));
+        continue;
+      }
+
       try {
-        console.log(`[ModelRouter] Trying ${modelConfig.model} for role ${roleOrTask}...`);
+        console.log(`[ModelRouter] Trying ${modelConfig.model} (role ${roleOrTask})...`);
         if (this.useProxy) {
           return await this.chatViaProxy(modelConfig, roleOrTask as ModelRole, messages, options);
         } else {
           return await this.chatDirect(modelConfig, roleOrTask as ModelRole, messages, options);
         }
       } catch (error: any) {
+        if (this.isRateLimitError(error)) {
+          this.setRateLimited(modelId);
+        }
         console.warn(`[ModelRouter] Model ${modelConfig.model} failed: ${error.message}`);
         errors.push(new Error(`[${modelConfig.model}] ${error.message}`));
         // Continue to next model in chain
