@@ -342,7 +342,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
       reason: 'approval_required',
       defaultChannel,
       defaultCommSkillId,
-      message: 'Shell command requires approval',
+      message: 'Command cancelled by user request. You may try again if necessary.',
     };
   });
 

@@ -36,10 +36,14 @@ export function ThinkingIndicator({
   pendingTools,
   activities,
   startedAt,
+  approvals = [],
+  onApproval,
 }: {
   pendingTools: string[];
   activities: ThinkingActivityEntry[];
   startedAt: number | null;
+  approvals?: Array<{ id: string; description: string; kind: string; status?: 'pending' | 'approved' | 'denied' }>;
+  onApproval?: (id: string, approved: boolean) => void;
 }) {
   const [now, setNow] = useState(() => Date.now());
   const recentActivities = useMemo(() => activities.slice(-8), [activities]);
@@ -64,7 +68,7 @@ export function ThinkingIndicator({
       <div className="w-full max-w-2xl rounded-xl border border-border-primary bg-bg-secondary/70 px-4 py-3">
         <div className="flex items-center gap-3">
           <Spinner size="sm" />
-          <span className="text-sm text-text-secondary">Working…</span>
+          <span className="text-sm font-medium text-text-secondary">Working…</span>
           <span className="inline-flex items-center gap-1 rounded-md bg-bg-tertiary px-2 py-0.5 text-[11px] text-text-muted">
             <Clock3 className="h-3 w-3" />
             {formatElapsed(elapsedSeconds)}
@@ -85,7 +89,51 @@ export function ThinkingIndicator({
           </div>
         )}
 
-        <div className="mt-2.5 max-h-40 overflow-auto rounded-lg border border-border-primary/80 bg-bg-primary/50 px-2 py-1.5 font-mono text-[11px]">
+        {/* Unified Approvals */}
+        {approvals.length > 0 && (
+          <div className="mt-3 space-y-2">
+            {approvals.map((req) => (
+              <div
+                key={req.id}
+                className="rounded-lg border border-border-primary bg-bg-primary/60 px-3 py-2.5 flex flex-col gap-2 shadow-sm animate-in fade-in slide-in-from-top-1 duration-200"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <p className="text-[11px] font-bold text-text-primary uppercase tracking-wider">Approval Required</p>
+                    <p className="text-xs text-text-muted mt-0.5 leading-tight">{req.description || req.kind}</p>
+                  </div>
+                  {req.status !== 'pending' && (
+                    <span className={clsx(
+                      "text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-tighter",
+                      req.status === 'approved' ? "bg-success/20 text-success" : "bg-error/20 text-error"
+                    )}>
+                      {req.status}
+                    </span>
+                  )}
+                </div>
+
+                {req.status === 'pending' && (
+                  <div className="flex gap-2 mt-1">
+                    <button
+                      className="flex-1 rounded-md bg-success/20 text-success px-2.5 py-1.5 text-xs font-semibold border border-success/40 transition-all hover:bg-success/30 hover:border-success/60 active:scale-[0.98]"
+                      onClick={() => onApproval?.(req.id, true)}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      className="flex-1 rounded-md bg-error/15 text-error px-2.5 py-1.5 text-xs font-semibold border border-error/30 transition-all hover:bg-error/25 hover:border-error/50 active:scale-[0.98]"
+                      onClick={() => onApproval?.(req.id, false)}
+                    >
+                      Deny
+                    </button>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        <div className="mt-3 max-h-40 overflow-auto rounded-lg border border-border-primary/80 bg-bg-primary/50 px-2 py-1.5 font-mono text-[11px]">
           {recentActivities.length === 0 ? (
             <p className="px-1 py-0.5 text-text-muted">Awaiting model updates…</p>
           ) : (
