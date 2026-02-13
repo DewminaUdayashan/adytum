@@ -17,6 +17,12 @@ interface ChatMessage {
   content: string;
   timestamp: number;
   toolCalls?: string[];
+  approvals?: Array<{
+    id: string;
+    description: string;
+    kind: string;
+    status?: 'pending' | 'approved' | 'denied';
+  }>;
 }
 
 export default function ChatPage() {
@@ -25,7 +31,6 @@ export default function ChatPage() {
   const [input, setInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
   const [pendingTools, setPendingTools] = useState<string[]>([]);
-  const [approvals, setApprovals] = useState<Array<{ id: string; description: string; kind: string }>>([]);
   const [activityFeed, setActivityFeed] = useState<ThinkingActivityEntry[]>([]);
   const [thinkingStartedAt, setThinkingStartedAt] = useState<number | null>(null);
   const [hasRestored, setHasRestored] = useState(false);
@@ -121,9 +126,34 @@ export default function ChatPage() {
       }
 
       if (event.type === 'approval_request') {
-        setApprovals((prev) => {
-          if (prev.some((p) => p.id === event.id)) return prev;
-          return [...prev, { id: String(event.id), description: String(event.description || ''), kind: String(event.kind || '') }];
+        const approval = {
+          id: String(event.id),
+          description: String(event.description || ''),
+          kind: String(event.kind || ''),
+          status: 'pending' as const,
+        };
+
+        setMessages((prev) => {
+          const lastMsg = prev[prev.length - 1];
+          if (lastMsg && lastMsg.role === 'assistant') {
+            const updatedMsg = {
+              ...lastMsg,
+              approvals: [...(lastMsg.approvals || []), approval]
+            };
+            return [...prev.slice(0, -1), updatedMsg];
+          } else {
+            // No assistant message to attach to, create a small stub
+            return [
+              ...prev,
+              {
+                id: crypto.randomUUID(),
+                role: 'assistant',
+                content: '',
+                timestamp: Date.now(),
+                approvals: [approval],
+              },
+            ];
+          }
         });
         continue;
       }
@@ -199,7 +229,19 @@ export default function ChatPage() {
   const handleApproval = useCallback(
     (id: string, approved: boolean) => {
       sendFrame({ type: 'approval_response', id, approved });
-      setApprovals((prev) => prev.filter((p) => p.id !== id));
+      setMessages((prev) => {
+        return prev.map((msg) => {
+          if (msg.approvals?.some((a) => a.id === id)) {
+            return {
+              ...msg,
+              approvals: msg.approvals.map((a) =>
+                a.id === id ? { ...a, status: approved ? 'approved' : 'denied' } : a
+              ),
+            };
+          }
+          return msg;
+        });
+      });
     },
     [sendFrame],
   );
@@ -251,35 +293,6 @@ export default function ChatPage() {
         </div>
       </div>
 
-      {/* Approvals */}
-      {approvals.length > 0 && (
-        <div className="px-8 pb-3 space-y-2">
-          {approvals.map((req) => (
-            <div key={req.id} className="rounded-lg border border-border-primary bg-bg-primary/50 px-4 py-3 flex items-start justify-between gap-3">
-              <div>
-                <p className="text-sm font-semibold text-text-primary">Approval required</p>
-                <p className="text-xs text-text-muted mt-1">{req.description || req.kind}</p>
-                <p className="text-[11px] text-text-tertiary font-mono">{req.id}</p>
-              </div>
-              <div className="flex gap-2">
-                <button
-                  className="rounded-md bg-success/20 text-success px-3 py-2 text-xs font-semibold border border-success/40"
-                  onClick={() => handleApproval(req.id, true)}
-                >
-                  Approve
-                </button>
-                <button
-                  className="rounded-md bg-error/15 text-error px-3 py-2 text-xs font-semibold border border-error/30"
-                  onClick={() => handleApproval(req.id, false)}
-                >
-                  Deny
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
       {/* Messages */}
       <div ref={scrollRef} className="flex-1 overflow-auto px-8 py-4 space-y-4">
         {messages.length === 0 && (
@@ -295,7 +308,7 @@ export default function ChatPage() {
         )}
 
         {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} />
+          <MessageBubble key={msg.id} message={msg} onApproval={handleApproval} />
         ))}
 
         {isThinking && (
@@ -335,7 +348,13 @@ export default function ChatPage() {
   );
 }
 
-function MessageBubble({ message }: { message: ChatMessage }) {
+function MessageBubble({
+  message,
+  onApproval,
+}: {
+  message: ChatMessage;
+  onApproval: (id: string, approved: boolean) => void;
+}) {
   const isUser = message.role === 'user';
 
   return (
@@ -359,11 +378,15 @@ function MessageBubble({ message }: { message: ChatMessage }) {
               : 'bg-bg-secondary border border-border-primary text-text-primary rounded-bl-sm',
           )}
         >
-          <MarkdownRenderer
-            content={message.content}
-            variant={isUser ? 'user' : 'assistant'}
-          />
+          {message.content && (
+            <MarkdownRenderer
+              content={message.content}
+              variant={isUser ? 'user' : 'assistant'}
+            />
+          )}
+
           {!isUser && <LinkPreviewList content={message.content} />}
+
           {!isUser && message.toolCalls && message.toolCalls.length > 0 && (
             <div className="mt-2.5 flex flex-wrap gap-1.5 pt-2.5 border-t border-border-primary/30">
               {message.toolCalls.map((tool) => (
@@ -374,6 +397,50 @@ function MessageBubble({ message }: { message: ChatMessage }) {
                   <Zap className="h-2.5 w-2.5 text-warning" />
                   {tool}
                 </span>
+              ))}
+            </div>
+          )}
+
+          {/* Inline Approvals */}
+          {!isUser && message.approvals && message.approvals.length > 0 && (
+            <div className="mt-3 space-y-2 pt-3 border-t border-border-primary/30">
+              {message.approvals.map((req) => (
+                <div
+                  key={req.id}
+                  className="rounded-lg border border-border-primary bg-bg-primary/40 px-3 py-2.5 flex flex-col gap-2"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-[11px] font-bold text-text-primary uppercase tracking-wider">Approval Required</p>
+                      <p className="text-xs text-text-muted mt-0.5 leading-tight">{req.description || req.kind}</p>
+                    </div>
+                    {req.status !== 'pending' && (
+                      <span className={clsx(
+                        "text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-tighter",
+                        req.status === 'approved' ? "bg-success/20 text-success" : "bg-error/20 text-error"
+                      )}>
+                        {req.status}
+                      </span>
+                    )}
+                  </div>
+
+                  {req.status === 'pending' && (
+                    <div className="flex gap-2 mt-1">
+                      <button
+                        className="flex-1 rounded-md bg-success/20 text-success px-2.5 py-1.5 text-xs font-semibold border border-success/40 transition-colors hover:bg-success/30"
+                        onClick={() => onApproval(req.id, true)}
+                      >
+                        Approve
+                      </button>
+                      <button
+                        className="flex-1 rounded-md bg-error/15 text-error px-2.5 py-1.5 text-xs font-semibold border border-error/30 transition-colors hover:bg-error/25"
+                        onClick={() => onApproval(req.id, false)}
+                      >
+                        Deny
+                      </button>
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           )}
