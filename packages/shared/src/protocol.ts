@@ -34,6 +34,8 @@ export const MessageFrameSchema = z.object({
   type: z.literal('message'),
   sessionId: z.string().uuid(),
   content: z.string(),
+  modelRole: z.string().optional(),
+  modelId: z.string().optional(),
   attachments: z.array(z.object({
     type: z.enum(['image', 'file', 'audio', 'video']),
     data: z.string(),

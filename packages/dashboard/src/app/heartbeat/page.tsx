@@ -18,18 +18,14 @@ export default function HeartbeatPage() {
   const [original, setOriginal] = useState('');
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [view, setView] = useState<'editor' | 'goals' | 'schedule'>('goals');
+  const [view, setView] = useState<'editor' | 'goals'>('goals');
   const [goals, setGoals] = useState<Goal[]>([]);
   const [error, setError] = useState<string | null>(null);
 
-  // Schedule settings state
-  const [schedules, setSchedules] = useState({ heartbeat: 30, dreamer: 30, monologue: 15 });
-  const [originalSchedules, setOriginalSchedules] = useState({ heartbeat: 30, dreamer: 30, monologue: 15 });
-  const [savingSchedules, setSavingSchedules] = useState(false);
+
 
   useEffect(() => {
     loadHeartbeat();
-    loadSchedules();
   }, []);
 
   const loadHeartbeat = async () => {
@@ -76,37 +72,6 @@ export default function HeartbeatPage() {
     setGoals([...goals, newGoal]);
   };
 
-  const loadSchedules = async () => {
-    try {
-      const data = await gatewayFetch<{ heartbeat: number; dreamer: number; monologue: number }>('/api/schedules');
-      setSchedules(data);
-      setOriginalSchedules(data);
-    } catch {
-      // Silently ignore — schedules will show defaults
-    }
-  };
-
-  const saveSchedules = async () => {
-    try {
-      setSavingSchedules(true);
-      await gatewayFetch('/api/schedules', {
-        method: 'PUT',
-        body: JSON.stringify(schedules),
-      });
-      setOriginalSchedules({ ...schedules });
-      setError(null);
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setSavingSchedules(false);
-    }
-  };
-
-  const hasScheduleChanges =
-    schedules.heartbeat !== originalSchedules.heartbeat ||
-    schedules.dreamer !== originalSchedules.dreamer ||
-    schedules.monologue !== originalSchedules.monologue;
-
   const updateGoal = (id: string, updates: Partial<Goal>) => {
     setGoals(goals.map((g) => (g.id === id ? { ...g, ...updates } : g)));
   };
@@ -117,8 +82,6 @@ export default function HeartbeatPage() {
 
   const hasChanges = view === 'goals'
     ? goalsToMarkdown(goals) !== original
-    : view === 'schedule'
-    ? hasScheduleChanges
     : content !== original;
 
   if (loading) {
@@ -150,39 +113,23 @@ export default function HeartbeatPage() {
             </Button>
             <Button
               size="sm"
-              variant={view === 'schedule' ? 'primary' : 'ghost'}
-              onClick={() => setView('schedule')}
-            >
-              <Clock className="h-3 w-3" />
-              Schedules
-            </Button>
-            <Button
-              size="sm"
               variant={view === 'editor' ? 'primary' : 'ghost'}
               onClick={() => setView('editor')}
             >
               <Calendar className="h-3 w-3" />
-              Raw
+              Editor
             </Button>
             <Button size="sm" variant="ghost" onClick={() => {
-              if (view === 'schedule') {
-                setSchedules({ ...originalSchedules });
-              } else {
                 loadHeartbeat();
-              }
             }} disabled={!hasChanges}>
               <RotateCcw className="h-3 w-3" />
               Reset
             </Button>
             <Button size="sm" variant="primary" onClick={() => {
-              if (view === 'schedule') {
-                saveSchedules();
-              } else {
                 handleSave();
-              }
-            }} disabled={!hasChanges || saving || savingSchedules}>
+            }} disabled={!hasChanges || saving}>
               <Save className="h-3 w-3" />
-              {saving || savingSchedules ? 'Saving…' : 'Save'}
+              {saving ? 'Saving…' : 'Save'}
             </Button>
           </div>
         </div>
@@ -221,39 +168,6 @@ export default function HeartbeatPage() {
                 />
               ))
             )}
-          </div>
-        ) : view === 'schedule' ? (
-          <div className="space-y-4 max-w-xl">
-            <div className="mb-2">
-              <h2 className="text-sm font-semibold text-text-primary">Background Schedules</h2>
-              <p className="text-xs text-text-muted mt-1">
-                Configure how often the agent&apos;s background processes run. Changes take effect immediately.
-              </p>
-            </div>
-
-            <ScheduleInput
-              icon={<Heart className="h-4 w-4 text-error" />}
-              label="Heartbeat"
-              description="Reads HEARTBEAT.md and acts on active goals."
-              value={schedules.heartbeat}
-              onChange={(v) => setSchedules({ ...schedules, heartbeat: v })}
-            />
-
-            <ScheduleInput
-              icon={<Timer className="h-4 w-4 text-accent-primary" />}
-              label="Dreamer"
-              description="Summarizes recent conversations into long-term memory and evolution log."
-              value={schedules.dreamer}
-              onChange={(v) => setSchedules({ ...schedules, dreamer: v })}
-            />
-
-            <ScheduleInput
-              icon={<Clock className="h-4 w-4 text-accent-secondary" />}
-              label="Inner Monologue"
-              description="Reflects on memories and stores autonomous insights."
-              value={schedules.monologue}
-              onChange={(v) => setSchedules({ ...schedules, monologue: v })}
-            />
           </div>
         ) : (
           <Card className="h-full">
@@ -335,76 +249,6 @@ function GoalCard({
         <Button variant="ghost" size="sm" onClick={onRemove}>
           <Trash2 className="h-3 w-3 text-text-muted" />
         </Button>
-      </div>
-    </Card>
-  );
-}
-
-// ─── Schedule Input Card ────────────────────────────────────
-
-const PRESET_INTERVALS = [5, 10, 15, 30, 60, 120, 360];
-
-function ScheduleInput({
-  icon,
-  label,
-  description,
-  value,
-  onChange,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  description: string;
-  value: number;
-  onChange: (value: number) => void;
-}) {
-  const formatInterval = (minutes: number) => {
-    if (minutes < 60) return `${minutes}m`;
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    return m > 0 ? `${h}h ${m}m` : `${h}h`;
-  };
-
-  return (
-    <Card className="animate-slide-up">
-      <div className="flex items-start gap-3">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-bg-tertiary">
-          {icon}
-        </div>
-        <div className="flex-1 min-w-0 space-y-2">
-          <div>
-            <h3 className="text-sm font-medium text-text-primary">{label}</h3>
-            <p className="text-xs text-text-muted">{description}</p>
-          </div>
-          <div className="flex items-center gap-2 flex-wrap">
-            {PRESET_INTERVALS.map((preset) => (
-              <button
-                key={preset}
-                onClick={() => onChange(preset)}
-                className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                  value === preset
-                    ? 'bg-accent-primary text-white'
-                    : 'bg-bg-tertiary text-text-secondary hover:bg-bg-secondary border border-border-primary'
-                }`}
-              >
-                {formatInterval(preset)}
-              </button>
-            ))}
-            <div className="flex items-center gap-1.5 ml-1">
-              <input
-                type="number"
-                min={1}
-                max={1440}
-                value={value}
-                onChange={(e) => {
-                  const v = parseInt(e.target.value, 10);
-                  if (v >= 1 && v <= 1440) onChange(v);
-                }}
-                className="w-16 rounded-md bg-bg-tertiary border border-border-primary px-2 py-1 text-xs text-text-primary text-center focus:outline-none focus:border-accent-primary/50 transition-colors"
-              />
-              <span className="text-xs text-text-muted">min</span>
-            </div>
-          </div>
-        </div>
       </div>
     </Card>
   );

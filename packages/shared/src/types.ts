@@ -103,7 +103,7 @@ export const AgentLogSchema = z.object({
     'model_call', 'model_response', 'tool_call', 'tool_result',
     'thinking', 'message_sent', 'message_received',
     'security_event', 'error', 'sub_agent_spawn', 'monologue_run',
-    'dreamer_run'
+    'dreamer_run', 'soul_evolve'
   ]),
   payload: z.record(z.unknown()),
   status: z.enum(['success', 'error', 'blocked', 'pending']),
@@ -253,6 +253,15 @@ export const AdytumConfigSchema = z.object({
   workspacePath: z.string(),
   dataPath: z.string(),
   models: z.array(ModelConfigSchema),
+  modelChains: z.record(ModelRoleSchema, z.array(z.string())).default({
+    thinking: [],
+    fast: [],
+    local: [],
+  }),
+  taskOverrides: z.record(z.string(), z.string()).default({}), // taskName -> modelId/chainId
+  soul: z.object({
+    autoUpdate: z.boolean().default(true),
+  }).default({ autoUpdate: true }),
   litellmPort: z.number().default(4000),
   gatewayPort: z.number().default(3001),
   dashboardPort: z.number().default(3000),

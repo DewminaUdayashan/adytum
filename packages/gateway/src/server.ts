@@ -36,6 +36,8 @@ export interface ServerConfig {
   onScheduleUpdate?: (type: 'dreamer' | 'monologue', intervalMinutes: number) => void;
   /** Callback to reload skills after config changes */
   onSkillsReload?: () => Promise<void>;
+  /** Callback to update ModelRouter when chains change */
+  onChainsUpdate?: (chains: Record<string, string[]>) => void;
 }
 
 /**
@@ -90,6 +92,55 @@ export class GatewayServer extends EventEmitter {
         baseUrl: body.baseUrl,
         apiKey: body.apiKey,
       });
+
+      // Also persist to adytum.config.yaml
+      try {
+        const cfg = loadConfig();
+        const existingModels = Array.isArray(cfg.models) ? [...cfg.models] : [];
+        // Avoid duplicates
+        if (!existingModels.some((m: any) => `${m.provider}/${m.model}` === body.id)) {
+          existingModels.push({
+            role: 'fast' as const, // Default role, user can change via chains
+            provider: body.provider,
+            model: body.model,
+            baseUrl: body.baseUrl,
+            apiKey: body.apiKey,
+          });
+          saveConfig({ models: existingModels } as any);
+        }
+      } catch (e) {
+        console.error('Failed to persist model to config', e);
+      }
+
+      return { success: true };
+    });
+
+    this.app.put('/api/models/:id', async (request, reply) => {
+      if (!this.modelCatalog) return reply.status(503).send({ error: 'Model Catalog unavailable' });
+      const { id } = request.params as { id: string };
+      const decodedId = decodeURIComponent(id);
+      const body = request.body as any;
+      const updated = this.modelCatalog.update(decodedId, {
+        baseUrl: body.baseUrl,
+        apiKey: body.apiKey,
+        name: body.name,
+      });
+      if (!updated) return reply.status(404).send({ error: 'Model not found' });
+
+      // Also persist to adytum.config.yaml
+      try {
+        const cfg = loadConfig();
+        const existingModels = Array.isArray(cfg.models) ? [...cfg.models] : [];
+        const idx = existingModels.findIndex((m: any) => `${m.provider}/${m.model}` === decodedId);
+        if (idx >= 0) {
+          if (body.baseUrl !== undefined) existingModels[idx] = { ...existingModels[idx], baseUrl: body.baseUrl };
+          if (body.apiKey !== undefined) existingModels[idx] = { ...existingModels[idx], apiKey: body.apiKey };
+          saveConfig({ models: existingModels } as any);
+        }
+      } catch (e) {
+        console.error('Failed to persist model update to config', e);
+      }
+
       return { success: true };
     });
 
@@ -107,6 +158,94 @@ export class GatewayServer extends EventEmitter {
       if (!this.modelCatalog) return reply.status(503).send({ error: 'Model Catalog unavailable' });
       const discovered = await this.modelCatalog.scanLocalModels();
       return { discovered };
+    });
+
+    // ─── Configuration Routes ───────────────────────────────
+    // ─── Roles & Chains ───────────────────────────────────────
+    
+    this.app.get('/api/config/roles', async (_request, reply) => {
+      const cfg = loadConfig();
+      const roles: any[] = ['thinking', 'fast', 'local']; // Standard roles
+      
+      // Get chains (synthesize from models[] if empty, similar to get chains endpoint)
+      let chains = cfg.modelChains || { thinking: [], fast: [], local: [] };
+      const allEmpty = Object.values(chains).every((c: any) => !c || c.length === 0);
+      
+      if (allEmpty && cfg.models && Array.isArray(cfg.models) && cfg.models.length > 0) {
+        const synthesized: Record<string, string[]> = { thinking: [], fast: [], local: [] };
+        for (const m of cfg.models) {
+          const id = `${m.provider}/${m.model}`;
+          const role = m.role as string;
+          if (synthesized[role]) {
+            synthesized[role].push(id);
+          }
+        }
+        chains = synthesized as any;
+      }
+
+      return {
+        roles,
+        chains,
+        defaultRole: 'thinking',
+      };
+    });
+
+    this.app.get('/api/config/chains', async () => {
+      const cfg = loadConfig();
+      let chains = cfg.modelChains || { thinking: [], fast: [], local: [] };
+
+      // If all chains are empty, synthesize from config models[] (legacy role-based setup)
+      const allEmpty = Object.values(chains).every((c: string[]) => !c || c.length === 0);
+      if (allEmpty && cfg.models && Array.isArray(cfg.models) && cfg.models.length > 0) {
+        const synthesized: Record<string, string[]> = { thinking: [], fast: [], local: [] };
+        for (const m of cfg.models) {
+          const id = `${m.provider}/${m.model}`;
+          const role = m.role as string;
+          if (synthesized[role]) {
+            synthesized[role].push(id);
+          }
+        }
+        chains = synthesized;
+      }
+
+      return { modelChains: chains };
+    });
+
+    this.app.put('/api/config/chains', async (request, reply) => {
+      const body = request.body as { modelChains: Record<string, string[]> };
+      if (!body.modelChains) return reply.status(400).send({ error: 'modelChains required' });
+      saveConfig({ modelChains: body.modelChains } as any);
+      // Sync to live ModelRouter if available
+      if (this.config.onChainsUpdate) {
+        this.config.onChainsUpdate(body.modelChains);
+      }
+      return { success: true, modelChains: body.modelChains };
+    });
+
+    this.app.get('/api/config/overrides', async () => {
+      const cfg = loadConfig();
+      return { taskOverrides: cfg.taskOverrides || {} };
+    });
+
+    this.app.put('/api/config/overrides', async (request, reply) => {
+      const body = request.body as { taskOverrides: Record<string, string> };
+      if (!body.taskOverrides) return reply.status(400).send({ error: 'taskOverrides required' });
+      saveConfig({ taskOverrides: body.taskOverrides } as any);
+      return { success: true, taskOverrides: body.taskOverrides };
+    });
+
+    this.app.get('/api/config/soul', async () => {
+      const cfg = loadConfig();
+      return { soul: cfg.soul || { autoUpdate: true } };
+    });
+
+    this.app.put('/api/config/soul', async (request, reply) => {
+      const body = request.body as { soul: { autoUpdate: boolean } };
+      if (!body.soul) return reply.status(400).send({ error: 'soul config required' });
+      saveConfig({ soul: body.soul } as any);
+      // Also update the runtime soul engine if possible, though config reload should handle it eventually.
+      // For now, next restart allows it.
+      return { success: true, soul: body.soul };
     });
 
     // ─── REST Routes ────────────────────────────────────────

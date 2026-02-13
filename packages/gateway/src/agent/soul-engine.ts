@@ -86,4 +86,9 @@ ${params.soulPersona || '- I think in public — I share my reasoning process tr
   getPath(): string {
     return this.soulPath;
   }
+  /** Update the SOUL.md file and invalidate cache. */
+  updateSoul(content: string): void {
+    writeFileSync(this.soulPath, content, 'utf-8');
+    this.cachedSoul = content;
+  }
 }

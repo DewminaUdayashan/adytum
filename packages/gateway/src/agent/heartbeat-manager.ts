@@ -3,7 +3,15 @@ import { join } from 'node:path';
 import type { AgentRuntime } from './runtime.js';
 import cron from 'node-cron';
 
-const DEFAULT_PROMPT = `Read HEARTBEAT.md if it exists (workspace context). Follow it strictly. Do not infer or repeat old tasks from prior chats. If nothing needs attention, reply HEARTBEAT_OK.`;
+const DEFAULT_PROMPT = `
+You are the Heartbeat Manager.
+Your task is to check the file "HEARTBEAT.md" and execute any pending tasks.
+1. Read "HEARTBEAT.md" (if it exists).
+2. If it contains tasks, execute them using available tools.
+3. If a task is done, update "HEARTBEAT.md" to mark it as done or remove it.
+4. If the file is empty or all tasks are done, reply exactly "HEARTBEAT_OK".
+5. Do NOT chat. Do NOT act on previous conversation history. Only act on "HEARTBEAT.md".
+`;
 
 export class HeartbeatManager {
   private task: cron.ScheduledTask | null = null;
@@ -48,18 +56,13 @@ export class HeartbeatManager {
 
     if (existsSync(heartbeatFile)) {
       heartbeatContent = readFileSync(heartbeatFile, 'utf-8').trim();
-      // If file exists but is effectively empty (just headers/whitespace), skip
       const meaningfulContent = heartbeatContent.replace(/^#.*$/gm, '').trim();
       if (!meaningfulContent) {
-        // Skip run to save tokens
+        // Skip run to save tokens if nothing to do
         return;
       }
       hasHeartbeatFile = true;
     }
-
-    // If no file and configured to skip? Behavior:
-    // - missing file: run with default prompt
-    // - empty file: skip run to save tokens
 
     const session = 'system-heartbeat';
     
@@ -70,7 +73,14 @@ export class HeartbeatManager {
     }
 
     try {
-      await this.agent.run(prompt, session);
+      const result = await this.agent.run(prompt, session);
+      
+      // Log simple status to console instead of full chat
+      if (result.response.includes('HEARTBEAT_OK')) {
+          console.log('[Heartbeat] Status: OK');
+      } else {
+          console.log('[Heartbeat] Activity:', result.response.slice(0, 100) + (result.response.length > 100 ? '...' : ''));
+      }
     } catch (error) {
       console.error('Heartbeat run failed:', error);
     }

@@ -84,12 +84,13 @@ export function useGatewaySocket() {
     };
   }, []);
 
-  const sendMessage = useCallback((content: string, sessionId: string) => {
+  const sendMessage = useCallback((content: string, sessionId: string, options?: { modelRole?: string; modelId?: string }) => {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
       socketRef.current.send(JSON.stringify({
         type: 'message',
         sessionId,
         content,
+        ...options,
       }));
     }
   }, []);

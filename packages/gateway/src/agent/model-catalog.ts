@@ -74,6 +74,32 @@ export class ModelCatalog {
         console.error('Failed to load models.json', e);
       }
     }
+
+    // 3. Seed from adytum.config.yaml models[] (CLI-configured models)
+    //    These models might not be in pi-ai or models.json, but the user 
+    //    configured them during `adytum init`. We add them so the dashboard can see them.
+    if (this.config.models && Array.isArray(this.config.models)) {
+      for (const mc of this.config.models) {
+        const id = `${mc.provider}/${mc.model}`;
+        // Only add if not already present (pi-ai or user models take precedence)
+        if (!this.models.has(id)) {
+          this.models.set(id, {
+            id,
+            name: mc.model,
+            provider: mc.provider,
+            model: mc.model,
+            source: 'default',
+            baseUrl: mc.baseUrl,
+            apiKey: mc.apiKey,
+          });
+        } else {
+          // Merge config fields (baseUrl, apiKey) into existing entry if missing
+          const existing = this.models.get(id)!;
+          if (!existing.baseUrl && mc.baseUrl) existing.baseUrl = mc.baseUrl;
+          if (!existing.apiKey && mc.apiKey) existing.apiKey = mc.apiKey;
+        }
+      }
+    }
   }
 
   save() {
@@ -99,6 +125,17 @@ export class ModelCatalog {
   add(entry: ModelEntry) {
     this.models.set(entry.id, { ...entry, source: 'user' });
     this.save();
+  }
+
+  update(id: string, updates: Partial<Pick<ModelEntry, 'baseUrl' | 'apiKey' | 'name'>>) {
+    const entry = this.models.get(id);
+    if (!entry) return false;
+    if (updates.baseUrl !== undefined) entry.baseUrl = updates.baseUrl || undefined;
+    if (updates.apiKey !== undefined) entry.apiKey = updates.apiKey || undefined;
+    if (updates.name !== undefined) entry.name = updates.name;
+    this.models.set(id, entry);
+    if (entry.source === 'user') this.save();
+    return true;
   }
 
   remove(id: string) {
