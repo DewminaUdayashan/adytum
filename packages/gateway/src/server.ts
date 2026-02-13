@@ -439,6 +439,7 @@ export class GatewayServer extends EventEmitter {
         ].filter(Boolean),
         secrets: Object.keys(secrets[skill.id] || {}),
         configEntry: entries[skill.id] || {},
+        readonly: skill.readonly,
       }));
 
 		  return { skills, global, execution: cfg.execution };

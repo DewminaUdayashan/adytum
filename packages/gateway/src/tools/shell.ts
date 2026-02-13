@@ -32,7 +32,26 @@ export function createShellToolWithApproval(
     };
 
     // Always consult approval policy (policy decides auto/ask/deny)
-    const approval = await onApprovalRequired(command);
+    // Heuristic: Check for critical files in command
+    const criticalFiles = ['adytum.config.yaml', '.env', 'security.json', 'litellm_config.yaml'];
+    const isCritical = criticalFiles.some(file => command.includes(file));
+    
+    // If critical file detected, force ASK mode and append warning
+    // This is a basic string check, but better than nothing
+    let wrappedApprovalFn = onApprovalRequired;
+    if (isCritical) {
+        wrappedApprovalFn = async (cmd: string) => {
+            const result = await onApprovalRequired(cmd);
+            if (result.mode === 'auto') {
+                // Downgrade AUTO to ASK for critical files
+                result.mode = 'ask';
+                result.message = (result.message || '') + '\n⚠️  CRITICAL FILE DETECTED: This command targets sensitive configuration files.';
+            }
+            return result;
+        }
+    }
+
+    const approval = await wrappedApprovalFn(command);
     if (!approval.approved) {
       return {
         exitCode: -1,

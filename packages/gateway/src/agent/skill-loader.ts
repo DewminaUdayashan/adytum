@@ -64,6 +64,7 @@ export interface LoadedSkill {
   };
   communication?: boolean;
   install?: Array<Record<string, unknown>>;
+  readonly: boolean;
 }
 
 type SkillMissing = {
@@ -312,6 +313,7 @@ export class SkillLoader {
           instructionFiles: [],
           manifest: undefined,
           priority: candidate.priority,
+          readonly: candidate.origin !== 'workspace',
         });
         continue;
       }
@@ -346,6 +348,7 @@ export class SkillLoader {
         communication: manifest.metadata?.communication === true,
         install: manifest.metadata?.install,
         priority: candidate.priority,
+        readonly: candidate.origin !== 'workspace',
       });
     }
 

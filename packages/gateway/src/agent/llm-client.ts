@@ -111,14 +111,15 @@ export class LLMClient {
     // pi.complete supports 'tools' in options?
     // Looking at pi-ai source/docs (inferred):
     // It accepts tools in options.
-    if (options.tools) {
-        piOptions.tools = options.tools;
-    }
-
     // 4. Call pi.complete
-    // We import pi dynamically or assume it's global? 
-    // We need to import it. LLMClient doesn't import pi yet.
     const pi = await import('@mariozechner/pi-ai');
+
+    // Tools mapping: pi-ai expects Tool[] in context
+    const piTools = options.tools?.map(t => ({
+        name: t.function.name,
+        description: t.function.description || '',
+        parameters: t.function.parameters as any
+    }));
 
     // Convert messages slightly if needed? pi.complete takes standard {role, content}
     // We sanitize nulls just in case
@@ -193,7 +194,8 @@ export class LLMClient {
         // Fix: complete takes (model, context, options)
         const result = await pi.complete(piModel, { 
             messages: contextMessages,
-            systemPrompt 
+            systemPrompt,
+            tools: piTools
         }, piOptions);
         
         if (result.errorMessage) {
