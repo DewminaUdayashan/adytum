@@ -2,6 +2,8 @@ import { v4 as uuid } from 'uuid';
 import chalk from 'chalk';
 import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
+import { watch, existsSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { loadConfig } from './config.js';
 import { GatewayServer } from './server.js';
 import { AgentRuntime } from './agent/runtime.js';
@@ -140,6 +142,30 @@ export async function startGateway(projectRoot: string): Promise<void> {
     await skillLoader.reload(agent);
     agent.refreshSystemPrompt();
   };
+
+  // Auto-reload skills when files change under workspace/skills
+  const skillsPath = resolve(config.workspacePath, 'skills');
+  const startSkillsWatcher = () => {
+    if (!existsSync(skillsPath)) return;
+    let timer: NodeJS.Timeout | null = null;
+    const debounceReload = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(async () => {
+        try {
+          console.log(chalk.dim('  [Skills] Change detected → reloading skills...'));
+          await reloadSkills();
+        } catch (err: any) {
+          console.error(chalk.red(`  [Skills] Reload failed: ${err?.message || err}`));
+        }
+      }, 400);
+    };
+
+    watch(skillsPath, { recursive: true }, (_event, filename) => {
+      if (!filename) return;
+      debounceReload();
+    });
+  };
+  startSkillsWatcher();
 
   // One-time migration: move known skill env vars into secrets store, then reload if changed.
   const migrateSkillEnvs = async () => {
