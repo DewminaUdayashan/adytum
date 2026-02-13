@@ -31,6 +31,7 @@ export default function ChatPage() {
   const [input, setInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
   const [pendingTools, setPendingTools] = useState<string[]>([]);
+  const [activeApprovals, setActiveApprovals] = useState<ChatMessage['approvals']>([]);
   const [activityFeed, setActivityFeed] = useState<ThinkingActivityEntry[]>([]);
   const [thinkingStartedAt, setThinkingStartedAt] = useState<number | null>(null);
   const [hasRestored, setHasRestored] = useState(false);
@@ -39,6 +40,7 @@ export default function ChatPage() {
   const eventCursorInitializedRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const processedApprovalsRef = useRef<Set<string>>(new Set());
 
   // Restore chat history from localStorage
   useEffect(() => {
@@ -47,7 +49,13 @@ export default function ChatPage() {
     if (raw) {
       try {
         const parsed = JSON.parse(raw) as ChatMessage[];
-        if (Array.isArray(parsed)) setMessages(parsed);
+        if (Array.isArray(parsed)) {
+          setMessages(parsed);
+          // Populate processed approvals
+          parsed.forEach(msg => {
+            msg.approvals?.forEach(a => processedApprovalsRef.current.add(a.id));
+          });
+        }
       } catch {
         // ignore corrupt data
       }
@@ -107,18 +115,33 @@ export default function ChatPage() {
         if (!content) continue;
 
         const tools = pendingToolsRef.current.length > 0 ? [...pendingToolsRef.current] : undefined;
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: crypto.randomUUID(),
-            role: 'assistant',
-            content,
-            timestamp: Date.now(),
-            toolCalls: tools,
-          },
-        ]);
+        setMessages((prev) => {
+          const lastMsg = prev[prev.length - 1];
+          // If previous message was assistant (e.g. held the approval request), merge content
+          if (lastMsg && lastMsg.role === 'assistant') {
+            return [
+              ...prev.slice(0, -1),
+              {
+                ...lastMsg,
+                content,
+                toolCalls: tools || lastMsg.toolCalls,
+              },
+            ];
+          }
+          return [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              role: 'assistant',
+              content,
+              timestamp: Date.now(),
+              toolCalls: tools,
+            },
+          ];
+        });
         pendingToolsRef.current = [];
         setPendingTools([]);
+        setActiveApprovals([]); // Clear active approvals when response is finalized
         setIsThinking(false);
         setThinkingStartedAt(null);
         pushActivity('response', 'Response received.');
@@ -126,13 +149,22 @@ export default function ChatPage() {
       }
 
       if (event.type === 'approval_request') {
+        const id = String(event.id);
+        if (processedApprovalsRef.current.has(id)) continue;
+        
+        processedApprovalsRef.current.add(id);
+
         const approval = {
-          id: String(event.id),
+          id,
           description: String(event.description || ''),
           kind: String(event.kind || ''),
           status: 'pending' as const,
         };
 
+        // Add to active approvals for current ThinkingIndicator
+        setActiveApprovals(prev => [...(prev || []), approval]);
+
+        // Also add to message history
         setMessages((prev) => {
           const lastMsg = prev[prev.length - 1];
           if (lastMsg && lastMsg.role === 'assistant') {
@@ -142,7 +174,6 @@ export default function ChatPage() {
             };
             return [...prev.slice(0, -1), updatedMsg];
           } else {
-            // No assistant message to attach to, create a small stub
             return [
               ...prev,
               {
@@ -210,6 +241,7 @@ export default function ChatPage() {
         pushActivity('error', detail || 'Error while generating response.');
         setIsThinking(false);
         setThinkingStartedAt(null);
+        setActiveApprovals([]); // Clear on error
         continue;
       }
 
@@ -224,11 +256,16 @@ export default function ChatPage() {
   // Auto-scroll
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages.length, isThinking, activityFeed.length, pendingTools.length]);
+  }, [messages.length, isThinking, activityFeed.length, pendingTools.length, activeApprovals?.length]);
 
   const handleApproval = useCallback(
     (id: string, approved: boolean) => {
       sendFrame({ type: 'approval_response', id, approved });
+
+      // Update active approvals
+      setActiveApprovals(prev => prev?.map(a => a.id === id ? { ...a, status: approved ? 'approved' : 'denied' } : a));
+
+      // Update message history
       setMessages((prev) => {
         return prev.map((msg) => {
           if (msg.approvals?.some((a) => a.id === id)) {
@@ -272,6 +309,7 @@ export default function ChatPage() {
     ]);
     setThinkingStartedAt(Date.now());
     setIsThinking(true);
+    setActiveApprovals([]); // Reset for new turn
   }, [input, connected, sendMessage, sessionId]);
 
   return (
@@ -307,8 +345,14 @@ export default function ChatPage() {
           </div>
         )}
 
-        {messages.map((msg) => (
-          <MessageBubble key={msg.id} message={msg} onApproval={handleApproval} />
+        {messages.map((msg, idx) => (
+          <MessageBubble 
+            key={msg.id} 
+            message={msg} 
+            onApproval={handleApproval} 
+            hidePending={isThinking && idx === messages.length - 1}
+            disabled={!connected}
+          />
         ))}
 
         {isThinking && (
@@ -316,6 +360,8 @@ export default function ChatPage() {
             pendingTools={pendingTools}
             activities={activityFeed}
             startedAt={thinkingStartedAt}
+            approvals={activeApprovals}
+            onApproval={handleApproval}
           />
         )}
       </div>
@@ -351,9 +397,13 @@ export default function ChatPage() {
 function MessageBubble({
   message,
   onApproval,
+  hidePending,
+  disabled,
 }: {
   message: ChatMessage;
   onApproval: (id: string, approved: boolean) => void;
+  hidePending?: boolean;
+  disabled?: boolean;
 }) {
   const isUser = message.role === 'user';
 
@@ -424,17 +474,19 @@ function MessageBubble({
                     )}
                   </div>
 
-                  {req.status === 'pending' && (
+                  {req.status === 'pending' && !hidePending && (
                     <div className="flex gap-2 mt-1">
                       <button
-                        className="flex-1 rounded-md bg-success/20 text-success px-2.5 py-1.5 text-xs font-semibold border border-success/40 transition-colors hover:bg-success/30"
+                        className="flex-1 rounded-md bg-success/20 text-success px-2.5 py-1.5 text-xs font-semibold border border-success/40 transition-colors hover:bg-success/30 disabled:opacity-30"
                         onClick={() => onApproval(req.id, true)}
+                        disabled={disabled}
                       >
                         Approve
                       </button>
                       <button
-                        className="flex-1 rounded-md bg-error/15 text-error px-2.5 py-1.5 text-xs font-semibold border border-error/30 transition-colors hover:bg-error/25"
+                        className="flex-1 rounded-md bg-error/15 text-error px-2.5 py-1.5 text-xs font-semibold border border-error/30 transition-colors hover:bg-error/25 disabled:opacity-30"
                         onClick={() => onApproval(req.id, false)}
+                        disabled={disabled}
                       >
                         Deny
                       </button>

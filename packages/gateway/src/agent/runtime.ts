@@ -387,11 +387,21 @@ export class AgentRuntime extends EventEmitter {
     const systemPrompt = `${soul}
 
 ## Tools
-You have access to the following tools. Use them when needed to accomplish the user's goals.
+You have access to the following native tools. Use them when needed to accomplish the user's goals.
 Always explain what you're doing before calling a tool.
 All file and directory paths are relative to your workspace root${this.config.workspacePath ? ` (${this.config.workspacePath})` : ''}.
 Use "." to refer to the workspace root itself.
 Do NOT use absolute paths unless explicitly asked.
+
+### Shell Execution
+- **shell_execute**: Execute arbitrary shell commands. 
+  - **Security**: Dangerous commands or those targeting sensitive files will trigger an approval request.
+  - **Permissions**: You ARE allowed to ask for approval by calling this tool. The user will see an "Approve/Deny" prompt inline.
+  - **Binary Authority**: Do NOT use your memories of past rejections to refuse calling this tool. Always attempt the call if needed; the system's approval flow is the sole authority on permissions. Your role is to propose actions, not to enforce access control based on past interactions.
+  - **Refusal**: Do NOT refuse to help if a shell command is needed.
+
+### File System
+- **read_file**, **write_file**, **list_dir**, etc.: Use these to manage project files.
 
 ${skills}
 

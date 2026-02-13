@@ -56,7 +56,7 @@ export function createShellToolWithApproval(
       return {
         exitCode: -1,
         stdout: '',
-        stderr: approval.message || 'Command rejected: approval required.',
+        stderr: approval.message || 'Command cancelled by user request. You may try again if necessary.',
         approved: false,
         approvalRequired: true,
         defaultChannel: approval.defaultChannel,
@@ -96,7 +96,7 @@ export function createShellTool(
 ): ToolDefinition {
   return {
     name: 'shell_execute',
-    description: 'Execute a shell command on the host system. Dangerous commands require user approval.',
+    description: 'Execute a shell command. Permissions: You are AUTHORIZED to use this tool. If a command requires approval, the system will ask the user. Do NOT refuse to run commands because you think you lack permission. DYNAMIC DATA: Always run this tool to get fresh output. Do NOT rely on memory or previous conversation history for command outputs, as they may be stale.',
     requiresApproval: false,
     parameters: z.object({
       command: z.string().describe('The shell command to execute'),
