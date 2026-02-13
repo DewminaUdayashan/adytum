@@ -22,6 +22,14 @@ export class TokenTracker extends EventEmitter {
   private modelTotals = new Map<string, { tokens: number; cost: number }>();
   private grandTotal = { tokens: 0, cost: 0 };
 
+  private filterRecords(from?: number, to?: number): TokenRecord[] {
+    return this.records.filter((r) => {
+      const afterFrom = typeof from === 'number' ? r.timestamp >= from : true;
+      const beforeTo = typeof to === 'number' ? r.timestamp <= to : true;
+      return afterFrom && beforeTo;
+    });
+  }
+
   record(usage: TokenUsage, sessionId: string): void {
     const record: TokenRecord = {
       ...usage,
@@ -64,19 +72,38 @@ export class TokenTracker extends EventEmitter {
     return this.modelTotals.get(model) || { tokens: 0, cost: 0 };
   }
 
-  getTotalUsage(): { tokens: number; cost: number } {
+  getTotalUsage(from?: number, to?: number): { tokens: number; cost: number } {
+    if (from || to) {
+      const records = this.filterRecords(from, to);
+      return records.reduce(
+        (acc, r) => {
+          acc.tokens += r.totalTokens;
+          acc.cost += r.estimatedCost;
+          return acc;
+        },
+        { tokens: 0, cost: 0 },
+      );
+    }
     return { ...this.grandTotal };
   }
 
-  getDailyUsage(): Array<{ date: string; tokens: number; cost: number; model: string }> {
-    const daily = new Map<string, { tokens: number; cost: number; model: string }>();
+  getDailyUsage(
+    from?: number,
+    to?: number,
+  ): Array<{ date: string; tokens: number; cost: number; model: string; role: ModelRole; calls: number }> {
+    const daily = new Map<
+      string,
+      { tokens: number; cost: number; model: string; role: ModelRole; calls: number }
+    >();
 
-    for (const record of this.records) {
+    for (const record of this.filterRecords(from, to)) {
       const date = new Date(record.timestamp).toISOString().split('T')[0];
-      const key = `${date}:${record.model}`;
-      const existing = daily.get(key) || { tokens: 0, cost: 0, model: record.model };
+      const key = `${date}:${record.model}:${record.role}`;
+      const existing =
+        daily.get(key) || { tokens: 0, cost: 0, model: record.model, role: record.role, calls: 0 };
       existing.tokens += record.totalTokens;
       existing.cost += record.estimatedCost;
+      existing.calls += 1;
       daily.set(key, existing);
     }
 
@@ -86,8 +113,9 @@ export class TokenTracker extends EventEmitter {
     }));
   }
 
-  getRecentRecords(count: number = 50): TokenRecord[] {
-    return this.records.slice(-count);
+  getRecentRecords(count: number = 50, from?: number, to?: number): TokenRecord[] {
+    const filtered = this.filterRecords(from, to);
+    return filtered.slice(-count);
   }
 
   /** Flush records for DB persistence. */

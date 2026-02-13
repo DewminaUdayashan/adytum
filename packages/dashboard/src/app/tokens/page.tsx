@@ -1,8 +1,9 @@
 'use client';
 
+import { useMemo, useState } from 'react';
 import { usePolling } from '@/hooks/use-polling';
-import { Card, Badge, Spinner, EmptyState } from '@/components/ui';
-import { Coins, TrendingUp, Cpu, Clock } from 'lucide-react';
+import { Card, Badge, Spinner, EmptyState, Button } from '@/components/ui';
+import { Coins, TrendingUp, Cpu, Clock, Calendar, RefreshCcw } from 'lucide-react';
 
 interface TokenRecord {
   model: string;
@@ -20,6 +21,8 @@ interface DailyUsage {
   tokens: number;
   cost: number;
   model: string;
+  role: string;
+  calls: number;
 }
 
 interface TokenResponse {
@@ -29,7 +32,24 @@ interface TokenResponse {
 }
 
 export default function TokensPage() {
-  const { data, loading } = usePolling<TokenResponse>('/api/tokens', 5000);
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
+  const tokensPath = useMemo(() => {
+    const params = new URLSearchParams();
+    if (dateFrom) {
+      const from = new Date(`${dateFrom}T00:00:00`);
+      params.set('from', String(from.getTime()));
+    }
+    if (dateTo) {
+      const to = new Date(`${dateTo}T23:59:59.999`);
+      params.set('to', String(to.getTime()));
+    }
+    const qs = params.toString();
+    return `/api/tokens${qs ? `?${qs}` : ''}`;
+  }, [dateFrom, dateTo]);
+
+  const { data, loading, refresh } = usePolling<TokenResponse>(tokensPath, 5000);
 
   if (loading && !data) {
     return (
@@ -45,13 +65,15 @@ export default function TokensPage() {
 
   // Aggregate by model
   const modelMap = new Map<string, { tokens: number; cost: number; calls: number }>();
-  for (const r of recent) {
-    const existing = modelMap.get(r.model) || { tokens: 0, cost: 0, calls: 0 };
-    existing.tokens += r.totalTokens;
-    existing.cost += r.estimatedCost;
-    existing.calls += 1;
-    modelMap.set(r.model, existing);
+  for (const d of daily) {
+    const existing = modelMap.get(d.model) || { tokens: 0, cost: 0, calls: 0 };
+    existing.tokens += d.tokens;
+    existing.cost += d.cost;
+    existing.calls += d.calls;
+    modelMap.set(d.model, existing);
   }
+
+  const rangeLabel = dateFrom || dateTo ? `${dateFrom || '…'} → ${dateTo || '…'}` : 'All time';
 
   return (
     <div className="flex flex-col h-full animate-fade-in">
@@ -62,6 +84,54 @@ export default function TokensPage() {
       </div>
 
       <div className="flex-1 overflow-auto px-8 py-6 space-y-6">
+        {/* Filters */}
+        <Card>
+          <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+            <div className="space-y-1">
+              <p className="text-sm font-semibold text-text-primary">Filters</p>
+              <p className="text-xs text-text-muted">Default shows all daily usage. Narrow by date to focus analysis.</p>
+              <p className="text-[11px] text-text-tertiary flex items-center gap-1">
+                <Calendar size={12} /> Range: {rangeLabel}
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <div className="flex flex-col">
+                <label className="text-[11px] uppercase text-text-muted font-medium mb-1">From</label>
+                <input
+                  type="date"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                  className="rounded-lg bg-bg-tertiary border border-border-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-primary/50"
+                />
+              </div>
+              <div className="flex flex-col">
+                <label className="text-[11px] uppercase text-text-muted font-medium mb-1">To</label>
+                <input
+                  type="date"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                  className="rounded-lg bg-bg-tertiary border border-border-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-primary/50"
+                />
+              </div>
+              <div className="flex items-end gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setDateFrom('');
+                    setDateTo('');
+                  }}
+                >
+                  Clear
+                </Button>
+                <Button variant="ghost" size="sm" onClick={refresh}>
+                  <RefreshCcw size={14} /> Refresh
+                </Button>
+              </div>
+            </div>
+          </div>
+        </Card>
+
         {/* Summary cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           <MiniStat icon={Coins} label="Total Tokens" value={total.tokens.toLocaleString()} />
@@ -117,6 +187,8 @@ export default function TokensPage() {
                   <tr className="border-b border-border-primary bg-bg-tertiary/30">
                     <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Date</th>
                     <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Model</th>
+                    <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Role</th>
+                    <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Calls</th>
                     <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Tokens</th>
                     <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Cost</th>
                   </tr>
@@ -126,6 +198,8 @@ export default function TokensPage() {
                     <tr key={i} className="border-b border-border-primary/50 hover:bg-bg-secondary/30 transition-colors">
                       <td className="px-4 py-2.5 text-text-primary text-[13px]">{d.date}</td>
                       <td className="px-4 py-2.5 text-text-secondary text-[13px]">{d.model}</td>
+                      <td className="px-4 py-2.5"><Badge>{d.role}</Badge></td>
+                      <td className="px-4 py-2.5 text-right text-text-secondary text-[13px]">{d.calls.toLocaleString()}</td>
                       <td className="px-4 py-2.5 text-right text-text-primary text-[13px]">{d.tokens.toLocaleString()}</td>
                       <td className="px-4 py-2.5 text-right text-success text-[13px] font-medium">${d.cost.toFixed(4)}</td>
                     </tr>
@@ -148,6 +222,7 @@ export default function TokensPage() {
                       <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Time</th>
                       <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Model</th>
                       <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Role</th>
+                      <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Session</th>
                       <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Prompt</th>
                       <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Completion</th>
                       <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Total</th>
@@ -158,10 +233,11 @@ export default function TokensPage() {
                     {recent.slice().reverse().map((r, i) => (
                       <tr key={i} className="border-b border-border-primary/50 hover:bg-bg-secondary/30 transition-colors">
                         <td className="px-4 py-2.5 text-text-muted text-[11px] font-mono">
-                          {new Date(r.timestamp).toLocaleTimeString()}
+                          {new Date(r.timestamp).toLocaleString()}
                         </td>
                         <td className="px-4 py-2.5 text-text-primary text-[13px]">{r.model}</td>
                         <td className="px-4 py-2.5"><Badge>{r.role}</Badge></td>
+                        <td className="px-4 py-2.5 text-text-tertiary text-[12px] font-mono truncate max-w-[140px]">{r.sessionId}</td>
                         <td className="px-4 py-2.5 text-right text-text-secondary text-[13px]">{r.promptTokens.toLocaleString()}</td>
                         <td className="px-4 py-2.5 text-right text-text-secondary text-[13px]">{r.completionTokens.toLocaleString()}</td>
                         <td className="px-4 py-2.5 text-right text-text-primary text-[13px] font-medium">{r.totalTokens.toLocaleString()}</td>

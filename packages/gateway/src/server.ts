@@ -258,11 +258,18 @@ export class GatewayServer extends EventEmitter {
       tokens: tokenTracker.getTotalUsage(),
     }));
 
-    this.app.get('/api/tokens', async () => ({
-      total: tokenTracker.getTotalUsage(),
-      daily: tokenTracker.getDailyUsage(),
-      recent: tokenTracker.getRecentRecords(20),
-    }));
+    this.app.get('/api/tokens', async (request) => {
+      const { from, to, limit } = request.query as { from?: string; to?: string; limit?: string };
+      const fromMs = from ? Number(from) : undefined;
+      const toMs = to ? Number(to) : undefined;
+      const recentLimit = Math.min(Number(limit) || 20, 200);
+
+      return {
+        total: tokenTracker.getTotalUsage(fromMs, toMs),
+        daily: tokenTracker.getDailyUsage(fromMs, toMs),
+        recent: tokenTracker.getRecentRecords(recentLimit, fromMs, toMs),
+      };
+    });
 
     this.app.get('/api/link-preview', async (request, reply) => {
       const { url } = request.query as { url?: string };
