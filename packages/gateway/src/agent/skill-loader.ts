@@ -286,6 +286,7 @@ export class SkillLoader {
         modelChains: { thinking: [], fast: [], local: [] },
         taskOverrides: {},
         soul: { autoUpdate: true },
+        routing: { maxRetries: 5, fallbackOnRateLimit: true, fallbackOnError: false },
       } as AdytumConfig);
 
     this.discover();
