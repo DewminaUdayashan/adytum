@@ -143,6 +143,7 @@ export class AgentRuntime extends EventEmitter {
           {
             tools: this.config.toolRegistry.toOpenAITools(),
             temperature: 0.7,
+            fallbackRole: roleToUse as any,
           },
         );
         lastMessage = message;
@@ -344,7 +345,7 @@ export class AgentRuntime extends EventEmitter {
     const { message, usage } = await this.config.modelRouter.chat(
       'fast',
       [{ role: 'user', content: compactionPrompt }],
-      { temperature: 0.3 },
+      { temperature: 0.3, fallbackRole: 'fast' as any },
     );
 
     tokenTracker.record(usage, sessionId);

@@ -41,6 +41,12 @@ interface ModelsResponse {
   models: ModelEntry[];
 }
 
+interface RoutingConfig {
+  maxRetries: number;
+  fallbackOnRateLimit: boolean;
+  fallbackOnError: boolean;
+}
+
 const MODEL_ROLES = [
   { value: 'thinking', label: 'Thinking', icon: <Brain size={14} />, color: 'text-violet-400', bgColor: 'bg-violet-500/10', description: 'Complex reasoning & planning' },
   { value: 'fast', label: 'Fast', icon: <Zap size={14} />, color: 'text-amber-400', bgColor: 'bg-amber-500/10', description: 'Quick responses & simple tasks' },
@@ -79,6 +85,12 @@ export default function ModelSettingsPage() {
   const [chainsSaving, setChainsSaving] = useState(false);
   const [chainsModified, setChainsModified] = useState(false);
 
+  // Routing behavior
+  const [routing, setRouting] = useState<RoutingConfig>({ maxRetries: 5, fallbackOnRateLimit: true, fallbackOnError: false });
+  const [routingLoading, setRoutingLoading] = useState(true);
+  const [routingSaving, setRoutingSaving] = useState(false);
+  const [routingModified, setRoutingModified] = useState(false);
+
   const models = data?.models || [];
 
   // Group models by provider
@@ -99,6 +111,10 @@ export default function ModelSettingsPage() {
     loadChains();
   }, []);
 
+  useEffect(() => {
+    loadRouting();
+  }, []);
+
   const loadChains = async () => {
     try {
       const res = await gatewayFetch<{ modelChains: Record<string, string[]> }>('/api/config/chains');
@@ -108,6 +124,18 @@ export default function ModelSettingsPage() {
       console.error('Failed to load chains', err);
     } finally {
       setChainsLoading(false);
+    }
+  };
+
+  const loadRouting = async () => {
+    try {
+      const res = await gatewayFetch<{ routing: RoutingConfig }>('/api/config/routing');
+      setRouting(res.routing || { maxRetries: 5, fallbackOnRateLimit: true, fallbackOnError: false });
+      setRoutingModified(false);
+    } catch (err) {
+      console.error('Failed to load routing config', err);
+    } finally {
+      setRoutingLoading(false);
     }
   };
 
@@ -126,6 +154,22 @@ export default function ModelSettingsPage() {
       alert('Failed to save chains');
     } finally {
       setChainsSaving(false);
+    }
+  };
+
+  const saveRouting = async () => {
+    setRoutingSaving(true);
+    try {
+      await gatewayFetch('/api/config/routing', {
+        method: 'PUT',
+        body: JSON.stringify({ routing }),
+      });
+      setRoutingModified(false);
+    } catch (err) {
+      console.error('Failed to save routing config', err);
+      alert('Failed to save routing config');
+    } finally {
+      setRoutingSaving(false);
     }
   };
 
@@ -785,6 +829,80 @@ export default function ModelSettingsPage() {
                          ))}
                      </div>
                  )}
+
+                 <Card className="space-y-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                          <h3 className="text-sm font-bold text-text-primary">Routing & Retries</h3>
+                          <p className="text-xs text-text-tertiary">
+                            Control how many times the agent retries a model and whether to fall back to the next model when rate-limited.
+                          </p>
+                        </div>
+                        {routingModified && (
+                          <div className="flex gap-2">
+                            <Button variant="outline" size="sm" onClick={loadRouting} disabled={routingSaving || routingLoading}>
+                              <RotateCcw size={14} /> Revert
+                            </Button>
+                            <Button variant="primary" size="sm" onClick={saveRouting} isLoading={routingSaving}>
+                              <Save size={14} /> Save
+                            </Button>
+                          </div>
+                        )}
+                    </div>
+
+                    {routingLoading ? (
+                      <div className="p-4 flex justify-center"><Spinner /></div>
+                    ) : (
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[11px] uppercase text-text-muted font-medium">Max retries per model</label>
+                          <input
+                            type="number"
+                            min={1}
+                            max={10}
+                            value={routing.maxRetries}
+                            onChange={(e) => {
+                              const val = Math.min(Math.max(Number(e.target.value || 1), 1), 10);
+                              setRouting((prev) => ({ ...prev, maxRetries: val }));
+                              setRoutingModified(true);
+                            }}
+                            className="rounded-lg bg-bg-tertiary border border-border-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-primary/50"
+                          />
+                          <p className="text-[11px] text-text-tertiary">Default 5. Applies before moving to the next model.</p>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <label className="text-[11px] uppercase text-text-muted font-medium">Fallback on rate limit</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={routing.fallbackOnRateLimit}
+                              onChange={(e) => {
+                                setRouting((prev) => ({ ...prev, fallbackOnRateLimit: e.target.checked }));
+                                setRoutingModified(true);
+                              }}
+                              className="h-4 w-4 accent-accent-primary"
+                            />
+                            <span className="text-sm text-text-primary">Try next model in chain when 429/Rate limit occurs</span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                          <label className="text-[11px] uppercase text-text-muted font-medium">Fallback on other errors</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={routing.fallbackOnError}
+                              onChange={(e) => {
+                                setRouting((prev) => ({ ...prev, fallbackOnError: e.target.checked }));
+                                setRoutingModified(true);
+                              }}
+                              className="h-4 w-4 accent-accent-primary"
+                            />
+                            <span className="text-sm text-text-primary">Advance to next model after non-rate-limit failures</span>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                 </Card>
              </div>
         )}
       </div>

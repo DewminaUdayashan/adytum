@@ -51,7 +51,7 @@ export class Dreamer {
 
     const { message } = await this.modelRouter.chat('fast', [
       { role: 'user', content: prompt },
-    ], { temperature: 0.2 });
+    ], { temperature: 0.2, fallbackRole: 'fast' as any });
 
     const summary = redactSecrets(message.content || '');
     if (!summary.trim()) {
@@ -141,7 +141,7 @@ Instructions:
     try {
       const { message } = await this.modelRouter.chat('thinking', [
         { role: 'user', content: evolutionPrompt }
-      ], { temperature: 0.4 });
+      ], { temperature: 0.4, fallbackRole: 'thinking' as any });
 
       const response = message.content?.trim();
       if (!response || response === 'NO_UPDATE') {

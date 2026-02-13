@@ -10,6 +10,7 @@ interface ModelRouterConfig {
   modelChains: AdytumConfig['modelChains'];
   taskOverrides: AdytumConfig['taskOverrides'];
   modelCatalog: ModelCatalog;
+  routing: AdytumConfig['routing'];
 }
 
 /**
@@ -35,12 +36,14 @@ export class ModelRouter {
   private useProxy: boolean = false;
   private initialized: boolean = false;
   private cooldowns = new Map<string, number>(); // modelId -> timestamp until which it is cooled down
+  private routing: AdytumConfig['routing'];
 
   constructor(config: ModelRouterConfig) {
     this.litellmBaseUrl = config.litellmBaseUrl;
     this.modelChains = config.modelChains || { thinking: [], fast: [], local: [] };
     this.taskOverrides = config.taskOverrides || {};
     this.modelCatalog = config.modelCatalog;
+    this.routing = config.routing || { maxRetries: 5, fallbackOnRateLimit: true, fallbackOnError: false };
 
     this.openaiClient = new OpenAI({
       apiKey: 'not-needed',
@@ -67,6 +70,14 @@ export class ModelRouter {
    */
   updateChains(chains: Partial<Record<ModelRole, string[]>>): void {
     this.modelChains = chains;
+  }
+
+  updateRouting(routing: AdytumConfig['routing']): void {
+    this.routing = {
+      maxRetries: Math.min(Math.max(routing.maxRetries ?? 5, 1), 10),
+      fallbackOnRateLimit: routing.fallbackOnRateLimit ?? true,
+      fallbackOnError: routing.fallbackOnError ?? false,
+    };
   }
 
   /**
@@ -204,6 +215,19 @@ export class ModelRouter {
     return msg.includes('429') || msg.includes('rate limit') || msg.includes('rate-limit');
   }
 
+  private isRetriableError(err: any): boolean {
+    const msg = String(err?.message || '').toLowerCase();
+    return (
+      msg.includes('timeout') ||
+      msg.includes('timed out') ||
+      msg.includes('econnreset') ||
+      msg.includes('temporary') ||
+      msg.includes('unavailable') ||
+      msg.includes('fetch failed') ||
+      msg.includes('network')
+    );
+  }
+
   /**
    * Send a chat completion request to the specified model role.
    * Falls back to other roles on failure.
@@ -216,6 +240,7 @@ export class ModelRouter {
       temperature?: number;
       maxTokens?: number;
       stream?: boolean;
+      fallbackRole?: ModelRole;
     } = {},
   ): Promise<{
     message: OpenAI.ChatCompletionMessage;
@@ -226,9 +251,26 @@ export class ModelRouter {
     }
 
     const errors: Error[] = [];
-    
+    const directModel = this.resolveDirectModel(roleOrTask);
+    const fallbackRole = options.fallbackRole;
+
     // Resolve the chain of models to try
-    let chain = this.resolveChain(roleOrTask);
+    let chain = directModel ? [directModel] : this.resolveChain(roleOrTask);
+
+    // If user forced a model but we allow fallback on rate-limit, append role chain (deduped)
+    if (directModel && this.routing.fallbackOnRateLimit && fallbackRole) {
+      const fallbackChain = this.resolveChain(fallbackRole);
+      chain = [...chain, ...fallbackChain];
+    }
+
+    // Deduplicate chain by provider/model
+    const seen = new Set<string>();
+    chain = chain.filter((m) => {
+      const id = `${m.provider}/${m.model}`;
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
     
     // If no chain found (e.g. invalid role), try to find ANY model as a last ditch fallback
     if (chain.length === 0) {
@@ -244,6 +286,8 @@ export class ModelRouter {
         throw new Error(`No models configured for role/task "${roleOrTask}" and no fallbacks available.`);
     }
 
+    const maxRetries = Math.min(Math.max(this.routing.maxRetries ?? 5, 1), 10);
+
     for (const modelConfig of chain) {
       const modelId = `${modelConfig.provider}/${modelConfig.model}`;
 
@@ -252,20 +296,48 @@ export class ModelRouter {
         continue;
       }
 
-      try {
-        console.log(`[ModelRouter] Trying ${modelConfig.model} (role ${roleOrTask})...`);
-        if (this.useProxy) {
-          return await this.chatViaProxy(modelConfig, roleOrTask as ModelRole, messages, options);
-        } else {
-          return await this.chatDirect(modelConfig, roleOrTask as ModelRole, messages, options);
+      let attempt = 0;
+      while (attempt < maxRetries) {
+        attempt++;
+        try {
+          console.log(`[ModelRouter] Trying ${modelConfig.model} (role ${roleOrTask}) attempt ${attempt}/${maxRetries}...`);
+          if (this.useProxy) {
+            return await this.chatViaProxy(modelConfig, roleOrTask as ModelRole, messages, options);
+          } else {
+            return await this.chatDirect(modelConfig, roleOrTask as ModelRole, messages, options);
+          }
+        } catch (error: any) {
+          const isRateLimited = this.isRateLimitError(error);
+          if (isRateLimited) {
+            this.setRateLimited(modelId);
+          }
+
+          const retriable = isRateLimited || this.isRetriableError(error);
+          const canRetry = retriable && attempt < maxRetries;
+          const errorMsg = `[${modelConfig.model}] ${error.message}`;
+
+          console.warn(
+            `[ModelRouter] Model ${modelConfig.model} failed (attempt ${attempt}/${maxRetries}): ${error.message}`,
+          );
+
+          if (isRateLimited && this.routing.fallbackOnRateLimit) {
+            errors.push(new Error(errorMsg));
+            break;
+          }
+
+          if (!isRateLimited && this.routing.fallbackOnError) {
+            errors.push(new Error(errorMsg));
+            break;
+          }
+
+          if (!canRetry) {
+            errors.push(new Error(errorMsg));
+          }
+
+          if (!canRetry) {
+            break;
+          }
         }
-      } catch (error: any) {
-        if (this.isRateLimitError(error)) {
-          this.setRateLimited(modelId);
-        }
-        console.warn(`[ModelRouter] Model ${modelConfig.model} failed: ${error.message}`);
-        errors.push(new Error(`[${modelConfig.model}] ${error.message}`));
-        // Continue to next model in chain
       }
     }
 

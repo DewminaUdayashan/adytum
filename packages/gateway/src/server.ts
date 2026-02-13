@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
 import cors from '@fastify/cors';
-import { parseFrame, serializeFrame, type WebSocketFrame } from '@adytum/shared';
+import { parseFrame, serializeFrame, type WebSocketFrame, type AdytumConfig } from '@adytum/shared';
 import { auditLogger } from './security/audit-logger.js';
 import { tokenTracker } from './agent/token-tracker.js';
 import { EventEmitter } from 'node:events';
@@ -38,6 +38,8 @@ export interface ServerConfig {
   onSkillsReload?: () => Promise<void>;
   /** Callback to update ModelRouter when chains change */
   onChainsUpdate?: (chains: Record<string, string[]>) => void;
+  /** Callback to update routing settings at runtime */
+  onRoutingUpdate?: (routing: AdytumConfig['routing']) => void;
 }
 
 /**
@@ -220,6 +222,29 @@ export class GatewayServer extends EventEmitter {
         this.config.onChainsUpdate(body.modelChains);
       }
       return { success: true, modelChains: body.modelChains };
+    });
+
+    // Routing behavior (retries, fallbacks)
+    this.app.get('/api/config/routing', async () => {
+      const cfg = loadConfig();
+      return { routing: cfg.routing || { maxRetries: 5, fallbackOnRateLimit: true, fallbackOnError: false } };
+    });
+
+    this.app.put('/api/config/routing', async (request, reply) => {
+      const body = request.body as { routing?: { maxRetries?: number; fallbackOnRateLimit?: boolean; fallbackOnError?: boolean } };
+      if (!body.routing) return reply.status(400).send({ error: 'routing required' });
+
+      const maxRetries = Math.min(Math.max(Number(body.routing.maxRetries ?? 5), 1), 10);
+      const fallbackOnRateLimit = body.routing.fallbackOnRateLimit ?? true;
+      const fallbackOnError = body.routing.fallbackOnError ?? false;
+
+      const routing = { maxRetries, fallbackOnRateLimit, fallbackOnError };
+      saveConfig({ routing } as any);
+
+      if (this.config.onRoutingUpdate) {
+        this.config.onRoutingUpdate(routing as any);
+      }
+      return { success: true, routing };
     });
 
     this.app.get('/api/config/overrides', async () => {

@@ -96,6 +96,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
     modelChains: config.modelChains,
     taskOverrides: config.taskOverrides,
     modelCatalog,
+    routing: config.routing,
   });
 
 
@@ -229,6 +230,9 @@ export async function startGateway(projectRoot: string): Promise<void> {
     onSkillsReload: reloadSkills,
     onChainsUpdate: (chains) => {
       modelRouter.updateChains(chains);
+    },
+    onRoutingUpdate: (routing) => {
+      modelRouter.updateRouting(routing);
     },
     modelCatalog,
   });

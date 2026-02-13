@@ -243,6 +243,13 @@ export const ExecutionPermissionsSchema = z.object({
 });
 export type ExecutionPermissions = z.infer<typeof ExecutionPermissionsSchema>;
 
+export const RoutingConfigSchema = z.object({
+  maxRetries: z.number().int().min(1).max(10).default(5),
+  fallbackOnRateLimit: z.boolean().default(true),
+  fallbackOnError: z.boolean().default(false),
+});
+export type RoutingConfig = z.infer<typeof RoutingConfigSchema>;
+
 // ─── Agent Config ─────────────────────────────────────────────
 
 export const AdytumConfigSchema = z.object({
@@ -272,6 +279,11 @@ export const AdytumConfigSchema = z.object({
   skills: SkillsConfigSchema.optional(),
   execution: ExecutionPermissionsSchema.optional(),
   discord: DiscordConfigSchema.optional(),
+  routing: RoutingConfigSchema.default({
+    maxRetries: 5,
+    fallbackOnRateLimit: true,
+    fallbackOnError: false,
+  }),
 });
 export type AdytumConfig = z.infer<typeof AdytumConfigSchema>;
 

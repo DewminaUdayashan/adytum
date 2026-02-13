@@ -35,7 +35,7 @@ export class InnerMonologue {
 
     const { message } = await this.modelRouter.chat('fast', [
       { role: 'user', content: prompt },
-    ], { temperature: 0.4 });
+    ], { temperature: 0.4, fallbackRole: 'fast' as any });
 
     const reflection = redactSecrets(message.content || '');
     if (reflection.trim()) {

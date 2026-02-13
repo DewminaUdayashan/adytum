@@ -139,6 +139,11 @@ export function loadConfig(projectRoot?: string): AdytumConfig {
           ? fileExecution.approvalBaseUrl
           : process.env.ADYTUM_PUBLIC_URL,
     },
+    routing: {
+      maxRetries: Number((fileConfig as any)?.routing?.maxRetries ?? 5),
+      fallbackOnRateLimit: (fileConfig as any)?.routing?.fallbackOnRateLimit ?? true,
+      fallbackOnError: (fileConfig as any)?.routing?.fallbackOnError ?? false,
+    },
     skills: {
       enabled: (fileSkills.enabled as boolean | undefined) ?? envSkillsEnabled ?? true,
       allow: parseList(fileSkills.allow as string[] | string | undefined) || envSkillsAllow || [],
