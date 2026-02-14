@@ -1,6 +1,7 @@
 import { v4 as uuid } from 'uuid';
 import type { SecurityEvent, AgentLog } from '@adytum/shared';
 import { EventEmitter } from 'node:events';
+import { logger } from '../logger.js';
 
 export interface LogEntry {
   id: string;
@@ -16,6 +17,7 @@ export interface LogEntry {
  * Central audit logger. Emits events for:
  * - Real-time WebSocket streaming to dashboard
  * - Persistent storage to database
+ * - Structured logging to stdout via Pino
  */
 export class AuditLogger extends EventEmitter {
   private buffer: LogEntry[] = [];
@@ -27,6 +29,17 @@ export class AuditLogger extends EventEmitter {
       timestamp: Date.now(),
       ...entry,
     };
+
+    // Log to Pino for observability
+    logger.info(
+      {
+        traceId: full.traceId,
+        action: full.actionType,
+        status: full.status,
+        ...full.payload,
+      },
+      `Audit: ${full.actionType}`,
+    );
 
     this.buffer.push(full);
     this.emit('log', full);
@@ -72,11 +85,7 @@ export class AuditLogger extends EventEmitter {
     });
   }
 
-  logModelResponse(
-    traceId: string,
-    model: string,
-    tokenUsage?: LogEntry['tokenUsage'],
-  ): LogEntry {
+  logModelResponse(traceId: string, model: string, tokenUsage?: LogEntry['tokenUsage']): LogEntry {
     return this.log({
       traceId,
       actionType: 'model_response',

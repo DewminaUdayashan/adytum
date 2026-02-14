@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '@adytum/shared';
-import type { MemoryDB } from '../agent/memory-db.js';
+import type { MemoryDB } from '../infrastructure/repositories/memory-db.js';
 
 export function createPersonalityTools(memoryDb: MemoryDB): ToolDefinition[] {
   return [

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { clsx } from 'clsx';
-import { Brain, Zap, Cpu } from 'lucide-react';
+import { Brain, Zap, Cpu, type LucideIcon } from 'lucide-react';
 import { Select } from '@/components/ui';
 import { gatewayFetch } from '@/lib/api';
 
@@ -19,7 +19,7 @@ interface RolesConfig {
   defaultRole: string;
 }
 
-const ROLE_ICONS: Record<string, any> = {
+const ROLE_ICONS: Record<string, LucideIcon> = {
   thinking: Brain,
   fast: Zap,
   local: Cpu,
@@ -34,12 +34,14 @@ export function ChatModelSelector({
   const [config, setConfig] = useState<RolesConfig | null>(null);
 
   useEffect(() => {
-    gatewayFetch<{ roles: string[]; chains: Record<string, string[]>; defaultRole: string }>('/api/config/roles')
+    gatewayFetch<{ roles: string[]; chains: Record<string, string[]>; defaultRole: string }>(
+      '/api/config/roles',
+    )
       .then((data) => {
         setConfig(data);
         // Set initial model if needed
         if (!selectedModelId && data.chains[selectedRole]?.[0]) {
-           onModelChange(data.chains[selectedRole][0]);
+          onModelChange(data.chains[selectedRole][0]);
         }
       })
       .catch((err) => console.error('Failed to load roles config', err));
@@ -65,7 +67,7 @@ export function ChatModelSelector({
       description: provider || undefined,
     };
   });
-  
+
   return (
     <div className="flex items-center gap-3 py-1.5 px-1 animate-fade-in">
       {/* Role Pills */}
@@ -73,7 +75,7 @@ export function ChatModelSelector({
         {config.roles.map((role) => {
           const Icon = ROLE_ICONS[role] || Brain;
           const isActive = selectedRole === role;
-          
+
           return (
             <button
               key={role}
@@ -82,7 +84,7 @@ export function ChatModelSelector({
                 'flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-md transition-all',
                 isActive
                   ? 'bg-bg-primary text-text-primary shadow-sm ring-1 ring-border-primary'
-                  : 'text-text-tertiary hover:text-text-secondary hover:bg-bg-tertiary/50'
+                  : 'text-text-tertiary hover:text-text-secondary hover:bg-bg-tertiary/50',
               )}
             >
               <Icon size={12} className={clsx(isActive ? 'text-accent-primary' : 'opacity-70')} />

@@ -13,12 +13,16 @@ export const AdytumMessageSchema = z.object({
   channel: z.string().default('terminal'),
   timestamp: z.number(),
   metadata: z.record(z.unknown()).optional(),
-  attachments: z.array(z.object({
-    type: z.enum(['image', 'file', 'audio', 'video']),
-    url: z.string(),
-    name: z.string().optional(),
-    mimeType: z.string().optional(),
-  })).optional(),
+  attachments: z
+    .array(
+      z.object({
+        type: z.enum(['image', 'file', 'audio', 'video']),
+        url: z.string(),
+        name: z.string().optional(),
+        mimeType: z.string().optional(),
+      }),
+    )
+    .optional(),
 });
 export type AdytumMessage = z.infer<typeof AdytumMessageSchema>;
 
@@ -100,10 +104,19 @@ export const AgentLogSchema = z.object({
   traceId: z.string().uuid(),
   timestamp: z.number(),
   actionType: z.enum([
-    'model_call', 'model_response', 'tool_call', 'tool_result',
-    'thinking', 'message_sent', 'message_received',
-    'security_event', 'error', 'sub_agent_spawn', 'monologue_run',
-    'dreamer_run', 'soul_evolve'
+    'model_call',
+    'model_response',
+    'tool_call',
+    'tool_result',
+    'thinking',
+    'message_sent',
+    'message_received',
+    'security_event',
+    'error',
+    'sub_agent_spawn',
+    'monologue_run',
+    'dreamer_run',
+    'soul_evolve',
   ]),
   payload: z.record(z.unknown()),
   status: z.enum(['success', 'error', 'blocked', 'pending']),
@@ -114,8 +127,13 @@ export type AgentLog = z.infer<typeof AgentLogSchema>;
 // ─── Feedback ─────────────────────────────────────────────────
 
 export const FeedbackReasonSchema = z.enum([
-  'inaccurate', 'too_verbose', 'wrong_tone',
-  'security_overreach', 'slow', 'perfect', 'other',
+  'inaccurate',
+  'too_verbose',
+  'wrong_tone',
+  'security_overreach',
+  'slow',
+  'perfect',
+  'other',
 ]);
 export type FeedbackReason = z.infer<typeof FeedbackReasonSchema>;
 
@@ -132,7 +150,10 @@ export type UserFeedback = z.infer<typeof UserFeedbackSchema>;
 // ─── Security ─────────────────────────────────────────────────
 
 export const AccessModeSchema = z.enum([
-  'workspace_only', 'read_only', 'full_access', 'just_in_time',
+  'workspace_only',
+  'read_only',
+  'full_access',
+  'just_in_time',
 ]);
 export type AccessMode = z.infer<typeof AccessModeSchema>;
 
@@ -225,10 +246,12 @@ export const SkillsConfigSchema = z.object({
   enabled: z.boolean().default(true),
   allow: z.array(z.string()).default([]),
   deny: z.array(z.string()).default([]),
-  load: z.object({
-    paths: z.array(z.string()).default([]),
-    extraDirs: z.array(z.string()).default([]),
-  }).optional(),
+  load: z
+    .object({
+      paths: z.array(z.string()).default([]),
+      extraDirs: z.array(z.string()).default([]),
+    })
+    .optional(),
   permissions: SkillsPermissionsSchema.optional(),
   entries: z.record(SkillEntryConfigSchema).default({}),
 });
@@ -266,9 +289,11 @@ export const AdytumConfigSchema = z.object({
     local: [],
   }),
   taskOverrides: z.record(z.string(), z.string()).default({}), // taskName -> modelId/chainId
-  soul: z.object({
-    autoUpdate: z.boolean().default(true),
-  }).default({ autoUpdate: true }),
+  soul: z
+    .object({
+      autoUpdate: z.boolean().default(true),
+    })
+    .default({ autoUpdate: true }),
   litellmPort: z.number().default(4000),
   gatewayPort: z.number().default(3001),
   dashboardPort: z.number().default(3000),

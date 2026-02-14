@@ -46,9 +46,7 @@ export function MarkdownRenderer({
 
         if (block.kind === 'paragraph') {
           return (
-            <p key={`p-${index}`}>
-              {renderInlineMarkdown(block.text, variant, `p-${index}`)}
-            </p>
+            <p key={`p-${index}`}>{renderInlineMarkdown(block.text, variant, `p-${index}`)}</p>
           );
         }
 
@@ -157,7 +155,11 @@ export function MarkdownRenderer({
   );
 }
 
-function renderInlineMarkdown(text: string, variant: MarkdownVariant, keyPrefix: string): ReactNode[] {
+function renderInlineMarkdown(
+  text: string,
+  variant: MarkdownVariant,
+  keyPrefix: string,
+): ReactNode[] {
   const nodes: ReactNode[] = [];
   let cursor = 0;
   let tokenIndex = 0;
@@ -200,9 +202,7 @@ function renderInlineToken(
         key={key}
         className={clsx(
           'rounded px-1 py-0.5 font-mono text-[12px]',
-          variant === 'user'
-            ? 'bg-white/15 text-white'
-            : 'bg-bg-tertiary text-text-primary',
+          variant === 'user' ? 'bg-white/15 text-white' : 'bg-bg-tertiary text-text-primary',
         )}
       >
         {token.slice(1, -1)}
@@ -219,8 +219,8 @@ function renderInlineToken(
   }
 
   if (
-    (token.startsWith('**') && token.endsWith('**'))
-    || (token.startsWith('__') && token.endsWith('__'))
+    (token.startsWith('**') && token.endsWith('**')) ||
+    (token.startsWith('__') && token.endsWith('__'))
   ) {
     return (
       <strong key={key} className="font-semibold">
@@ -229,7 +229,10 @@ function renderInlineToken(
     );
   }
 
-  if ((token.startsWith('*') && token.endsWith('*')) || (token.startsWith('_') && token.endsWith('_'))) {
+  if (
+    (token.startsWith('*') && token.endsWith('*')) ||
+    (token.startsWith('_') && token.endsWith('_'))
+  ) {
     return (
       <em key={key} className="italic">
         {renderInlineMarkdown(token.slice(1, -1), variant, `${key}-italic`)}

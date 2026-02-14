@@ -1,4 +1,5 @@
-# 🌌 Adytum 
+# 🌌 Adytum
+
 ### The Intelligence Layer for your Digital Workspace
 
 [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
@@ -12,10 +13,10 @@ Adytum is a **self-hosted, autonomous AI agent** that lives in your local machin
 
 Adytum isn't just a tool—it's a **digital companion**.
 
--   **Your AI Buddy**: Think of Adytum as a pet or a sidekick that lives in your computer. It's not just a command-line utility; it has a presence.
--   **Independent Personality**: As it works with you, Adytum builds its own personality (defined in `SOUL.md`). It doesn't just reply; it *thinks*, *reflects*, and *grows* alongside you.
--   **Proactive Autonomy**: It doesn't wait for orders. Adytum independently manages its own goals (`HEARTBEAT.md`), organizes its memory, and suggests actions to help you be more productive.
--   **Privacy Centric**: Your data stays where it belongs—on your machine. Use Local LLMs (Ollama) for maximum privacy.
+- **Your AI Buddy**: Think of Adytum as a pet or a sidekick that lives in your computer. It's not just a command-line utility; it has a presence.
+- **Independent Personality**: As it works with you, Adytum builds its own personality (defined in `SOUL.md`). It doesn't just reply; it _thinks_, _reflects_, and _grows_ alongside you.
+- **Proactive Autonomy**: It doesn't wait for orders. Adytum independently manages its own goals (`HEARTBEAT.md`), organizes its memory, and suggests actions to help you be more productive.
+- **Privacy Centric**: Your data stays where it belongs—on your machine. Use Local LLMs (Ollama) for maximum privacy.
 
 ---
 
@@ -24,22 +25,25 @@ Adytum isn't just a tool—it's a **digital companion**.
 The fastest way to get Adytum up and running is our zero-config setup script:
 
 1.  **Clone the Repository**:
+
     ```bash
     git clone https://github.com/dewminaudayashan/adytum.git
     cd adytum
     ```
 
 2.  **Run the Installer**:
+
     ```bash
     sh install.sh
     ```
-    *This script will install dependencies, build the ecosystem, and guide you through the **Birth Protocol** (initial configuration).*
+
+    _This script will install dependencies, build the ecosystem, and guide you through the **Birth Protocol** (initial configuration)._
 
 3.  **Start the Ecosystem**:
     ```bash
     adytum start
     ```
-    *This will launch the AI Gateway, the Web Dashboard, and open your browser automatically to `http://localhost:3002`.*
+    _This will launch the AI Gateway, the Web Dashboard, and open your browser automatically to `http://localhost:3002`._
 
 ---
 
@@ -47,13 +51,13 @@ The fastest way to get Adytum up and running is our zero-config setup script:
 
 Adytum comes with a powerful global CLI to manage your agent from any terminal.
 
-| Command | Description |
-| :--- | :--- |
-| `adytum init` | Re-run the Birth Protocol to configure keys and settings. |
-| `adytum start` | Launch the Gateway + Dashboard and open the browser. |
-| `adytum update` | Pull latest patches from Git and rebuild everything. |
-| `adytum status` | Check system health, token usage, and active models. |
-| `adytum reset` | **DANGER**: Wipes all configuration and local memory. |
+| Command         | Description                                               |
+| :-------------- | :-------------------------------------------------------- |
+| `adytum init`   | Re-run the Birth Protocol to configure keys and settings. |
+| `adytum start`  | Launch the Gateway + Dashboard and open the browser.      |
+| `adytum update` | Pull latest patches from Git and rebuild everything.      |
+| `adytum status` | Check system health, token usage, and active models.      |
+| `adytum reset`  | **DANGER**: Wipes all configuration and local memory.     |
 
 ---
 
@@ -62,10 +66,12 @@ Adytum comes with a powerful global CLI to manage your agent from any terminal.
 Adytum is as smart as you make it. Use the **Dashboard** to manage your agent's capabilities.
 
 ### Adding Skills
+
 - **Instructions**: Drop a folder with a `SKILL.md` file into the `skills/` directory.
 - **Plugins**: Create functional plugins with `adytum.plugin.json` to integrate with external APIs.
 
 ### Configuring Skills
+
 1.  Navigate to the **Skills** page in the Dashboard.
 2.  Select a skill to see its documentation.
 3.  Set its **Secrets** (API Keys, tokens) directly in the UI. They are stored securely in your local `.env` file.
@@ -95,4 +101,5 @@ Use the **Models** page in the Dashboard to test connections and switch active r
 ---
 
 ## 📄 License
+
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

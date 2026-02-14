@@ -1,12 +1,7 @@
 ---
 name: web-search
 description: Lightweight web search and surf using DuckDuckGo (no API key) or Serper (Google, requires API key).
-metadata:
-  {
-    "communication": false,
-    "requires": { "bins": [] },
-    "install": []
-  }
+metadata: { 'communication': false, 'requires': { 'bins': [] }, 'install': [] }
 ---
 
 # Web Search

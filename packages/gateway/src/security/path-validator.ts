@@ -51,7 +51,7 @@ export class PathValidator {
           const realParent = realpathSync(parent);
           resolved = resolve(realParent, basename(resolved));
         } catch {
-           // Parent might be restricted or invalid, let specific checks handle it
+          // Parent might be restricted or invalid, let specific checks handle it
         }
       }
     }
@@ -59,11 +59,11 @@ export class PathValidator {
     // 3. Blacklist Check (Critical Config Files)
     // We block writing to these files to prevent privilege escalation or breaking the agent.
     if (this.isCriticalPath(resolved) && operation === 'write') {
-        throw new PathSecurityError(
-            `Access denied: "${basename(resolved)}" is a critical system file and cannot be modified.`,
-            resolved,
-            'critical_file'
-        );
+      throw new PathSecurityError(
+        `Access denied: "${basename(resolved)}" is a critical system file and cannot be modified.`,
+        resolved,
+        'critical_file',
+      );
     }
 
     // 4. Sensitive System Path Check
@@ -128,9 +128,14 @@ export class PathValidator {
 
   private isSensitivePath(p: string): boolean {
     const sensitive = [
-      '/etc/shadow', '/etc/passwd', '/etc/sudoers',
-      '/root', '/private/etc',
-      '.ssh', '.gnupg', '.aws/credentials',
+      '/etc/shadow',
+      '/etc/passwd',
+      '/etc/sudoers',
+      '/root',
+      '/private/etc',
+      '.ssh',
+      '.gnupg',
+      '.aws/credentials',
     ];
     const lower = p.toLowerCase();
     return sensitive.some((s) => lower.includes(s));

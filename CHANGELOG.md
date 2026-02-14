@@ -3,7 +3,9 @@
 All notable changes to this project will be documented in this file.
 
 ## [0.2.0] - 2026-02-10
+
 ### Added
+
 - **Dashboard**: Next.js 15 + Tailwind CSS v4 dashboard with dark glassmorphism theme.
 - **Activity Feed** (`/`): Real-time social feed of agent actions with type filters, expandable payloads, and inline feedback.
 - **Live Console** (`/console`): WebSocket-powered stream of reasoning, tool calls, and model responses with pause/resume.
@@ -19,11 +21,14 @@ All notable changes to this project will be documented in this file.
 - **CORS Support**: `@fastify/cors` configured for dashboard-to-gateway communication.
 
 ### Changed
+
 - Removed unused `ink` and `react@18` dependencies from gateway to resolve React version conflict with dashboard's React 19.
 - Added `dev:dashboard` script to root `package.json`.
 
 ## [0.1.0] - 2026-02-10
+
 ### Added
+
 - **Birth Protocol**: Cinematic CLI initialization sequence with ASCII animations.
 - **Monorepo Scaffold**: Established `packages/shared` and `packages/gateway`.
 - **Agent Runtime**: ReAct reasoning loop with tool registry and streaming support.

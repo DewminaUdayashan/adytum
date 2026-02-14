@@ -69,7 +69,13 @@ interface PageReport {
 
 const WebSearchSchema = z.object({
   query: z.string().min(2).describe('Search query'),
-  maxResults: z.number().int().min(1).max(20).optional().describe('Maximum number of search results'),
+  maxResults: z
+    .number()
+    .int()
+    .min(1)
+    .max(20)
+    .optional()
+    .describe('Maximum number of search results'),
   focusDomains: z
     .array(z.string())
     .optional()
@@ -88,7 +94,13 @@ const WebFetchPageSchema = z.object({
 const WebSurfSchema = z.object({
   query: z.string().min(2).describe('Research query'),
   goal: z.string().optional().describe('Optional research intent to guide rotations'),
-  rotations: z.number().int().min(1).max(6).optional().describe('How many search rotations to perform'),
+  rotations: z
+    .number()
+    .int()
+    .min(1)
+    .max(6)
+    .optional()
+    .describe('How many search rotations to perform'),
   maxResults: z.number().int().min(1).max(20).optional().describe('Results per rotation'),
   maxPages: z.number().int().min(1).max(12).optional().describe('How many pages to open and read'),
   maxChars: z
@@ -102,16 +114,16 @@ const WebSurfSchema = z.object({
     .boolean()
     .default(false)
     .describe('Include full extracted text in the response (can be large)'),
-  focusDomains: z
-    .array(z.string())
-    .optional()
-    .describe('Optional domain allowlist for this run'),
+  focusDomains: z.array(z.string()).optional().describe('Optional domain allowlist for this run'),
 });
 
 class WebSurfEngine {
   private config: WebSurfConfig;
 
-  constructor(rawConfig: unknown, private logger: WebLogger) {
+  constructor(
+    rawConfig: unknown,
+    private logger: WebLogger,
+  ) {
     this.config = resolveConfig(rawConfig);
   }
 
@@ -120,12 +132,7 @@ class WebSurfEngine {
   }
 
   async searchOnly(args: z.infer<typeof WebSearchSchema>): Promise<any> {
-    const maxResults = clampInteger(
-      args.maxResults,
-      1,
-      20,
-      this.config.defaultMaxResults,
-    );
+    const maxResults = clampInteger(args.maxResults, 1, 20, this.config.defaultMaxResults);
 
     const searchReport = await this.searchWithFallback(args.query, maxResults);
     const filtered = this.filterResultsByDomains(searchReport.results, args.focusDomains);
@@ -163,24 +170,9 @@ class WebSurfEngine {
   }
 
   async surf(args: z.infer<typeof WebSurfSchema>): Promise<any> {
-    const rotations = clampInteger(
-      args.rotations,
-      1,
-      6,
-      this.config.defaultRotations,
-    );
-    const maxResults = clampInteger(
-      args.maxResults,
-      1,
-      20,
-      this.config.defaultMaxResults,
-    );
-    const maxPages = clampInteger(
-      args.maxPages,
-      1,
-      12,
-      this.config.defaultMaxPages,
-    );
+    const rotations = clampInteger(args.rotations, 1, 6, this.config.defaultRotations);
+    const maxResults = clampInteger(args.maxResults, 1, 20, this.config.defaultMaxResults);
+    const maxPages = clampInteger(args.maxPages, 1, 12, this.config.defaultMaxPages);
     const maxCharsBudget = clampInteger(
       args.maxChars,
       2_000,
@@ -268,10 +260,7 @@ class WebSurfEngine {
       return `${header}\n\n${page.content || page.excerpt}`;
     });
 
-    if (
-      !args.includeRawText &&
-      this.config.includeSearchSnippetsInContext
-    ) {
+    if (!args.includeRawText && this.config.includeSearchSnippetsInContext) {
       const snippetBlocks = candidates
         .slice(0, maxPages)
         .map((candidate, index) => {
@@ -317,10 +306,7 @@ class WebSurfEngine {
 
   private async searchWithFallback(query: string, limit: number): Promise<SearchReport> {
     const preferred = this.config.searchProvider;
-    const order = [
-      preferred,
-      ...SEARCH_PROVIDERS.filter((provider) => provider !== preferred),
-    ];
+    const order = [preferred, ...SEARCH_PROVIDERS.filter((provider) => provider !== preferred)];
 
     const warnings: string[] = [];
 
@@ -382,7 +368,8 @@ class WebSurfEngine {
     }
 
     const html = await response.text();
-    const anchors = /<a[^>]*class=\"[^\"]*result__a[^\"]*\"[^>]*href=\"([^\"]+)\"[^>]*>([\s\S]*?)<\/a>/gi;
+    const anchors =
+      /<a[^>]*class=\"[^\"]*result__a[^\"]*\"[^>]*href=\"([^\"]+)\"[^>]*>([\s\S]*?)<\/a>/gi;
 
     const results: SearchResult[] = [];
     const seen = new Set<string>();
@@ -615,7 +602,9 @@ class WebSurfEngine {
       return { ok: false, error: `Blocked private/local host: ${domain}` };
     }
 
-    const blocked = this.config.blockedDomains.map((entry) => normalizeDomain(entry)).filter(Boolean);
+    const blocked = this.config.blockedDomains
+      .map((entry) => normalizeDomain(entry))
+      .filter(Boolean);
     if (blocked.length > 0 && matchesDomainList(domain, blocked)) {
       return { ok: false, error: `Blocked domain: ${domain}` };
     }
@@ -649,7 +638,11 @@ function resolveConfig(rawConfig: unknown): WebSurfConfig {
   };
 }
 
-function buildRotationQueries(query: string, goal: string | undefined, rotations: number): string[] {
+function buildRotationQueries(
+  query: string,
+  goal: string | undefined,
+  rotations: number,
+): string[] {
   const base = query.trim();
   if (!base) return [];
 
@@ -718,11 +711,7 @@ function safeHostname(rawUrl: string): string | null {
 }
 
 function normalizeDomain(domain: string): string {
-  return domain
-    .trim()
-    .toLowerCase()
-    .replace(/^\.+/, '')
-    .replace(/\.+$/, '');
+  return domain.trim().toLowerCase().replace(/^\.+/, '').replace(/\.+$/, '');
 }
 
 function matchesDomainList(domain: string, list: string[]): boolean {
@@ -778,9 +767,7 @@ function extractTitle(input: string): string | undefined {
 }
 
 function cleanTextFragment(value: string): string {
-  return decodeHtmlEntities(value)
-    .replace(/\s+/g, ' ')
-    .trim();
+  return decodeHtmlEntities(value).replace(/\s+/g, ' ').trim();
 }
 
 function decodeHtmlEntities(value: string): string {
@@ -826,7 +813,8 @@ function readEnv(key: string): string | undefined {
 const webSurfPlugin = {
   id: 'web-surf',
   name: 'Web Surf',
-  description: 'Autonomous web research skill with search + crawl + configurable extraction budgets.',
+  description:
+    'Autonomous web research skill with search + crawl + configurable extraction budgets.',
 
   register(api: any) {
     const engine = new WebSurfEngine(api.pluginConfig, api.logger);

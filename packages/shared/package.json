@@ -8,16 +8,19 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "main": "dist/index.js"
     }
   },
   "scripts": {
-    "build": "tsc",
-    "dev": "tsc --watch"
+    "build": "tsc --build",
+    "dev": "tsc --watch",
+    "clean": "rm -rf dist node_modules tsconfig.tsbuildinfo",
+    "test": "vitest run"
   },
   "dependencies": {
-    "drizzle-orm": "^0.38.0",
-    "zod": "^3.24.0"
+    "drizzle-orm": "^0.39.1",
+    "zod": "^3.24.1"
   },
   "devDependencies": {
     "typescript": "^5.7.0"

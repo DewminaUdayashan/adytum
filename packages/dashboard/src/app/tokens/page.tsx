@@ -79,8 +79,12 @@ export default function TokensPage() {
     <div className="flex flex-col h-full animate-fade-in">
       {/* Header */}
       <div className="px-8 pt-8 pb-2">
-        <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted font-medium">Analytics</p>
-        <h1 className="text-2xl font-semibold text-text-primary tracking-tight mt-1">Token Usage</h1>
+        <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted font-medium">
+          Analytics
+        </p>
+        <h1 className="text-2xl font-semibold text-text-primary tracking-tight mt-1">
+          Token Usage
+        </h1>
       </div>
 
       <div className="flex-1 overflow-auto px-8 py-6 space-y-6">
@@ -89,14 +93,18 @@ export default function TokensPage() {
           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
             <div className="space-y-1">
               <p className="text-sm font-semibold text-text-primary">Filters</p>
-              <p className="text-xs text-text-muted">Default shows all daily usage. Narrow by date to focus analysis.</p>
+              <p className="text-xs text-text-muted">
+                Default shows all daily usage. Narrow by date to focus analysis.
+              </p>
               <p className="text-[11px] text-text-tertiary flex items-center gap-1">
                 <Calendar size={12} /> Range: {rangeLabel}
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
               <div className="flex flex-col">
-                <label className="text-[11px] uppercase text-text-muted font-medium mb-1">From</label>
+                <label className="text-[11px] uppercase text-text-muted font-medium mb-1">
+                  From
+                </label>
                 <input
                   type="date"
                   value={dateFrom}
@@ -185,23 +193,46 @@ export default function TokensPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="border-b border-border-primary bg-bg-tertiary/30">
-                    <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Date</th>
-                    <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Model</th>
-                    <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Role</th>
-                    <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Calls</th>
-                    <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Tokens</th>
-                    <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Cost</th>
+                    <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                      Date
+                    </th>
+                    <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                      Model
+                    </th>
+                    <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                      Role
+                    </th>
+                    <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                      Calls
+                    </th>
+                    <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                      Tokens
+                    </th>
+                    <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                      Cost
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
                   {daily.map((d, i) => (
-                    <tr key={i} className="border-b border-border-primary/50 hover:bg-bg-secondary/30 transition-colors">
+                    <tr
+                      key={i}
+                      className="border-b border-border-primary/50 hover:bg-bg-secondary/30 transition-colors"
+                    >
                       <td className="px-4 py-2.5 text-text-primary text-[13px]">{d.date}</td>
                       <td className="px-4 py-2.5 text-text-secondary text-[13px]">{d.model}</td>
-                      <td className="px-4 py-2.5"><Badge>{d.role}</Badge></td>
-                      <td className="px-4 py-2.5 text-right text-text-secondary text-[13px]">{d.calls.toLocaleString()}</td>
-                      <td className="px-4 py-2.5 text-right text-text-primary text-[13px]">{d.tokens.toLocaleString()}</td>
-                      <td className="px-4 py-2.5 text-right text-success text-[13px] font-medium">${d.cost.toFixed(4)}</td>
+                      <td className="px-4 py-2.5">
+                        <Badge>{d.role}</Badge>
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-text-secondary text-[13px]">
+                        {d.calls.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-text-primary text-[13px]">
+                        {d.tokens.toLocaleString()}
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-success text-[13px] font-medium">
+                        ${d.cost.toFixed(4)}
+                      </td>
                     </tr>
                   ))}
                 </tbody>
@@ -219,31 +250,65 @@ export default function TokensPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-border-primary bg-bg-tertiary/30">
-                      <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Time</th>
-                      <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Model</th>
-                      <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Role</th>
-                      <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Session</th>
-                      <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Prompt</th>
-                      <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Completion</th>
-                      <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Total</th>
-                      <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">Cost</th>
+                      <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                        Time
+                      </th>
+                      <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                        Model
+                      </th>
+                      <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                        Role
+                      </th>
+                      <th className="text-left px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                        Session
+                      </th>
+                      <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                        Prompt
+                      </th>
+                      <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                        Completion
+                      </th>
+                      <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                        Total
+                      </th>
+                      <th className="text-right px-4 py-2.5 text-[11px] font-semibold text-text-muted uppercase tracking-wider">
+                        Cost
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {recent.slice().reverse().map((r, i) => (
-                      <tr key={i} className="border-b border-border-primary/50 hover:bg-bg-secondary/30 transition-colors">
-                        <td className="px-4 py-2.5 text-text-muted text-[11px] font-mono">
-                          {new Date(r.timestamp).toLocaleString()}
-                        </td>
-                        <td className="px-4 py-2.5 text-text-primary text-[13px]">{r.model}</td>
-                        <td className="px-4 py-2.5"><Badge>{r.role}</Badge></td>
-                        <td className="px-4 py-2.5 text-text-tertiary text-[12px] font-mono truncate max-w-[140px]">{r.sessionId}</td>
-                        <td className="px-4 py-2.5 text-right text-text-secondary text-[13px]">{r.promptTokens.toLocaleString()}</td>
-                        <td className="px-4 py-2.5 text-right text-text-secondary text-[13px]">{r.completionTokens.toLocaleString()}</td>
-                        <td className="px-4 py-2.5 text-right text-text-primary text-[13px] font-medium">{r.totalTokens.toLocaleString()}</td>
-                        <td className="px-4 py-2.5 text-right text-success text-[13px] font-medium">${r.estimatedCost.toFixed(4)}</td>
-                      </tr>
-                    ))}
+                    {recent
+                      .slice()
+                      .reverse()
+                      .map((r, i) => (
+                        <tr
+                          key={i}
+                          className="border-b border-border-primary/50 hover:bg-bg-secondary/30 transition-colors"
+                        >
+                          <td className="px-4 py-2.5 text-text-muted text-[11px] font-mono">
+                            {new Date(r.timestamp).toLocaleString()}
+                          </td>
+                          <td className="px-4 py-2.5 text-text-primary text-[13px]">{r.model}</td>
+                          <td className="px-4 py-2.5">
+                            <Badge>{r.role}</Badge>
+                          </td>
+                          <td className="px-4 py-2.5 text-text-tertiary text-[12px] font-mono truncate max-w-[140px]">
+                            {r.sessionId}
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-text-secondary text-[13px]">
+                            {r.promptTokens.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-text-secondary text-[13px]">
+                            {r.completionTokens.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-text-primary text-[13px] font-medium">
+                            {r.totalTokens.toLocaleString()}
+                          </td>
+                          <td className="px-4 py-2.5 text-right text-success text-[13px] font-medium">
+                            ${r.estimatedCost.toFixed(4)}
+                          </td>
+                        </tr>
+                      ))}
                   </tbody>
                 </table>
               </div>
@@ -271,7 +336,9 @@ function MiniStat({
           <Icon className="h-[18px] w-[18px]" />
         </div>
         <div>
-          <p className="text-[11px] text-text-muted font-medium uppercase tracking-wider">{label}</p>
+          <p className="text-[11px] text-text-muted font-medium uppercase tracking-wider">
+            {label}
+          </p>
           <p className="text-lg font-semibold text-text-primary leading-tight">{value}</p>
         </div>
       </div>

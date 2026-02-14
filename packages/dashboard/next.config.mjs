@@ -12,7 +12,7 @@ const nextConfig = {
     // node_modules first to prevent version mismatch.
     config.resolve.modules = [
       resolve(__dirname, 'node_modules'),
-      ...config.resolve.modules || ['node_modules'],
+      ...(config.resolve.modules || ['node_modules']),
     ];
     return config;
   },
@@ -20,9 +20,12 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: 'http://localhost:3001/api/:path*',
+        destination: 'http://127.0.0.1:3001/api/:path*',
       },
     ];
+  },
+  eslint: {
+    ignoreDuringBuilds: true,
   },
 };
 

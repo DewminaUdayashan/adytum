@@ -23,7 +23,10 @@ const GetPageSchema = z.object({
 const CreatePageSchema = z.object({
   title: z.string().min(1).describe('Page title'),
   parentId: z.string().optional().describe('Parent page id; falls back to defaultParentPageId'),
-  databaseId: z.string().optional().describe('Database id to create in; falls back to defaultDatabaseId'),
+  databaseId: z
+    .string()
+    .optional()
+    .describe('Database id to create in; falls back to defaultDatabaseId'),
   properties: z.record(z.unknown()).optional().describe('Optional Notion properties JSON'),
   children: z.array(z.record(z.unknown())).optional().describe('Optional block children array'),
 });
@@ -49,17 +52,19 @@ const notionPlugin = {
       name: 'notion_search',
       description: 'Search pages and databases in Notion.',
       parameters: SearchSchema,
-      execute: (args: z.infer<typeof SearchSchema>) => request(cfg, api, '/v1/search', 'POST', {
-        query: args.query,
-        page_size: args.pageSize,
-      }),
+      execute: (args: z.infer<typeof SearchSchema>) =>
+        request(cfg, api, '/v1/search', 'POST', {
+          query: args.query,
+          page_size: args.pageSize,
+        }),
     });
 
     api.registerTool({
       name: 'notion_get_page',
       description: 'Get a Notion page by id.',
       parameters: GetPageSchema,
-      execute: (args: z.infer<typeof GetPageSchema>) => request(cfg, api, `/v1/pages/${normalizeId(args.pageId)}`, 'GET'),
+      execute: (args: z.infer<typeof GetPageSchema>) =>
+        request(cfg, api, `/v1/pages/${normalizeId(args.pageId)}`, 'GET'),
     });
 
     api.registerTool({
@@ -119,7 +124,10 @@ function normalizeId(id: string | undefined): string | undefined {
 async function request(cfg: Cfg, api: any, path: string, method: string, body?: unknown) {
   const apiKey = cfg.apiKey || api.pluginConfig?.apiKey || process.env.NOTION_API_KEY;
   if (!apiKey) {
-    return { error: 'Missing NOTION_API_KEY', guidance: 'Set skills.entries.notion.apiKey or env NOTION_API_KEY' };
+    return {
+      error: 'Missing NOTION_API_KEY',
+      guidance: 'Set skills.entries.notion.apiKey or env NOTION_API_KEY',
+    };
   }
 
   const headers: Record<string, string> = {
@@ -144,7 +152,7 @@ async function request(cfg: Cfg, api: any, path: string, method: string, body?: 
   }
 
   if (!res.ok) {
-    return { error: `Notion API ${res.status}: ${res.statusText}`, detail: json }; 
+    return { error: `Notion API ${res.status}: ${res.statusText}`, detail: json };
   }
 
   return json;

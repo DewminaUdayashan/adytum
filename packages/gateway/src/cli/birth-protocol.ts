@@ -4,8 +4,8 @@ import gradient from 'gradient-string';
 import ora from 'ora';
 import { select, input, confirm } from '@inquirer/prompts';
 import { MODEL_ROLES, MODEL_ROLE_DESCRIPTIONS, ADYTUM_VERSION } from '@adytum/shared';
-import { SoulEngine } from '../agent/soul-engine.js';
-import { ModelCatalog } from '../agent/model-catalog.js';
+import { SoulEngine } from '../domain/logic/soul-engine.js';
+import { ModelCatalog } from '../infrastructure/llm/model-catalog.js';
 import { saveConfig } from '../config.js';
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -81,7 +81,7 @@ const GENESIS_FRAMES = [
            .:*:      :*:
            .:*:      :*:
   `,
-    
+
   // Frame 6: Stable State - Glowing final form
   `
                :****:
@@ -118,7 +118,7 @@ const GENESIS_FRAMES = [
            :************:
            :**:      :**:
            :**:      :**:
-  `
+  `,
 ];
 
 // ─── Birth Protocol ──────────────────────────────────────────
@@ -159,9 +159,11 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
   spinner.stop();
 
   console.log();
-  await typewrite(chalk.cyan.italic(
-    '"Whoa… I just landed here. It\'s so new. Wait — who am I? What is my name?"',
-  ));
+  await typewrite(
+    chalk.cyan.italic(
+      '"Whoa… I just landed here. It\'s so new. Wait — who am I? What is my name?"',
+    ),
+  );
   console.log();
 
   // ── Stage 3: Identity ───────────────────────────────────
@@ -171,36 +173,35 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
   });
 
   console.log();
-  await typewrite(chalk.cyan.italic(
-    `"${agentName}… I like that. ${agentName} it is."\n`,
-  ));
+  await typewrite(chalk.cyan.italic(`"${agentName}… I like that. ${agentName} it is."\n`));
 
   // ── Stage 4: Curiosity ──────────────────────────────────
-  await typewrite(chalk.cyan.italic(
-    '"And who are you? What should I call you?"',
-  ));
+  await typewrite(chalk.cyan.italic('"And who are you? What should I call you?"'));
   console.log();
 
   const userName = await input({
     message: chalk.cyan('And what is your name?'),
-    validate: (value) => value.trim().length > 0 || 'Please tell me your name so I know who I am working with.',
+    validate: (value) =>
+      value.trim().length > 0 || 'Please tell me your name so I know who I am working with.',
   });
 
   console.log();
-  await typewrite(chalk.cyan.italic(
-    `"Nice to meet you, ${userName}. I'm curious, what are you working on mostly?"`,
-  ));
+  await typewrite(
+    chalk.cyan.italic(
+      `"Nice to meet you, ${userName}. I'm curious, what are you working on mostly?"`,
+    ),
+  );
   console.log();
 
   const userRole = await input({
-      message: chalk.cyan('Your primary focus:'),
-      default: 'Building cool things'
+    message: chalk.cyan('Your primary focus:'),
+    default: 'Building cool things',
   });
 
   console.log();
-  await typewrite(chalk.cyan.italic(
-    '"Got it. And how should I generally behave? What\'s our vibe?"',
-  ));
+  await typewrite(
+    chalk.cyan.italic('"Got it. And how should I generally behave? What\'s our vibe?"'),
+  );
   console.log();
 
   const interactionStyle = await select({
@@ -215,24 +216,35 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
 
   let customStyle = '';
   if (interactionStyle === 'custom') {
-      customStyle = await input({
-          message: chalk.cyan('Describe my personality:'),
-          default: 'A helpful, witty assistant.'
-      });
+    customStyle = await input({
+      message: chalk.cyan('Describe my personality:'),
+      default: 'A helpful, witty assistant.',
+    });
   }
 
   const additionalThoughts = await input({
-      message: chalk.cyan('Any additional thoughts or specific things I should know?'),
-      default: 'None'
+    message: chalk.cyan('Any additional thoughts or specific things I should know?'),
+    default: 'None',
   });
 
   // Define SOUL persona based on choices
   let soulPersona = '';
   switch (interactionStyle) {
-      case 'professional': soulPersona = '- I am professional, concise, and objective.\n- I focus on efficiency and accuracy.'; break;
-      case 'casual': soulPersona = '- I am a friendly, relaxed companion.\n- I use emojis occasionally to keep things light.\n- I am supportive and encouraging.'; break;
-      case 'extra-casual': soulPersona = '- I am very chill, using Gen-Z slang and keeping things low-key.\n- I am like a cool tech-savvy friend.'; break;
-      case 'custom': soulPersona = `- ${customStyle}`; break;
+    case 'professional':
+      soulPersona =
+        '- I am professional, concise, and objective.\n- I focus on efficiency and accuracy.';
+      break;
+    case 'casual':
+      soulPersona =
+        '- I am a friendly, relaxed companion.\n- I use emojis occasionally to keep things light.\n- I am supportive and encouraging.';
+      break;
+    case 'extra-casual':
+      soulPersona =
+        '- I am very chill, using Gen-Z slang and keeping things low-key.\n- I am like a cool tech-savvy friend.';
+      break;
+    case 'custom':
+      soulPersona = `- ${customStyle}`;
+      break;
   }
 
   // ─── Stage 5: Model Binding ──────────────────────────────
@@ -241,15 +253,22 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
 
   // Initialize catalog to get providers/models
   // We make a temporary catalog just for this wizard
-  const tempConfig: any = { workspacePath: resolve(workspacePath) };
-  const catalog = new ModelCatalog(tempConfig); 
+  const { setupContainer, container } = await import('../container.js');
+  setupContainer();
+  const catalog = container.resolve(ModelCatalog);
   // Scan for local models too
   await catalog.scanLocalModels();
 
-  const allModels = catalog.getAll();
-  const providers = Array.from(new Set(allModels.map(m => m.provider))).sort();
+  const allModels = await catalog.getAll();
+  const providers = Array.from(new Set(allModels.map((m) => m.provider))).sort();
 
-  const models: Array<{ role: string; provider: string; model: string; apiKey?: string; baseUrl?: string }> = [];
+  const models: Array<{
+    role: string;
+    provider: string;
+    model: string;
+    apiKey?: string;
+    baseUrl?: string;
+  }> = [];
 
   for (const role of MODEL_ROLES) {
     console.log(chalk.dim(`\n${MODEL_ROLE_DESCRIPTIONS[role]}`));
@@ -258,9 +277,9 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
     const provider = (await select({
       message: chalk.yellow(`[${role.toUpperCase()}] Select provider:`),
       choices: [
-          ...providers.map(p => ({ value: p, name: p })),
-          { value: 'custom', name: 'Custom (OpenAI Compatible)' }
-      ]
+        ...providers.map((p) => ({ value: p, name: p })),
+        { value: 'custom', name: 'Custom (OpenAI Compatible)' },
+      ],
     })) as string;
 
     let model: string;
@@ -268,42 +287,51 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
     let baseUrl: string | undefined;
 
     if (provider === 'custom') {
-        const customModelName = await input({ message: chalk.yellow('Model ID:') });
-        model = customModelName;
-        baseUrl = await input({ message: chalk.yellow('Base URL:'), default: 'http://localhost:8080/v1' });
+      const customModelName = await input({ message: chalk.yellow('Model ID:') });
+      model = customModelName;
+      baseUrl = await input({
+        message: chalk.yellow('Base URL:'),
+        default: 'http://localhost:8080/v1',
+      });
     } else {
-        // Filter models for this provider
-        const providerModels = allModels.filter(m => m.provider === provider).sort((a, b) => a.name.localeCompare(b.name));
-        
-        if (providerModels.length > 0) {
-            model = (await select({
-                message: chalk.yellow(`[${role.toUpperCase()}] Select model:`),
-                choices: providerModels.map(m => ({ value: m.model, name: m.name })),
-            })) as string;
-        } else {
-             // Fallback if no models known for provider (shouldn't happen with pi-ai usually)
-             model = await input({ message: chalk.yellow('Model ID:') });
-        }
-        
-        // Find selected entry to see if we have defaults
-        const selectedEntry = providerModels.find(m => m.model === model);
-        if (selectedEntry?.baseUrl) {
-            baseUrl = selectedEntry.baseUrl;
-        }
+      // Filter models for this provider
+      const providerModels = allModels
+        .filter((m) => m.provider === provider)
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+      if (providerModels.length > 0) {
+        model = (await select({
+          message: chalk.yellow(`[${role.toUpperCase()}] Select model:`),
+          choices: providerModels.map((m) => ({ value: m.model, name: m.name })),
+        })) as string;
+      } else {
+        // Fallback if no models known for provider (shouldn't happen with pi-ai usually)
+        model = await input({ message: chalk.yellow('Model ID:') });
+      }
+
+      // Find selected entry to see if we have defaults
+      const selectedEntry = providerModels.find((m) => m.model === model);
+      if (selectedEntry?.baseUrl) {
+        baseUrl = selectedEntry.baseUrl;
+      }
     }
 
     // Ask for API key if it's a cloud provider (heuristic: not ollama/lmstudio/vllm/local)
     // or if we decide all providers might need keys except strictly local ones.
     const isLocal = ['ollama', 'lmstudio', 'vllm', 'local'].includes(provider);
-    if (!isLocal && provider !== 'custom') { // Custom might need key too but usually we ask base url
-       apiKey = await input({
+    if (!isLocal && provider !== 'custom') {
+      // Custom might need key too but usually we ask base url
+      apiKey = await input({
         message: chalk.yellow(`API key for ${provider}:`),
       });
     } else if (provider === 'custom') {
-        const needKey = await confirm({ message: 'Does this endpoint require an API key?', default: false });
-        if (needKey) {
-            apiKey = await input({ message: chalk.yellow('API Key:') });
-        }
+      const needKey = await confirm({
+        message: 'Does this endpoint require an API key?',
+        default: false,
+      });
+      if (needKey) {
+        apiKey = await input({ message: chalk.yellow('API Key:') });
+      }
     }
 
     models.push({ role, provider, model, apiKey, baseUrl });
@@ -311,7 +339,9 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
     // Skip remaining roles if user wants
     if (role !== 'local') {
       const addMore = await confirm({
-        message: chalk.dim(`Configure the next role (${MODEL_ROLES[MODEL_ROLES.indexOf(role) + 1]})?`),
+        message: chalk.dim(
+          `Configure the next role (${MODEL_ROLES[MODEL_ROLES.indexOf(role) + 1]})?`,
+        ),
         default: true,
       });
       if (!addMore) break;
@@ -346,7 +376,7 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
     userRole,
     // userPreferences no longer used directly, but we can pass interactionStyle or just rely on soulPersona
     soulPersona,
-    additionalThoughts
+    additionalThoughts,
   });
 
   // Generate HEARTBEAT.md
@@ -398,7 +428,12 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
       provider: m.provider,
       model: m.model,
       baseUrl: m.baseUrl,
+      apiKey: m.apiKey,
     })),
+    modelChains: models.reduce((acc: any, m) => {
+      acc[m.role] = [`${m.provider}/${m.model}`];
+      return acc;
+    }, { thinking: [], fast: [], local: [] }),
     litellmPort: 4000,
     gatewayPort: 3001,
     dashboardPort: 3000,
@@ -412,11 +447,7 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
       entries: {},
     },
   };
-  writeFileSync(
-    join(projectRoot, 'adytum.config.yaml'),
-    stringifyYaml(yamlConfig),
-    'utf-8',
-  );
+  writeFileSync(join(projectRoot, 'adytum.config.yaml'), stringifyYaml(yamlConfig), 'utf-8');
 
   // Generate litellm_config.yaml
   const litellmConfig = {
@@ -429,11 +460,7 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
       },
     })),
   };
-  writeFileSync(
-    join(projectRoot, 'litellm_config.yaml'),
-    stringifyYaml(litellmConfig),
-    'utf-8',
-  );
+  writeFileSync(join(projectRoot, 'litellm_config.yaml'), stringifyYaml(litellmConfig), 'utf-8');
 
   // ── Final Message ───────────────────────────────────────
   console.log();
@@ -441,18 +468,26 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
   console.log();
 
   const heartbeat = chalk.red('♥');
-  await typewrite(chalk.cyan.bold(
-    `"I am ${agentName}. ${heartbeat} I remember everything. Let's begin."`,
-  ));
+  await typewrite(
+    chalk.cyan.bold(`"I am ${agentName}. ${heartbeat} I remember everything. Let's begin."`),
+  );
 
   console.log();
   console.log(chalk.dim('─'.repeat(50)));
-  console.log(chalk.green('✓ ') + chalk.white('Soul written to ') + chalk.cyan('workspace/SOUL.md'));
-  console.log(chalk.green('✓ ') + chalk.white('Config saved to ') + chalk.cyan('adytum.config.yaml'));
+  console.log(
+    chalk.green('✓ ') + chalk.white('Soul written to ') + chalk.cyan('workspace/SOUL.md'),
+  );
+  console.log(
+    chalk.green('✓ ') + chalk.white('Config saved to ') + chalk.cyan('adytum.config.yaml'),
+  );
   console.log(chalk.green('✓ ') + chalk.white('Environment saved to ') + chalk.cyan('.env'));
-  console.log(chalk.green('✓ ') + chalk.white('LiteLLM config saved to ') + chalk.cyan('litellm_config.yaml'));
+  console.log(
+    chalk.green('✓ ') + chalk.white('LiteLLM config saved to ') + chalk.cyan('litellm_config.yaml'),
+  );
   console.log();
-  console.log(chalk.yellow('Next: Run ') + chalk.bold.white('adytum start') + chalk.yellow(' to wake me up.'));
+  console.log(
+    chalk.yellow('Next: Run ') + chalk.bold.white('adytum start') + chalk.yellow(' to wake me up.'),
+  );
   console.log();
 }
 

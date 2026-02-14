@@ -63,8 +63,12 @@ export default function PersonalityPage() {
       <div className="px-8 pt-8 pb-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted font-medium">Configuration</p>
-            <h1 className="text-2xl font-semibold text-text-primary tracking-tight mt-1">Personality</h1>
+            <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted font-medium">
+              Configuration
+            </p>
+            <h1 className="text-2xl font-semibold text-text-primary tracking-tight mt-1">
+              Personality
+            </h1>
           </div>
           <div className="flex items-center gap-2">
             {hasChanges && <Badge variant="warning">Unsaved</Badge>}
@@ -77,11 +81,21 @@ export default function PersonalityPage() {
               {showDiff ? <Edit3 className="h-3 w-3" /> : <Eye className="h-3 w-3" />}
               {showDiff ? 'Editor' : 'Diff'}
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => setContent(original)} disabled={!hasChanges}>
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => setContent(original)}
+              disabled={!hasChanges}
+            >
               <RotateCcw className="h-3 w-3" />
               Reset
             </Button>
-            <Button size="sm" variant="primary" onClick={handleSave} disabled={!hasChanges || saving}>
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={handleSave}
+              disabled={!hasChanges || saving}
+            >
               <Save className="h-3 w-3" />
               {saving ? 'Saving…' : 'Save'}
             </Button>
@@ -133,7 +147,9 @@ function DiffView({ original, modified }: { original: string; modified: string }
       </div>
       <div className="grid grid-cols-2 gap-4 font-mono text-xs">
         <div>
-          <p className="text-text-muted mb-2 font-sans text-[11px] font-medium uppercase tracking-wider">Original</p>
+          <p className="text-text-muted mb-2 font-sans text-[11px] font-medium uppercase tracking-wider">
+            Original
+          </p>
           <div className="space-y-0">
             {origLines.map((line, i) => {
               const isChanged = modLines[i] !== line;
@@ -142,7 +158,9 @@ function DiffView({ original, modified }: { original: string; modified: string }
                   key={i}
                   className={`px-2 py-0.5 rounded-sm ${isChanged ? 'bg-error/10 text-error' : 'text-text-tertiary'}`}
                 >
-                  <span className="text-text-muted mr-3 select-none">{String(i + 1).padStart(3)}</span>
+                  <span className="text-text-muted mr-3 select-none">
+                    {String(i + 1).padStart(3)}
+                  </span>
                   {line || ' '}
                 </div>
               );
@@ -150,7 +168,9 @@ function DiffView({ original, modified }: { original: string; modified: string }
           </div>
         </div>
         <div>
-          <p className="text-text-muted mb-2 font-sans text-[11px] font-medium uppercase tracking-wider">Modified</p>
+          <p className="text-text-muted mb-2 font-sans text-[11px] font-medium uppercase tracking-wider">
+            Modified
+          </p>
           <div className="space-y-0">
             {modLines.map((line, i) => {
               const isChanged = origLines[i] !== line;
@@ -159,7 +179,9 @@ function DiffView({ original, modified }: { original: string; modified: string }
                   key={i}
                   className={`px-2 py-0.5 rounded-sm ${isChanged ? 'bg-success/10 text-success' : 'text-text-tertiary'}`}
                 >
-                  <span className="text-text-muted mr-3 select-none">{String(i + 1).padStart(3)}</span>
+                  <span className="text-text-muted mr-3 select-none">
+                    {String(i + 1).padStart(3)}
+                  </span>
                   {line || ' '}
                 </div>
               );

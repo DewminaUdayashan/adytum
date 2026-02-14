@@ -39,10 +39,10 @@ export function Select({
   useEffect(() => {
     const handleScroll = () => {
       if (isOpen && containerRef.current) {
-         updatePosition();
+        updatePosition();
       }
     };
-    
+
     // Update position on scroll/resize
     window.addEventListener('scroll', handleScroll, true);
     window.addEventListener('resize', handleScroll);
@@ -57,7 +57,7 @@ export function Select({
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (
-        containerRef.current && 
+        containerRef.current &&
         !containerRef.current.contains(event.target as Node) &&
         dropdownRef.current &&
         !dropdownRef.current.contains(event.target as Node)
@@ -67,31 +67,31 @@ export function Select({
     };
 
     if (isOpen) {
-        document.addEventListener('mousedown', handleClickOutside);
+      document.addEventListener('mousedown', handleClickOutside);
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isOpen]);
 
   const updatePosition = () => {
-      if (containerRef.current) {
-          const rect = containerRef.current.getBoundingClientRect();
-          setPosition({
-              topDown: rect.bottom + window.scrollY + 4,
-              topUp: rect.top + window.scrollY - 4,
-              left: rect.left + window.scrollX,
-              width: rect.width
-          });
-      }
+    if (containerRef.current) {
+      const rect = containerRef.current.getBoundingClientRect();
+      setPosition({
+        topDown: rect.bottom + window.scrollY + 4,
+        topUp: rect.top + window.scrollY - 4,
+        left: rect.left + window.scrollX,
+        width: rect.width,
+      });
+    }
   };
 
   const toggleOpen = () => {
-      if (disabled) return;
-      if (!isOpen) {
-          updatePosition();
-          setIsOpen(true);
-      } else {
-          setIsOpen(false);
-      }
+    if (disabled) return;
+    if (!isOpen) {
+      updatePosition();
+      setIsOpen(true);
+    } else {
+      setIsOpen(false);
+    }
   };
 
   const handleSelect = (val: string) => {
@@ -107,60 +107,72 @@ export function Select({
         disabled={disabled}
         className={clsx(
           'flex h-10 w-full items-center justify-between rounded-lg border bg-bg-secondary px-3 py-2 text-sm transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-accent-primary/20',
-          isOpen ? 'border-accent-primary ring-2 ring-accent-primary/20' : 'border-border-primary hover:border-border-secondary',
-          disabled && 'cursor-not-allowed opacity-50'
+          isOpen
+            ? 'border-accent-primary ring-2 ring-accent-primary/20'
+            : 'border-border-primary hover:border-border-secondary',
+          disabled && 'cursor-not-allowed opacity-50',
         )}
       >
-        <span className={clsx('truncate flex items-center gap-2', !selectedOption && 'text-text-muted')}>
+        <span
+          className={clsx('truncate flex items-center gap-2', !selectedOption && 'text-text-muted')}
+        >
           {selectedOption ? (
-             <>
-                {selectedOption.icon}
-                {selectedOption.label}
-             </>
-          ) : placeholder}
+            <>
+              {selectedOption.icon}
+              {selectedOption.label}
+            </>
+          ) : (
+            placeholder
+          )}
         </span>
-        <ChevronDown className={clsx('h-4 w-4 text-text-tertiary transition-transform duration-200', isOpen && 'rotate-180')} />
+        <ChevronDown
+          className={clsx(
+            'h-4 w-4 text-text-tertiary transition-transform duration-200',
+            isOpen && 'rotate-180',
+          )}
+        />
       </button>
 
-      {isOpen && createPortal(
-        <div 
+      {isOpen &&
+        createPortal(
+          <div
             ref={dropdownRef}
-            style={{ 
-                top: placement === 'down' ? position.topDown : position.topUp, 
-                left: position.left, 
-                width: position.width,
-                transform: placement === 'up' ? 'translateY(-100%)' : undefined,
-                zIndex: 9999 
+            style={{
+              top: placement === 'down' ? position.topDown : position.topUp,
+              left: position.left,
+              width: position.width,
+              transform: placement === 'up' ? 'translateY(-100%)' : undefined,
+              zIndex: 9999,
             }}
             className={clsx(
               'fixed max-h-60 overflow-auto rounded-lg border border-border-primary bg-bg-secondary py-1 shadow-xl animate-in fade-in zoom-in-95 duration-100',
-              placement === 'down' ? 'mt-1' : 'mb-1'
+              placement === 'down' ? 'mt-1' : 'mb-1',
             )}
-        >
-          {options.map((option) => (
-            <button
-              key={option.value}
-              onClick={() => handleSelect(option.value)}
-              className={clsx(
-                'relative flex w-full flex-col px-3 py-2 text-left text-sm transition-colors hover:bg-bg-tertiary',
-                option.value === value && 'bg-accent-primary/5 text-accent-primary'
-              )}
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-medium flex items-center gap-2">
+          >
+            {options.map((option) => (
+              <button
+                key={option.value}
+                onClick={() => handleSelect(option.value)}
+                className={clsx(
+                  'relative flex w-full flex-col px-3 py-2 text-left text-sm transition-colors hover:bg-bg-tertiary',
+                  option.value === value && 'bg-accent-primary/5 text-accent-primary',
+                )}
+              >
+                <div className="flex items-center justify-between">
+                  <span className="font-medium flex items-center gap-2">
                     {option.icon}
                     {option.label}
-                </span>
-                {option.value === value && <Check className="h-3.5 w-3.5" />}
-              </div>
-              {option.description && (
-                <span className="text-xs text-text-muted mt-0.5">{option.description}</span>
-              )}
-            </button>
-          ))}
-        </div>,
-        document.body
-      )}
+                  </span>
+                  {option.value === value && <Check className="h-3.5 w-3.5" />}
+                </div>
+                {option.description && (
+                  <span className="text-xs text-text-muted mt-0.5">{option.description}</span>
+                )}
+              </button>
+            ))}
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

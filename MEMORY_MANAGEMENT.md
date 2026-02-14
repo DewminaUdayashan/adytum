@@ -30,44 +30,58 @@ Each tier has a different purpose, retention strategy, and cost profile.
 ## 3) Data Stores & Files
 
 ### 3.1 SQLite Database (Operational History)
+
 Located at:
+
 ```
 data/db/adytum.db
 ```
+
 Tables that affect memory and evolution:
+
 - `messages` — persistent chat history per session.
 - `action_logs` — tool invocation history (used by Dreamer).
 - `thought_queue` — surfaced thoughts from Inner Monologue.
 - `pending_updates` — approval queue for SOUL/GUIDELINES updates.
 
 ### 3.2 ChromaDB Vector Store (Episodic Memory)
+
 Located at:
+
 ```
 data/db/chroma/
 ```
+
 Stored as embeddings for semantic retrieval. Used by:
+
 - Context overflow archival.
 - Inner Monologue reflection material.
 - Dreamer fact embedding.
 - User‑requested memory storage (`memory_store`).
 
 ### 3.3 Semantic Identity & Evolution Files
+
 Located at:
+
 ```
 config/personality/SOUL.md
 config/personality/EVOLUTION.md
 config/personality/GUIDELINES.md
 ```
+
 - **SOUL.md** — structured identity + system prompt.
 - **EVOLUTION.md** — append‑only evolution log.
 - **GUIDELINES.md** — behavioral rules from feedback.
 
 ### 3.4 Dreamer Snapshots & Archive
+
 Located at:
+
 ```
 data/memories/snapshots/
 data/memories/archive/
 ```
+
 - Snapshots contain daily summaries.
 - Archive stores raw logs as JSON (optional).
 
@@ -75,17 +89,19 @@ data/memories/archive/
 
 ## 4) Tier 1 — Short‑Term Context Window
 
-**Purpose:** Maintain the last *N* user+assistant turns for coherent conversation.
+**Purpose:** Maintain the last _N_ user+assistant turns for coherent conversation.
 
 **Implementation:** `ContextWindow` in `src/agent/memory.py`.
 
 ### How it works
+
 - Default `max_turns = 20` (≈ 40 messages).
 - Every new user message is appended.
 - When the window exceeds `max_turns`, **oldest messages are evicted** (non‑system).
 - Evicted messages are passed to Tier 2 for archival.
 
 ### Restore on restart
+
 If the server restarts, the window is re‑seeded from saved DB history if available.
 
 ---
@@ -97,6 +113,7 @@ If the server restarts, the window is re‑seeded from saved DB history if avail
 **Implementation:** `MemoryStore` in `src/agent/memory.py`.
 
 ### Write paths
+
 1. **Context Eviction → Episodic**
    - `archive_evicted_messages()` builds a raw text block.
    - If >200 chars, it is **summarized** using the fast model to reduce token cost.
@@ -116,6 +133,7 @@ If the server restarts, the window is re‑seeded from saved DB history if avail
      `monologue` and `curiosity`.
 
 ### Read paths
+
 - `memory_search` tool queries ChromaDB using semantic similarity.
 - The agent core injects **top‑K relevant memories** into the next user prompt:
   - `_inject_memory_context()` in `src/agent/core.py`.
@@ -128,6 +146,7 @@ If the server restarts, the window is re‑seeded from saved DB history if avail
 **Purpose:** Stable long‑term identity and behavioral evolution.
 
 ### 6.1 SOUL.md (Identity)
+
 - Structured YAML front‑matter + Markdown body.
 - Enforced and validated by `src/utils/soul.py` to prevent corruption.
 - Updated through:
@@ -135,10 +154,12 @@ If the server restarts, the window is re‑seeded from saved DB history if avail
   - **Dreamer insights** (queued unless auto‑approved).
 
 ### 6.2 GUIDELINES.md (Behavioral Rules)
+
 - Updated through `update_guidelines` tool based on explicit feedback.
 - Changes are **queued for approval** unless auto‑approved.
 
 ### 6.3 EVOLUTION.md (Observational Journal)
+
 - Written by the Dreamer after each consolidation cycle.
 - Append‑only, no approval required.
 
@@ -149,6 +170,7 @@ If the server restarts, the window is re‑seeded from saved DB history if avail
 The Dreamer runs on a schedule (default every 30 minutes) via Heartbeat.
 
 **Process:**
+
 1. **Recall** — Fetches `messages` and `action_logs` since last run.
 2. **Reflect** — Uses a cheap model to summarize key facts.
 3. **Consolidate** —
@@ -166,6 +188,7 @@ This is the main mechanism for **long‑term evolution**.
 ## 8) Autonomous Reflection (Inner Monologue)
 
 The Inner Monologue is a scheduled autonomous cycle that:
+
 - Recalls recent memories from ChromaDB.
 - Reflects using a fast model.
 - Queues insights for the user (thought queue).
@@ -178,10 +201,13 @@ It **does not directly change identity**, but it influences the memory reservoir
 ## 10) Configuration Knobs
 
 All settings live in:
+
 ```
 config/settings.yaml
 ```
+
 Key parameters:
+
 - `memory.collection_name` — Chroma collection name.
 - `memory.top_k` — default retrieval count.
 - `dreamer.enabled`, `dreamer.interval_minutes` — consolidation schedule.
@@ -221,6 +247,7 @@ Key parameters:
 ## 13) Key Categories Used in Memory Metadata
 
 Common `category` values stored in ChromaDB:
+
 - `episodic_raw`
 - `episodic_summary`
 - `dream`

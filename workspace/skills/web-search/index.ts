@@ -20,7 +20,8 @@ async function ddgSearch(query: string, maxResults: number): Promise<SearchResul
   });
   const html = await res.text();
   const results: SearchResult[] = [];
-  const regex = /<a[^>]+class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi;
+  const regex =
+    /<a[^>]+class="result__a"[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>[\s\S]*?<a[^>]+class="result__snippet"[^>]*>([\s\S]*?)<\/a>/gi;
   let match: RegExpExecArray | null = regex.exec(html);
   while (match && results.length < maxResults) {
     const url = match[1];
@@ -32,7 +33,11 @@ async function ddgSearch(query: string, maxResults: number): Promise<SearchResul
   return results;
 }
 
-async function serperSearch(query: string, apiKey: string, maxResults: number): Promise<SearchResult[]> {
+async function serperSearch(
+  query: string,
+  apiKey: string,
+  maxResults: number,
+): Promise<SearchResult[]> {
   const payload = { q: query, gl: 'us', hl: 'en', num: maxResults };
   const res = await fetch('https://google.serper.dev/search', {
     method: 'POST',

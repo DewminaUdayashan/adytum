@@ -89,7 +89,10 @@ type DiscordActionPermissions = z.infer<typeof DiscordActionPermissionsSchema>;
 
 const DiscordSendSchema = z.object({
   content: z.string().min(1).describe('Message text to send to Discord'),
-  channelId: z.string().optional().describe('Target channel ID. Defaults to configured default channel.'),
+  channelId: z
+    .string()
+    .optional()
+    .describe('Target channel ID. Defaults to configured default channel.'),
   userId: z.string().optional().describe('Target Discord user ID (for DM).'),
   threadId: z.string().optional().describe('Target thread ID.'),
   replyToMessageId: z.string().optional().describe('Optional message ID to reply to.'),
@@ -98,7 +101,10 @@ const DiscordSendSchema = z.object({
 const DiscordActionSchema = z.object({
   action: z.enum(DISCORD_ACTIONS),
 
-  target: z.string().optional().describe('Target format: channel:<id>, thread:<id>, user:<id>, or plain channel ID.'),
+  target: z
+    .string()
+    .optional()
+    .describe('Target format: channel:<id>, thread:<id>, user:<id>, or plain channel ID.'),
   channelId: z.string().optional(),
   threadId: z.string().optional(),
   userId: z.string().optional(),
@@ -137,7 +143,8 @@ type OutboundTarget =
   | { type: 'thread'; id: string }
   | { type: 'user'; id: string };
 
-const isSnowflake = (value?: string): boolean => typeof value === 'string' && /^\d{17,20}$/.test(value.trim());
+const isSnowflake = (value?: string): boolean =>
+  typeof value === 'string' && /^\d{17,20}$/.test(value.trim());
 
 class DiscordService {
   private client: Client | null = null;
@@ -145,7 +152,10 @@ class DiscordService {
   private config: DiscordPluginConfig;
   private privilegedIntentsActive = false;
 
-  constructor(rawConfig: unknown, private logger: DiscordLogger) {
+  constructor(
+    rawConfig: unknown,
+    private logger: DiscordLogger,
+  ) {
     this.config = resolveConfig(rawConfig);
   }
 
@@ -177,7 +187,9 @@ class DiscordService {
     }
 
     if (!this.config.botToken) {
-      this.logger.warn('missing bot token; set skills.entries.discord.config.botToken or ADYTUM_DISCORD_BOT_TOKEN');
+      this.logger.warn(
+        'missing bot token; set skills.entries.discord.config.botToken or ADYTUM_DISCORD_BOT_TOKEN',
+      );
       return;
     }
 
@@ -241,7 +253,9 @@ class DiscordService {
     // Normalize IDs: if caller passed a non-numeric userId, prefer defaultUserId; otherwise reject.
     const normalizedUserId =
       (params.userId && isSnowflake(params.userId) && params.userId.trim()) ||
-      (this.config.defaultUserId && isSnowflake(this.config.defaultUserId) ? this.config.defaultUserId.trim() : undefined) ||
+      (this.config.defaultUserId && isSnowflake(this.config.defaultUserId)
+        ? this.config.defaultUserId.trim()
+        : undefined) ||
       (params.userId ? undefined : undefined);
 
     const target =
@@ -333,7 +347,9 @@ class DiscordService {
     const target =
       input.target ||
       parseTarget({ target: undefined, channelId: input.channelId }) ||
-      (this.config.defaultChannelId ? ({ type: 'channel', id: this.config.defaultChannelId } as OutboundTarget) : null);
+      (this.config.defaultChannelId
+        ? ({ type: 'channel', id: this.config.defaultChannelId } as OutboundTarget)
+        : null);
 
     if (!target) {
       throw new Error('No target channel for poll');
@@ -408,7 +424,9 @@ class DiscordService {
       category: ChannelType.GuildCategory,
     };
 
-    const resolvedType = input.channelType ? channelTypeMap[input.channelType] : ChannelType.GuildText;
+    const resolvedType = input.channelType
+      ? channelTypeMap[input.channelType]
+      : ChannelType.GuildText;
 
     const payload: any = {
       name: input.channelName,
@@ -418,7 +436,8 @@ class DiscordService {
 
     if (typeof input.topic === 'string') payload.topic = input.topic;
     if (typeof input.nsfw === 'boolean') payload.nsfw = input.nsfw;
-    if (typeof input.rateLimitPerUser === 'number') payload.rateLimitPerUser = input.rateLimitPerUser;
+    if (typeof input.rateLimitPerUser === 'number')
+      payload.rateLimitPerUser = input.rateLimitPerUser;
 
     const created = await guild.channels.create(payload);
     return {
@@ -429,7 +448,10 @@ class DiscordService {
     };
   }
 
-  async replyThread(threadId: string, content: string): Promise<{ messageId: string; threadId: string }> {
+  async replyThread(
+    threadId: string,
+    content: string,
+  ): Promise<{ messageId: string; threadId: string }> {
     const channel = await this.getTextChannel(threadId);
     if (!channel) throw new Error(`Thread not found: ${threadId}`);
 
@@ -515,7 +537,11 @@ class DiscordService {
     };
   }
 
-  async listMembers(input?: { guildId?: string; memberQuery?: string; limit?: number }): Promise<any[]> {
+  async listMembers(input?: {
+    guildId?: string;
+    memberQuery?: string;
+    limit?: number;
+  }): Promise<any[]> {
     if (!this.privilegedIntentsActive) {
       throw new Error(
         'Guild member intent is disabled. Enable enableGuildMembersIntent and toggle Server Members Intent in Discord Developer Portal.',
@@ -622,7 +648,10 @@ class DiscordService {
     if (message.author.bot) return false;
     if (!this.config.listenIncoming) return false;
 
-    if (this.config.allowedUserIds.length > 0 && !this.config.allowedUserIds.includes(message.author.id)) {
+    if (
+      this.config.allowedUserIds.length > 0 &&
+      !this.config.allowedUserIds.includes(message.author.id)
+    ) {
       return false;
     }
 
@@ -630,7 +659,10 @@ class DiscordService {
       return false;
     }
 
-    if (this.config.allowedChannelIds.length > 0 && !this.config.allowedChannelIds.includes(message.channelId)) {
+    if (
+      this.config.allowedChannelIds.length > 0 &&
+      !this.config.allowedChannelIds.includes(message.channelId)
+    ) {
       return false;
     }
 
@@ -680,7 +712,11 @@ class DiscordService {
         this.logger.warn('send_message action is disabled; skipping inbound auto-reply');
         return;
       }
-      await this.sendMessage({ content: result.response, channelId: message.channelId, replyToMessageId: message.id });
+      await this.sendMessage({
+        content: result.response,
+        channelId: message.channelId,
+        replyToMessageId: message.id,
+      });
     }
   }
 }
@@ -689,7 +725,8 @@ function resolveConfig(rawConfig: unknown): DiscordPluginConfig {
   const parsed = DiscordPluginConfigSchema.parse(rawConfig || {});
 
   const resolvedToken = parsed.botToken?.trim() || readEnv(parsed.tokenEnv);
-  const resolvedDefaultChannel = parsed.defaultChannelId?.trim() || readEnv(parsed.defaultChannelIdEnv);
+  const resolvedDefaultChannel =
+    parsed.defaultChannelId?.trim() || readEnv(parsed.defaultChannelIdEnv);
   const resolvedDefaultUser = parsed.defaultUserId?.trim() || readEnv(parsed.defaultUserIdEnv);
   const resolvedGuildId = parsed.guildId?.trim() || readEnv(parsed.guildIdEnv);
 
@@ -704,13 +741,7 @@ function resolveConfig(rawConfig: unknown): DiscordPluginConfig {
 }
 
 function isDisallowedIntentsError(error: any): boolean {
-  const text = [
-    error?.message,
-    error?.code,
-    error?.name,
-    error?.cause?.message,
-    error?.cause?.code,
-  ]
+  const text = [error?.message, error?.code, error?.name, error?.cause?.message, error?.cause?.code]
     .filter(Boolean)
     .map((part) => String(part))
     .join(' ');
@@ -771,7 +802,9 @@ function parseTarget(input: {
   return { type: 'channel', id: raw };
 }
 
-function parseDiscordMessageLink(link: string): { guildId: string; channelId: string; messageId: string } | null {
+function parseDiscordMessageLink(
+  link: string,
+): { guildId: string; channelId: string; messageId: string } | null {
   const match = link.match(/discord\.com\/channels\/(.+?)\/(\d+)\/(\d+)/i);
   if (!match) return null;
   return {
@@ -812,7 +845,8 @@ function normalizeMessage(message: any): any {
 const discordPlugin = {
   id: 'discord',
   name: 'Discord',
-  description: 'Comprehensive Discord skill with inbound listener, outbound messaging, reactions, polls, threads, and discovery actions.',
+  description:
+    'Comprehensive Discord skill with inbound listener, outbound messaging, reactions, polls, threads, and discovery actions.',
 
   register(api: any) {
     const service = new DiscordService(api.pluginConfig, api.logger);
@@ -823,7 +857,13 @@ const discordPlugin = {
       name: 'discord_send',
       description: 'Send a message to a Discord channel/thread/DM via the configured bot.',
       parameters: DiscordSendSchema,
-      execute: async ({ content, channelId, userId, threadId, replyToMessageId }: z.infer<typeof DiscordSendSchema>) => {
+      execute: async ({
+        content,
+        channelId,
+        userId,
+        threadId,
+        replyToMessageId,
+      }: z.infer<typeof DiscordSendSchema>) => {
         if (!service.isReady()) {
           return 'Discord bot is not connected. Check token/config and restart gateway.';
         }
@@ -832,7 +872,12 @@ const discordPlugin = {
 
         // Prefer numeric userId; if caller passed a non-snowflake string, fall back to configured defaultUserId when present.
         let effectiveUserId = userId;
-        if (effectiveUserId && !isSnowflake(effectiveUserId) && service['config'].defaultUserId && isSnowflake(service['config'].defaultUserId)) {
+        if (
+          effectiveUserId &&
+          !isSnowflake(effectiveUserId) &&
+          service['config'].defaultUserId &&
+          isSnowflake(service['config'].defaultUserId)
+        ) {
           effectiveUserId = service['config'].defaultUserId;
         }
         if (effectiveUserId && !isSnowflake(effectiveUserId)) {
@@ -853,7 +898,8 @@ const discordPlugin = {
 
     api.registerTool({
       name: 'discord_action',
-      description: 'Advanced Discord actions: read/fetch messages, react, create polls/threads, pin/unpin, and channel/guild/member discovery.',
+      description:
+        'Advanced Discord actions: read/fetch messages, react, create polls/threads, pin/unpin, and channel/guild/member discovery.',
       parameters: DiscordActionSchema,
       execute: async (args: z.infer<typeof DiscordActionSchema>) => {
         if (!service.isReady()) {
@@ -878,8 +924,10 @@ const discordPlugin = {
 
           case 'read_messages': {
             const target = parseTarget(args);
-            const channelId = args.channelId || args.threadId || (target?.type !== 'user' ? target?.id : undefined);
-            if (!channelId) throw new Error('channelId/threadId/target is required for read_messages');
+            const channelId =
+              args.channelId || args.threadId || (target?.type !== 'user' ? target?.id : undefined);
+            if (!channelId)
+              throw new Error('channelId/threadId/target is required for read_messages');
             return service.readMessages(channelId, args.limit ?? 20);
           }
 
@@ -892,7 +940,8 @@ const discordPlugin = {
 
           case 'react': {
             const target = parseTarget(args);
-            const channelId = args.channelId || args.threadId || (target?.type !== 'user' ? target?.id : undefined);
+            const channelId =
+              args.channelId || args.threadId || (target?.type !== 'user' ? target?.id : undefined);
             if (!channelId || !args.messageId || !args.emoji) {
               throw new Error('react requires channelId/threadId/target + messageId + emoji');
             }
@@ -916,7 +965,8 @@ const discordPlugin = {
 
           case 'create_thread': {
             const target = parseTarget(args);
-            const channelId = args.channelId || (target?.type === 'channel' ? target.id : undefined);
+            const channelId =
+              args.channelId || (target?.type === 'channel' ? target.id : undefined);
             if (!channelId || !args.threadName) {
               throw new Error('create_thread requires channelId/target and threadName');
             }
@@ -954,7 +1004,8 @@ const discordPlugin = {
 
           case 'pin_message': {
             const target = parseTarget(args);
-            const channelId = args.channelId || args.threadId || (target?.type !== 'user' ? target?.id : undefined);
+            const channelId =
+              args.channelId || args.threadId || (target?.type !== 'user' ? target?.id : undefined);
             if (!channelId || !args.messageId) {
               throw new Error('pin_message requires channelId/threadId/target and messageId');
             }
@@ -963,7 +1014,8 @@ const discordPlugin = {
 
           case 'unpin_message': {
             const target = parseTarget(args);
-            const channelId = args.channelId || args.threadId || (target?.type !== 'user' ? target?.id : undefined);
+            const channelId =
+              args.channelId || args.threadId || (target?.type !== 'user' ? target?.id : undefined);
             if (!channelId || !args.messageId) {
               throw new Error('unpin_message requires channelId/threadId/target and messageId');
             }

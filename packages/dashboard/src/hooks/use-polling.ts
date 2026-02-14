@@ -3,11 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { gatewayFetch } from '@/lib/api';
 
-export function usePolling<T>(
-  path: string,
-  intervalMs: number = 5000,
-  initialData?: T,
-) {
+export function usePolling<T>(path: string, intervalMs: number = 5000, initialData?: T) {
   const [data, setData] = useState<T | undefined>(initialData);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -17,16 +13,22 @@ export function usePolling<T>(
       const result = await gatewayFetch<T>(path);
       setData(result);
       setError(null);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError(String(err));
+      }
     } finally {
       setLoading(false);
     }
   }, [path]);
 
   useEffect(() => {
-    refresh();
-    const timer = setInterval(refresh, intervalMs);
+    void refresh();
+    const timer = setInterval(() => {
+      void refresh();
+    }, intervalMs);
     return () => clearInterval(timer);
   }, [refresh, intervalMs]);
 

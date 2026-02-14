@@ -13,10 +13,7 @@ function joinGatewayPath(base: string, path: string): string {
   return `${normalizedBase}${normalizedPath}`;
 }
 
-export async function gatewayFetch<T = unknown>(
-  path: string,
-  options?: RequestInit,
-): Promise<T> {
+export async function gatewayFetch<T = unknown>(path: string, options?: RequestInit): Promise<T> {
   const headers = new Headers(options?.headers || {});
   const hasBody = options?.body !== undefined && options?.body !== null;
   if (hasBody && !headers.has('Content-Type') && !(options?.body instanceof FormData)) {
@@ -29,14 +26,15 @@ export async function gatewayFetch<T = unknown>(
       ...options,
       headers,
     });
-  } catch (err: any) {
-    throw new Error(`Failed to fetch ${path}: ${err?.message || String(err)}`);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : String(err);
+    throw new Error(`Failed to fetch ${path}: ${msg}`);
   }
 
   if (!res.ok) {
     let detail = '';
     try {
-      const payload = await res.json() as { error?: string; message?: string };
+      const payload = (await res.json()) as { error?: string; message?: string };
       detail = payload.error || payload.message || '';
     } catch {
       try {

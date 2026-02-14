@@ -36,11 +36,15 @@ export const MessageFrameSchema = z.object({
   content: z.string(),
   modelRole: z.string().optional(),
   modelId: z.string().optional(),
-  attachments: z.array(z.object({
-    type: z.enum(['image', 'file', 'audio', 'video']),
-    data: z.string(),
-    name: z.string().optional(),
-  })).optional(),
+  attachments: z
+    .array(
+      z.object({
+        type: z.enum(['image', 'file', 'audio', 'video']),
+        data: z.string(),
+        name: z.string().optional(),
+      }),
+    )
+    .optional(),
 });
 export type MessageFrame = z.infer<typeof MessageFrameSchema>;
 
@@ -52,11 +56,11 @@ export const StreamFrameSchema = z.object({
   traceId: z.string().uuid(),
   delta: z.string(),
   streamType: z.enum([
-    'thinking',      // Agent's internal reasoning
-    'response',      // Final response text
-    'tool_call',     // Tool being invoked
-    'tool_result',   // Tool execution result
-    'status',        // Status update
+    'thinking', // Agent's internal reasoning
+    'response', // Final response text
+    'tool_call', // Tool being invoked
+    'tool_result', // Tool execution result
+    'status', // Status update
   ]),
   metadata: z.record(z.unknown()).optional(),
 });

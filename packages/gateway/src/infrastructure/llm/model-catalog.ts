@@ -1,0 +1,277 @@
+import { join } from 'node:path';
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { type AdytumConfig } from '@adytum/shared';
+import * as pi from '@mariozechner/pi-ai';
+import { singleton, inject } from 'tsyringe';
+import { ConfigService } from '../config/config-service.js';
+import { ModelRepository, ModelEntry } from '../../domain/interfaces/model-repository.interface.js';
+import { Logger } from '../../logger.js';
+
+// Initialize pi-ai built-ins once
+try {
+  pi.registerBuiltInApiProviders();
+} catch (e) {
+  // Ignore if already registered
+}
+
+export { ModelEntry };
+
+@singleton()
+export class ModelCatalog implements ModelRepository {
+  private catalogPath: string;
+  private models: Map<string, ModelEntry> = new Map();
+  private detailsCache: Map<string, any> = new Map();
+
+  constructor(
+    @inject(ConfigService) private configService: ConfigService,
+    @inject(Logger) private logger: Logger
+  ) {
+    const config = this.configService.getFullConfig();
+    this.catalogPath = join(config.workspacePath || process.cwd(), 'models.json');
+    this.logger.info('ModelCatalog initialized');
+    this.load();
+  }
+
+  private load() {
+    this.models.clear();
+    const config = this.configService.getFullConfig();
+
+    // 1. Load built-in models from pi-ai
+    try {
+      // @ts-ignore
+      const providers = pi.getProviders();
+      for (const providerId of providers) {
+        if (typeof providerId !== 'string') continue;
+        // @ts-ignore
+        const providerModels = pi.getModels(providerId);
+        for (const m of providerModels) {
+          const id = `${m.provider}/${m.id}`;
+          this.models.set(id, {
+            id,
+            name: m.name || m.id,
+            provider: m.provider,
+            model: m.id,
+            contextWindow: m.contextWindow,
+            reasoning: m.reasoning,
+            input: m.input,
+            source: 'default',
+            baseUrl: m.baseUrl,
+          });
+          this.detailsCache.set(id, m);
+        }
+      }
+    } catch (e) {
+      this.logger.warn('Failed to load pi-ai models', e);
+    }
+
+    // 2. Load from disk (User overrides/additions)
+    if (existsSync(this.catalogPath)) {
+      try {
+        const raw = readFileSync(this.catalogPath, 'utf-8');
+        const stored: ModelEntry[] = JSON.parse(raw);
+        for (const m of stored) {
+          this.models.set(m.id, { ...m, source: 'user' });
+        }
+      } catch (e) {
+        this.logger.error('Failed to load models.json', e);
+      }
+    }
+
+    // 3. Seed from adytum.config.yaml models[] (CLI-configured models)
+    if (config.models && Array.isArray(config.models)) {
+      for (const mc of config.models) {
+        const id = `${mc.provider}/${mc.model}`;
+        const existing = this.models.get(id);
+        
+        if (!existing) {
+          this.models.set(id, {
+            id,
+            name: mc.model,
+            provider: mc.provider,
+            model: mc.model,
+            source: 'default',
+            baseUrl: mc.baseUrl,
+            apiKey: mc.apiKey,
+          });
+        } else {
+          // Merge config fields (baseUrl, apiKey) into existing entry
+          // Important: CLI models in adytum.config.yaml should be treated as high priority 
+          // but if we have a 'user' model from models.json it usually means a dashboard override.
+          if (mc.baseUrl) existing.baseUrl = mc.baseUrl;
+          if (mc.apiKey) existing.apiKey = mc.apiKey;
+        }
+      }
+    }
+  }
+
+  save() {
+    const config = this.configService.getFullConfig();
+    const userModels = Array.from(this.models.values()).filter((m) => m.source === 'user');
+    try {
+      if (!existsSync(config.workspacePath)) {
+        mkdirSync(config.workspacePath, { recursive: true });
+      }
+      writeFileSync(this.catalogPath, JSON.stringify(userModels, null, 2), 'utf-8');
+    } catch (e) {
+      this.logger.error('Failed to save models.json', e);
+    }
+  }
+
+  async getAll(): Promise<ModelEntry[]> {
+    return Array.from(this.models.values());
+  }
+
+  async get(id: string): Promise<ModelEntry | undefined> {
+    return this.models.get(id);
+  }
+
+  async add(entry: ModelEntry): Promise<void> {
+    this.models.set(entry.id, { ...entry, source: 'user' as const });
+    this.save();
+  }
+
+  async update(id: string, updates: Partial<Pick<ModelEntry, 'baseUrl' | 'apiKey' | 'name'>>): Promise<boolean> {
+    const entry = this.models.get(id);
+    if (!entry) return false;
+    if (updates.baseUrl !== undefined) entry.baseUrl = updates.baseUrl || undefined;
+    if (updates.apiKey !== undefined) entry.apiKey = updates.apiKey || undefined;
+    if (updates.name !== undefined) entry.name = updates.name;
+    
+    // If we are updating a default/discovered model, convert it to 'user' so it persists
+    entry.source = 'user';
+    this.models.set(id, entry);
+    this.save();
+    return true;
+  }
+
+  async remove(id: string): Promise<void> {
+    if (this.models.has(id)) {
+      // If it's a default model, we can't really "remove" it permanently from pi-ai,
+      // but we can maybe hide it or just allow removing user models.
+      // For now, only remove from our map. If it's default, it will reappear on restart.
+      // Ideally we only allow removing 'user' source models.
+      const entry = this.models.get(id);
+      if (entry && entry.source !== 'user') {
+        // Check if we have an override, if so remove the override
+        // But here we are just deleting from map.
+        // For now let's just allow it, but it won't persist deletion of defaults.
+      }
+      this.models.delete(id);
+      this.save(); // Only saves user models
+    }
+  }
+
+  /**
+   * Scan for local models (Ollama, etc.)
+   */
+  async scanLocalModels(): Promise<ModelEntry[]> {
+    const discovered: ModelEntry[] = [];
+
+    // Check Ollama
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 1000);
+
+      const res = await fetch('http://localhost:11434/api/tags', { signal: controller.signal });
+      clearTimeout(timeout);
+
+      if (res.ok) {
+        const data = (await res.json()) as any;
+        for (const model of data.models || []) {
+          const name = model.name;
+          // Ollama models usually don't have provider prefix in name, so we add it
+          const id = `ollama/${name}`;
+          const entry: ModelEntry = {
+            id,
+            name,
+            provider: 'ollama',
+            model: name,
+            source: 'discovered',
+            baseUrl: 'http://localhost:11434/v1',
+          };
+          discovered.push(entry);
+
+          if (!this.models.has(id)) {
+            this.models.set(id, entry);
+          }
+        }
+      }
+    } catch (e) {
+      // Ollama not running
+    }
+
+    // Check LM Studio
+    try {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 1000);
+      const res = await fetch('http://localhost:1234/v1/models', { signal: controller.signal });
+      clearTimeout(timeout);
+
+      if (res.ok) {
+        const data = (await res.json()) as any;
+        for (const model of data.data || []) {
+          const name = model.id;
+          const id = `lmstudio/${name}`;
+          const entry: ModelEntry = {
+            id,
+            name,
+            provider: 'lmstudio',
+            model: name,
+            source: 'discovered',
+            baseUrl: 'http://localhost:1234/v1',
+          };
+          discovered.push(entry);
+          if (!this.models.has(id)) {
+            this.models.set(id, entry);
+          }
+        }
+      }
+    } catch (e) {
+      /* LM Studio not running */
+    }
+
+    return discovered;
+  }
+
+  async getPiModel(aliasOrId: string): Promise<any> {
+    if (this.detailsCache.has(aliasOrId)) return this.detailsCache.get(aliasOrId);
+    // If alias, resolve first
+    const resolved = await this.resolveModel(aliasOrId);
+    if (resolved && this.detailsCache.has(resolved.id)) {
+      return this.detailsCache.get(resolved.id);
+    }
+    return undefined;
+  }
+
+  /**
+   * Resolve a model ID to a full configuration.
+   * Handles aliases and provider/model syntax.
+   */
+  async resolveModel(aliasOrId: string): Promise<ModelEntry | undefined> {
+    // 1. Check in-memory catalog
+    if (this.models.has(aliasOrId)) return this.models.get(aliasOrId);
+
+    // 2. Check basic provider/model format (e.g. "anthropic/claude-3-opus")
+    // If not in catalog, we try to see if it's a known provider in pi-ai
+    if (aliasOrId.includes('/')) {
+      const [provider, model] = aliasOrId.split('/');
+
+      // Try to find if pi-ai knows this provider
+      // pi-ai providers: anthropic, openai, etc.
+
+      // If we didn't find it in getModels(), maybe it's a new model or custom
+      // Return a basic entry
+      return {
+        id: aliasOrId,
+        name: aliasOrId,
+        provider,
+        model,
+        source: 'default',
+        // We don't have baseUrl unless we know the provider config
+        // But pi-ai's getApiProvider might have it
+      };
+    }
+
+    return undefined;
+  }
+}

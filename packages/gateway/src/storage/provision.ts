@@ -84,7 +84,8 @@ async function ensureDockerPostgres(dataPath: string): Promise<string> {
   mkdirSync(pgDataDir, { recursive: true });
 
   // Pull and start PostgreSQL with pgvector
-  await execAsync(`docker run -d \
+  await execAsync(
+    `docker run -d \
     --name ${DOCKER_CONTAINER_NAME} \
     -e POSTGRES_USER=${PG_USER} \
     -e POSTGRES_PASSWORD=${PG_PASSWORD} \
@@ -110,10 +111,9 @@ async function ensureDockerPostgres(dataPath: string): Promise<string> {
 async function waitForPostgres(maxRetries: number = 30): Promise<void> {
   for (let i = 0; i < maxRetries; i++) {
     try {
-      await execAsync(
-        `docker exec ${DOCKER_CONTAINER_NAME} pg_isready -U ${PG_USER}`,
-        { timeout: 3000 },
-      );
+      await execAsync(`docker exec ${DOCKER_CONTAINER_NAME} pg_isready -U ${PG_USER}`, {
+        timeout: 3000,
+      });
       return;
     } catch {
       await new Promise((r) => setTimeout(r, 1000));

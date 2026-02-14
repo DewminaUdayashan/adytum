@@ -46,6 +46,7 @@ node packages/gateway/dist/cli/index.js init
 ```
 
 This walks you through naming your agent, selecting models, and generates:
+
 - `adytum.config.yaml` — main config
 - `litellm_config.yaml` — proxy config (optional)
 - `workspace/SOUL.md` — agent personality
@@ -90,12 +91,12 @@ node packages/gateway/dist/cli/index.js skill list
 
 ### REPL commands (inside the chat)
 
-| Command    | Action                              |
-| ---------- | ----------------------------------- |
-| `exit`     | Shut down the gateway               |
-| `/clear`   | Reset conversation context          |
-| `/status`  | Show token usage and connection count |
-| `/reload`  | Reload SOUL.md and skills from disk |
+| Command   | Action                                |
+| --------- | ------------------------------------- |
+| `exit`    | Shut down the gateway                 |
+| `/clear`  | Reset conversation context            |
+| `/status` | Show token usage and connection count |
+| `/reload` | Reload SOUL.md and skills from disk   |
 
 ## Development Workflow
 
@@ -242,15 +243,15 @@ npm run dev -w packages/dashboard
 
 Then visit:
 
-| Page                            | What to check                                     |
-| ------------------------------- | ------------------------------------------------- |
-| http://localhost:3000            | Activity feed — shows agent actions after chatting |
-| http://localhost:3000/console    | Live console — green "Connected" indicator         |
-| http://localhost:3000/chat       | Chat interface — send a message                   |
-| http://localhost:3000/tokens     | Token stats — non-zero after chatting              |
-| http://localhost:3000/permissions| Permission grant/revoke form                      |
-| http://localhost:3000/personality| SOUL.md editor with diff preview                  |
-| http://localhost:3000/heartbeat  | Goal manager                                      |
+| Page                              | What to check                                      |
+| --------------------------------- | -------------------------------------------------- |
+| http://localhost:3000             | Activity feed — shows agent actions after chatting |
+| http://localhost:3000/console     | Live console — green "Connected" indicator         |
+| http://localhost:3000/chat        | Chat interface — send a message                    |
+| http://localhost:3000/tokens      | Token stats — non-zero after chatting              |
+| http://localhost:3000/permissions | Permission grant/revoke form                       |
+| http://localhost:3000/personality | SOUL.md editor with diff preview                   |
+| http://localhost:3000/heartbeat   | Goal manager                                       |
 
 ## Troubleshooting
 

@@ -116,7 +116,8 @@ export class ToolRegistry {
     if (type instanceof z.ZodString) return { type: 'string', description: type.description };
     if (type instanceof z.ZodNumber) return { type: 'number', description: type.description };
     if (type instanceof z.ZodBoolean) return { type: 'boolean', description: type.description };
-    if (type instanceof z.ZodArray) return { type: 'array', items: this.zodTypeToJson(type.element) };
+    if (type instanceof z.ZodArray)
+      return { type: 'array', items: this.zodTypeToJson(type.element) };
     if (type instanceof z.ZodEnum) return { type: 'string', enum: type.options };
     if (type instanceof z.ZodOptional) return this.zodTypeToJson(type.unwrap());
     if (type instanceof z.ZodDefault) return this.zodTypeToJson(type.removeDefault());

@@ -97,7 +97,11 @@ type SkillsResponse = {
     deny: string[];
     loadPaths: string[];
     extraDirs?: string[];
-    permissions?: { install: 'auto' | 'ask' | 'deny'; defaultChannel?: string; defaultUser?: string };
+    permissions?: {
+      install: 'auto' | 'ask' | 'deny';
+      defaultChannel?: string;
+      defaultUser?: string;
+    };
   };
 };
 
@@ -128,7 +132,11 @@ function getAtPath(obj: Record<string, unknown> | undefined, path: string[]): un
   return cursor;
 }
 
-function setAtPath(obj: Record<string, unknown>, path: string[], value: unknown): Record<string, unknown> {
+function setAtPath(
+  obj: Record<string, unknown>,
+  path: string[],
+  value: unknown,
+): Record<string, unknown> {
   if (path.length === 0) return obj;
   const [head, ...tail] = path;
 
@@ -143,7 +151,10 @@ function setAtPath(obj: Record<string, unknown>, path: string[], value: unknown)
   return next;
 }
 
-function getHint(uiHints: Record<string, SkillUiHint> | undefined, path: string[]): SkillUiHint | undefined {
+function getHint(
+  uiHints: Record<string, SkillUiHint> | undefined,
+  path: string[],
+): SkillUiHint | undefined {
   if (!uiHints) return undefined;
   const key = path.join('.');
   return uiHints[key];
@@ -215,7 +226,10 @@ function FieldRenderer(props: {
   if (schema.type === 'boolean') {
     const checked = Boolean(value);
     return (
-      <label key={fieldKey} className="flex items-start justify-between gap-4 rounded-lg border border-border-primary/60 bg-bg-tertiary/20 p-3">
+      <label
+        key={fieldKey}
+        className="flex items-start justify-between gap-4 rounded-lg border border-border-primary/60 bg-bg-tertiary/20 p-3"
+      >
         <div>
           <p className="text-sm font-medium text-text-primary">{title}</p>
           {help && <p className="mt-1 text-[11px] text-text-muted">{help}</p>}
@@ -231,13 +245,13 @@ function FieldRenderer(props: {
   }
 
   if (schema.type === 'array' && schema.items?.type === 'string') {
-    const lines = Array.isArray(value)
-      ? value.map((entry) => String(entry)).join('\n')
-      : '';
+    const lines = Array.isArray(value) ? value.map((entry) => String(entry)).join('\n') : '';
 
     return (
       <div key={fieldKey} className="space-y-1">
-        <label className="block text-xs font-semibold uppercase tracking-wider text-text-muted">{title}</label>
+        <label className="block text-xs font-semibold uppercase tracking-wider text-text-muted">
+          {title}
+        </label>
         {help && <p className="text-[11px] text-text-muted">{help}</p>}
         <textarea
           rows={4}
@@ -261,7 +275,9 @@ function FieldRenderer(props: {
 
     return (
       <div key={fieldKey} className="space-y-1">
-        <label className="block text-xs font-semibold uppercase tracking-wider text-text-muted">{title}</label>
+        <label className="block text-xs font-semibold uppercase tracking-wider text-text-muted">
+          {title}
+        </label>
         {help && <p className="text-[11px] text-text-muted">{help}</p>}
         <select
           value={selected}
@@ -282,7 +298,9 @@ function FieldRenderer(props: {
     const numericValue = typeof value === 'number' ? String(value) : '';
     return (
       <div key={fieldKey} className="space-y-1">
-        <label className="block text-xs font-semibold uppercase tracking-wider text-text-muted">{title}</label>
+        <label className="block text-xs font-semibold uppercase tracking-wider text-text-muted">
+          {title}
+        </label>
         {help && <p className="text-[11px] text-text-muted">{help}</p>}
         <input
           type="number"
@@ -307,7 +325,9 @@ function FieldRenderer(props: {
 
   return (
     <div key={fieldKey} className="space-y-1">
-      <label className="block text-xs font-semibold uppercase tracking-wider text-text-muted">{title}</label>
+      <label className="block text-xs font-semibold uppercase tracking-wider text-text-muted">
+        {title}
+      </label>
       {help && <p className="text-[11px] text-text-muted">{help}</p>}
       <input
         type={isSensitive ? 'password' : 'text'}
@@ -328,17 +348,29 @@ export default function SkillsPage() {
   const [savingSkillId, setSavingSkillId] = useState<string | null>(null);
   const [draftConfig, setDraftConfig] = useState<Record<string, Record<string, unknown>>>({});
   const [draftEnabled, setDraftEnabled] = useState<Record<string, boolean>>({});
-  const [draftInstallPerm, setDraftInstallPerm] = useState<Record<string, 'auto' | 'ask' | 'deny' | undefined>>({});
+  const [draftInstallPerm, setDraftInstallPerm] = useState<
+    Record<string, 'auto' | 'ask' | 'deny' | undefined>
+  >({});
   const [originalConfig, setOriginalConfig] = useState<Record<string, Record<string, unknown>>>({});
   const [originalEnabled, setOriginalEnabled] = useState<Record<string, boolean>>({});
-  const [originalInstallPerm, setOriginalInstallPerm] = useState<Record<string, 'auto' | 'ask' | 'deny' | undefined>>({});
-  const [globalPerms, setGlobalPerms] = useState<{ install: 'auto' | 'ask' | 'deny'; defaultChannel?: string; defaultUser?: string }>({
+  const [originalInstallPerm, setOriginalInstallPerm] = useState<
+    Record<string, 'auto' | 'ask' | 'deny' | undefined>
+  >({});
+  const [globalPerms, setGlobalPerms] = useState<{
+    install: 'auto' | 'ask' | 'deny';
+    defaultChannel?: string;
+    defaultUser?: string;
+  }>({
     install: 'ask',
     defaultChannel: '',
     defaultUser: '',
   });
-  const [instructionFilesBySkill, setInstructionFilesBySkill] = useState<Record<string, SkillInstructionFile[]>>({});
-  const [selectedInstructionFileBySkill, setSelectedInstructionFileBySkill] = useState<Record<string, string>>({});
+  const [instructionFilesBySkill, setInstructionFilesBySkill] = useState<
+    Record<string, SkillInstructionFile[]>
+  >({});
+  const [selectedInstructionFileBySkill, setSelectedInstructionFileBySkill] = useState<
+    Record<string, string>
+  >({});
   const [instructionDrafts, setInstructionDrafts] = useState<Record<string, string>>({});
   const [instructionOriginals, setInstructionOriginals] = useState<Record<string, string>>({});
   const [instructionLoadingSkillId, setInstructionLoadingSkillId] = useState<string | null>(null);
@@ -351,13 +383,13 @@ export default function SkillsPage() {
       const res = await gatewayFetch<SkillsResponse>('/api/skills');
       const nextSkills = res.skills;
       setSkills(nextSkills);
-    if (res.global?.permissions) {
-      setGlobalPerms({
-        install: res.global.permissions.install || 'ask',
-        defaultChannel: res.global.permissions.defaultChannel,
-        defaultUser: res.global.permissions.defaultUser,
-      });
-    }
+      if (res.global?.permissions) {
+        setGlobalPerms({
+          install: res.global.permissions.install || 'ask',
+          defaultChannel: res.global.permissions.defaultChannel,
+          defaultUser: res.global.permissions.defaultUser,
+        });
+      }
 
       const nextConfig: Record<string, Record<string, unknown>> = {};
       const nextEnabled: Record<string, boolean> = {};
@@ -407,7 +439,9 @@ export default function SkillsPage() {
   const loadSkillInstructions = async (skillId: string) => {
     try {
       setInstructionLoadingSkillId(skillId);
-      const res = await gatewayFetch<SkillInstructionsResponse>(`/api/skills/${skillId}/instructions`);
+      const res = await gatewayFetch<SkillInstructionsResponse>(
+        `/api/skills/${skillId}/instructions`,
+      );
       const files = Array.isArray(res.files) ? res.files : [];
 
       setInstructionFilesBySkill((prev) => ({
@@ -462,7 +496,8 @@ export default function SkillsPage() {
   }, [selectedSkillId, instructionFilesBySkill]);
 
   const hasSkillChanges = (skillId: string): boolean => {
-    const cfgChanged = JSON.stringify(draftConfig[skillId] || {}) !== JSON.stringify(originalConfig[skillId] || {});
+    const cfgChanged =
+      JSON.stringify(draftConfig[skillId] || {}) !== JSON.stringify(originalConfig[skillId] || {});
     const enabledChanged = draftEnabled[skillId] !== originalEnabled[skillId];
     const permChanged = draftInstallPerm[skillId] !== originalInstallPerm[skillId];
     return cfgChanged || enabledChanged || permChanged;
@@ -561,11 +596,14 @@ export default function SkillsPage() {
     ? instructionFilesBySkill[selectedSkill.id] || []
     : [];
   const selectedInstructionPath = selectedSkill
-    ? selectedInstructionFileBySkill[selectedSkill.id] || selectedInstructionFiles[0]?.relativePath || ''
+    ? selectedInstructionFileBySkill[selectedSkill.id] ||
+      selectedInstructionFiles[0]?.relativePath ||
+      ''
     : '';
-  const selectedInstructionKey = selectedSkill && selectedInstructionPath
-    ? instructionContentKey(selectedSkill.id, selectedInstructionPath)
-    : '';
+  const selectedInstructionKey =
+    selectedSkill && selectedInstructionPath
+      ? instructionContentKey(selectedSkill.id, selectedInstructionPath)
+      : '';
   const selectedInstructionContent = selectedInstructionKey
     ? instructionDrafts[selectedInstructionKey] || ''
     : '';
@@ -579,33 +617,38 @@ export default function SkillsPage() {
   }
 
   return (
-      <div className="flex h-full flex-col animate-fade-in">
-        <div className="px-8 pt-8 pb-4">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted font-medium">Configuration</p>
-              <h1 className="mt-1 text-2xl font-semibold tracking-tight text-text-primary">Skills</h1>
-              <p className="mt-1 text-sm text-text-muted">
-                Configure each skill from its manifest-defined schema. Changes apply immediately after skill reload.
-              </p>
-            </div>
-            <div className="flex items-center gap-2">
-              <Badge variant="info">{loadedCount}/{skills.length} loaded</Badge>
-              <Button variant="ghost" size="sm" onClick={loadSkills}>
-                <RefreshCw className="h-3.5 w-3.5" />
-                Refresh
-              </Button>
-            </div>
+    <div className="flex h-full flex-col animate-fade-in">
+      <div className="px-8 pt-8 pb-4">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted font-medium">
+              Configuration
+            </p>
+            <h1 className="mt-1 text-2xl font-semibold tracking-tight text-text-primary">Skills</h1>
+            <p className="mt-1 text-sm text-text-muted">
+              Configure each skill from its manifest-defined schema. Changes apply immediately after
+              skill reload.
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Badge variant="info">
+              {loadedCount}/{skills.length} loaded
+            </Badge>
+            <Button variant="ghost" size="sm" onClick={loadSkills}>
+              <RefreshCw className="h-3.5 w-3.5" />
+              Refresh
+            </Button>
           </div>
         </div>
+      </div>
 
-        {error && (
-          <div className="mx-8 mb-2 rounded-lg border border-error/30 bg-error/10 px-4 py-2 text-sm text-error">
-            {error}
-          </div>
-        )}
+      {error && (
+        <div className="mx-8 mb-2 rounded-lg border border-error/30 bg-error/10 px-4 py-2 text-sm text-error">
+          {error}
+        </div>
+      )}
 
-        <div className="flex-1 overflow-auto px-8 pb-8">
+      <div className="flex-1 overflow-auto px-8 pb-8">
         {skills.length === 0 ? (
           <EmptyState
             icon={Puzzle}
@@ -616,11 +659,14 @@ export default function SkillsPage() {
           <div className="grid gap-4 lg:grid-cols-[320px_minmax(0,1fr)]">
             <Card className="h-fit">
               <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Installed Skills</p>
+                <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                  Installed Skills
+                </p>
                 <div className="space-y-2">
                   {skills.map((skill) => {
                     const isActive = selectedSkillId === skill.id;
-                    const hasChanges = hasSkillChanges(skill.id) || hasAnyInstructionChanges(skill.id);
+                    const hasChanges =
+                      hasSkillChanges(skill.id) || hasAnyInstructionChanges(skill.id);
 
                     return (
                       <button
@@ -634,14 +680,26 @@ export default function SkillsPage() {
                         }`}
                       >
                         <div className="flex items-center justify-between gap-2">
-                          <p className="truncate text-sm font-semibold text-text-primary">{skill.name}</p>
-                          <Badge variant={skill.status === 'error' ? 'error' : skill.status === 'loaded' ? 'success' : 'warning'}>
+                          <p className="truncate text-sm font-semibold text-text-primary">
+                            {skill.name}
+                          </p>
+                          <Badge
+                            variant={
+                              skill.status === 'error'
+                                ? 'error'
+                                : skill.status === 'loaded'
+                                  ? 'success'
+                                  : 'warning'
+                            }
+                          >
                             {skill.status}
                           </Badge>
                         </div>
                         <p className="mt-1 truncate text-xs text-text-muted">{skill.id}</p>
                         {hasChanges && (
-                          <p className="mt-2 text-[11px] font-medium text-warning">Unsaved changes</p>
+                          <p className="mt-2 text-[11px] font-medium text-warning">
+                            Unsaved changes
+                          </p>
                         )}
                       </button>
                     );
@@ -650,319 +708,381 @@ export default function SkillsPage() {
               </div>
             </Card>
 
-            {selectedSkill ? (() => {
-              const skill = selectedSkill;
-              const schema = skill.manifest?.configSchema;
-              const uiHints = skill.manifest?.uiHints;
-              const canRenderConfig = schema?.type === 'object' && isRecord(schema.properties);
-              const requiredEnv = skill.requiredEnv || [];
-              const secretKeys = new Set(skill.secrets || []);
+            {selectedSkill ? (
+              (() => {
+                const skill = selectedSkill;
+                const schema = skill.manifest?.configSchema;
+                const uiHints = skill.manifest?.uiHints;
+                const canRenderConfig = schema?.type === 'object' && isRecord(schema.properties);
+                const requiredEnv = skill.requiredEnv || [];
+                const secretKeys = new Set(skill.secrets || []);
 
-              return (
-                <Card key={skill.id}>
-                  <div className="space-y-4">
-                    <div className="flex flex-wrap items-start justify-between gap-4">
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <h2 className="text-lg font-semibold text-text-primary">{skill.name}</h2>
-                          <Badge variant={skill.status === 'error' ? 'error' : skill.status === 'loaded' ? 'success' : 'warning'}>
-                            {skill.status}
-                          </Badge>
-                          <Badge variant="default">{skill.id}</Badge>
-                          {skill.readonly && <Badge variant="default" className="border-border-primary bg-bg-tertiary text-text-muted">System (Read-Only)</Badge>}
+                return (
+                  <Card key={skill.id}>
+                    <div className="space-y-4">
+                      <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h2 className="text-lg font-semibold text-text-primary">
+                              {skill.name}
+                            </h2>
+                            <Badge
+                              variant={
+                                skill.status === 'error'
+                                  ? 'error'
+                                  : skill.status === 'loaded'
+                                    ? 'success'
+                                    : 'warning'
+                              }
+                            >
+                              {skill.status}
+                            </Badge>
+                            <Badge variant="default">{skill.id}</Badge>
+                            {skill.readonly && (
+                              <Badge
+                                variant="default"
+                                className="border-border-primary bg-bg-tertiary text-text-muted"
+                              >
+                                System (Read-Only)
+                              </Badge>
+                            )}
+                          </div>
+                          {skill.description && (
+                            <p className="mt-1 text-sm text-text-muted">{skill.description}</p>
+                          )}
+                          {skill.error && <p className="mt-2 text-sm text-error">{skill.error}</p>}
+                          <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-text-muted">
+                            <span className="inline-flex items-center gap-1">
+                              <Wrench className="h-3.5 w-3.5" />
+                              Tools: {skill.toolNames.length}
+                            </span>
+                            <span className="inline-flex items-center gap-1">
+                              <ShieldCheck className="h-3.5 w-3.5" />
+                              Services: {skill.serviceIds.length}
+                            </span>
+                          </div>
                         </div>
-                        {skill.description && (
-                          <p className="mt-1 text-sm text-text-muted">{skill.description}</p>
-                        )}
-                        {skill.error && (
-                          <p className="mt-2 text-sm text-error">{skill.error}</p>
-                        )}
-                        <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-text-muted">
-                          <span className="inline-flex items-center gap-1">
-                            <Wrench className="h-3.5 w-3.5" />
-                            Tools: {skill.toolNames.length}
-                          </span>
-                          <span className="inline-flex items-center gap-1">
-                            <ShieldCheck className="h-3.5 w-3.5" />
-                            Services: {skill.serviceIds.length}
-                          </span>
-                        </div>
+
+                        <label
+                          className={`inline-flex items-center gap-2 rounded-lg border border-border-primary bg-bg-tertiary/20 px-3 py-2 text-sm ${skill.readonly ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          <span className="text-text-secondary">Enabled</span>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(draftEnabled[skill.id])}
+                            disabled={skill.readonly}
+                            onChange={(e) =>
+                              setDraftEnabled((prev) => ({
+                                ...prev,
+                                [skill.id]: e.target.checked,
+                              }))
+                            }
+                            className="h-4 w-4 rounded border-border-primary bg-bg-primary text-accent-primary focus:ring-accent-primary/50"
+                          />
+                        </label>
+                        <label
+                          className={`inline-flex items-center gap-2 rounded-lg border border-border-primary bg-bg-tertiary/20 px-3 py-2 text-sm ${skill.readonly ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                          <span className="text-text-secondary">Install</span>
+                          <select
+                            className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent-primary/50 focus:outline-none disabled:cursor-not-allowed"
+                            value={draftInstallPerm[skill.id] || 'ask'}
+                            disabled={skill.readonly}
+                            onChange={(e) =>
+                              setDraftInstallPerm((prev) => ({
+                                ...prev,
+                                [skill.id]: e.target.value as 'auto' | 'ask' | 'deny',
+                              }))
+                            }
+                          >
+                            <option value="auto">Auto</option>
+                            <option value="ask">Ask</option>
+                            <option value="deny">Deny</option>
+                          </select>
+                        </label>
                       </div>
 
-                      <label className={`inline-flex items-center gap-2 rounded-lg border border-border-primary bg-bg-tertiary/20 px-3 py-2 text-sm ${skill.readonly ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                        <span className="text-text-secondary">Enabled</span>
-                        <input
-                          type="checkbox"
-                          checked={Boolean(draftEnabled[skill.id])}
-                          disabled={skill.readonly}
-                          onChange={(e) =>
-                            setDraftEnabled((prev) => ({
-                              ...prev,
-                              [skill.id]: e.target.checked,
-                            }))
-                          }
-                          className="h-4 w-4 rounded border-border-primary bg-bg-primary text-accent-primary focus:ring-accent-primary/50"
-                        />
-                      </label>
-                      <label className={`inline-flex items-center gap-2 rounded-lg border border-border-primary bg-bg-tertiary/20 px-3 py-2 text-sm ${skill.readonly ? 'opacity-50 cursor-not-allowed' : ''}`}>
-                        <span className="text-text-secondary">Install</span>
-                        <select
-                          className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent-primary/50 focus:outline-none disabled:cursor-not-allowed"
-                          value={draftInstallPerm[skill.id] || 'ask'}
-                          disabled={skill.readonly}
-                          onChange={(e) =>
-                            setDraftInstallPerm((prev) => ({
-                              ...prev,
-                              [skill.id]: e.target.value as 'auto' | 'ask' | 'deny',
-                            }))
-                          }
-                        >
-                          <option value="auto">Auto</option>
-                          <option value="ask">Ask</option>
-                          <option value="deny">Deny</option>
-                        </select>
-                      </label>
-                    </div>
-
-                    {requiredEnv.length > 0 && (
-                      <div className="space-y-2 rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4">
-                        <div className="flex items-center justify-between">
-                          <h3 className="text-sm font-semibold text-text-primary">Required Environment</h3>
-                          <span className="text-xs text-text-muted">
-                            {requiredEnv.filter((k) => secretKeys.has(k)).length}/{requiredEnv.length} set
-                          </span>
+                      {requiredEnv.length > 0 && (
+                        <div className="space-y-2 rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-semibold text-text-primary">
+                              Required Environment
+                            </h3>
+                            <span className="text-xs text-text-muted">
+                              {requiredEnv.filter((k) => secretKeys.has(k)).length}/
+                              {requiredEnv.length} set
+                            </span>
+                          </div>
+                          <div className="grid gap-2 md:grid-cols-2">
+                            {requiredEnv.map((envKey) => (
+                              <div key={envKey} className="space-y-1">
+                                <label className="block text-[11px] uppercase tracking-wider text-text-muted font-semibold">
+                                  {envKey}
+                                </label>
+                                <input
+                                  type="password"
+                                  value={secretDrafts[skill.id]?.[envKey] || ''}
+                                  onChange={(e) =>
+                                    setSecretDrafts((prev) => ({
+                                      ...prev,
+                                      [skill.id]: {
+                                        ...(prev[skill.id] || {}),
+                                        [envKey]: e.target.value,
+                                      },
+                                    }))
+                                  }
+                                  placeholder={
+                                    secretKeys.has(envKey) ? '•••••• (set)' : 'Enter value'
+                                  }
+                                  className="w-full rounded-lg border border-border-primary bg-bg-tertiary px-3 py-2 text-sm text-text-primary focus:border-accent-primary/50 focus:outline-none"
+                                />
+                              </div>
+                            ))}
+                          </div>
+                          <div className="flex items-center justify-end gap-2">
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              isLoading={savingSkillId === skill.id}
+                              onClick={() => saveSecrets(skill.id)}
+                              disabled={savingSkillId === skill.id || skill.readonly}
+                            >
+                              Save Required Env
+                            </Button>
+                          </div>
                         </div>
-                        <div className="grid gap-2 md:grid-cols-2">
-                          {requiredEnv.map((envKey) => (
-                            <div key={envKey} className="space-y-1">
-                              <label className="block text-[11px] uppercase tracking-wider text-text-muted font-semibold">{envKey}</label>
+                      )}
+
+                      {canRenderConfig ? (
+                        <div className="space-y-3 rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4">
+                          <h3 className="text-sm font-semibold text-text-primary">Configuration</h3>
+                          <div className="flex justify-end">
+                            <label className="text-xs text-text-muted inline-flex items-center gap-2">
                               <input
-                                type="password"
-                                value={secretDrafts[skill.id]?.[envKey] || ''}
+                                type="checkbox"
+                                checked={Boolean(showAdvancedBySkill[skill.id])}
                                 onChange={(e) =>
-                                  setSecretDrafts((prev) => ({
+                                  setShowAdvancedBySkill((prev) => ({
                                     ...prev,
-                                    [skill.id]: { ...(prev[skill.id] || {}), [envKey]: e.target.value },
+                                    [skill.id]: e.target.checked,
                                   }))
                                 }
-                                placeholder={secretKeys.has(envKey) ? '•••••• (set)' : 'Enter value'}
-                                className="w-full rounded-lg border border-border-primary bg-bg-tertiary px-3 py-2 text-sm text-text-primary focus:border-accent-primary/50 focus:outline-none"
+                                className="h-3.5 w-3.5 rounded border-border-primary"
                               />
-                            </div>
-                          ))}
+                              Show advanced fields
+                            </label>
+                          </div>
+                          <FieldRenderer
+                            schema={schema}
+                            path={[]}
+                            config={draftConfig[skill.id] || {}}
+                            onChange={(path, value) => {
+                              setDraftConfig((prev) => {
+                                const current = prev[skill.id] || {};
+                                return {
+                                  ...prev,
+                                  [skill.id]: setAtPath(current, path, value),
+                                };
+                              });
+                            }}
+                            uiHints={uiHints}
+                            showAdvanced={Boolean(showAdvancedBySkill[skill.id])}
+                          />
                         </div>
-                        <div className="flex items-center justify-end gap-2">
+                      ) : (
+                        <div className="rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4 text-sm text-text-muted">
+                          This skill does not expose configurable schema fields.
+                        </div>
+                      )}
+
+                      <div className="space-y-2 rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <h3 className="text-sm font-semibold text-text-primary">
+                            Install & Requirements
+                          </h3>
+                          <div className="text-xs text-text-muted">
+                            Missing:{' '}
+                            {[
+                              ...(skill.missing?.bins || []).map((b) => `bin:${b}`),
+                              ...(skill.missing?.anyBins || []).map((b) => `any:${b}`),
+                              ...(skill.missing?.env || []).map((e) => `env:${e}`),
+                              ...(skill.missing?.config || []).map((c) => `config:${c}`),
+                              ...(skill.missing?.os || []).map((o) => `os:${o}`),
+                            ].join(', ') || 'none'}
+                          </div>
+                        </div>
+                        {skill.install && skill.install.length > 0 ? (
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              onClick={async () => {
+                                try {
+                                  await gatewayFetch(`/api/skills/${skill.id}/install`, {
+                                    method: 'POST',
+                                    body: JSON.stringify({ approve: true }),
+                                  });
+                                  await loadSkills();
+                                } catch (err: any) {
+                                  setError(err.message || String(err));
+                                }
+                              }}
+                            >
+                              Install missing deps
+                            </Button>
+                            <p className="text-xs text-text-muted">
+                              Uses manifest install hints (brew supported).
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-xs text-text-muted">No installer hints provided.</p>
+                        )}
+                      </div>
+
+                      <div className="space-y-3 rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <h3 className="text-sm font-semibold text-text-primary">Skill Prompt</h3>
+                          {selectedInstructionFiles.length > 1 && (
+                            <select
+                              value={selectedInstructionPath}
+                              onChange={(e) => {
+                                const nextPath = e.target.value;
+                                setSelectedInstructionFileBySkill((prev) => ({
+                                  ...prev,
+                                  [skill.id]: nextPath,
+                                }));
+                              }}
+                              className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-xs text-text-primary focus:border-accent-primary/50 focus:outline-none"
+                            >
+                              {selectedInstructionFiles.map((file) => (
+                                <option key={file.relativePath} value={file.relativePath}>
+                                  {file.relativePath}
+                                </option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+
+                        {instructionLoadingSkillId === skill.id ? (
+                          <div className="flex items-center gap-2 text-sm text-text-muted">
+                            <Spinner size="sm" />
+                            Loading instructions...
+                          </div>
+                        ) : selectedInstructionFiles.length === 0 ? (
+                          <p className="text-sm text-text-muted">
+                            No instruction files found for this skill.
+                          </p>
+                        ) : (
+                          <>
+                            <textarea
+                              value={selectedInstructionContent}
+                              onChange={(e) => {
+                                if (!selectedInstructionPath) return;
+                                const key = instructionContentKey(
+                                  skill.id,
+                                  selectedInstructionPath,
+                                );
+                                setInstructionDrafts((prev) => ({
+                                  ...prev,
+                                  [key]: e.target.value,
+                                }));
+                              }}
+                              className="min-h-[220px] w-full rounded-lg border border-border-primary bg-bg-tertiary px-3 py-2 font-mono text-xs leading-relaxed text-text-primary focus:border-accent-primary/50 focus:outline-none"
+                              spellCheck={false}
+                            />
+
+                            <div className="flex items-center justify-end gap-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  if (!selectedInstructionPath) return;
+                                  const key = instructionContentKey(
+                                    skill.id,
+                                    selectedInstructionPath,
+                                  );
+                                  setInstructionDrafts((prev) => ({
+                                    ...prev,
+                                    [key]: instructionOriginals[key] || '',
+                                  }));
+                                }}
+                                disabled={
+                                  !selectedInstructionPath ||
+                                  !hasInstructionChanges(skill.id, selectedInstructionPath)
+                                }
+                              >
+                                Reset Prompt
+                              </Button>
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                isLoading={instructionSavingSkillId === skill.id}
+                                onClick={() => saveSkillInstructions(skill.id)}
+                                disabled={
+                                  !selectedInstructionPath ||
+                                  !hasInstructionChanges(skill.id, selectedInstructionPath) ||
+                                  instructionSavingSkillId === skill.id ||
+                                  skill.readonly
+                                }
+                              >
+                                <Save className="h-3.5 w-3.5" />
+                                Save Prompt
+                              </Button>
+                            </div>
+                          </>
+                        )}
+                      </div>
+
+                      {/* Global Save/Reset for skill config and enabled state */}
+                      {hasSkillChanges(skill.id) && (
+                        <div className="flex items-center justify-end gap-3 pt-4 border-t border-border-primary/40">
+                          {hasSkillChanges(skill.id) && (
+                            <span className="text-xs text-warning animate-pulse">
+                              You have unsaved changes
+                            </span>
+                          )}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                              setDraftConfig((prev) => ({
+                                ...prev,
+                                [skill.id]: originalConfig[skill.id] || {},
+                              }));
+                              setDraftEnabled((prev) => ({
+                                ...prev,
+                                [skill.id]: originalEnabled[skill.id],
+                              }));
+                            }}
+                            disabled={
+                              !hasSkillChanges(skill.id) ||
+                              savingSkillId === skill.id ||
+                              skill.readonly
+                            }
+                          >
+                            Reset
+                          </Button>
                           <Button
                             variant="primary"
                             size="sm"
                             isLoading={savingSkillId === skill.id}
-                            onClick={() => saveSecrets(skill.id)}
-                            disabled={savingSkillId === skill.id || skill.readonly}
+                            onClick={() => saveSkill(skill.id)}
+                            disabled={
+                              !hasSkillChanges(skill.id) ||
+                              savingSkillId === skill.id ||
+                              skill.readonly
+                            }
                           >
-                            Save Required Env
+                            <Save className="h-3.5 w-3.5" />
+                            Save Skill
                           </Button>
                         </div>
-                      </div>
-                    )}
-
-                    {canRenderConfig ? (
-                      <div className="space-y-3 rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4">
-                        <h3 className="text-sm font-semibold text-text-primary">Configuration</h3>
-                        <div className="flex justify-end">
-                          <label className="text-xs text-text-muted inline-flex items-center gap-2">
-                            <input
-                              type="checkbox"
-                              checked={Boolean(showAdvancedBySkill[skill.id])}
-                              onChange={(e) =>
-                                setShowAdvancedBySkill((prev) => ({ ...prev, [skill.id]: e.target.checked }))
-                              }
-                              className="h-3.5 w-3.5 rounded border-border-primary"
-                            />
-                            Show advanced fields
-                          </label>
-                        </div>
-                        <FieldRenderer
-                          schema={schema}
-                          path={[]}
-                          config={draftConfig[skill.id] || {}}
-                          onChange={(path, value) => {
-                            setDraftConfig((prev) => {
-                              const current = prev[skill.id] || {};
-                              return {
-                                ...prev,
-                                [skill.id]: setAtPath(current, path, value),
-                              };
-                            });
-                          }}
-                          uiHints={uiHints}
-                          showAdvanced={Boolean(showAdvancedBySkill[skill.id])}
-                        />
-                      </div>
-                    ) : (
-                      <div className="rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4 text-sm text-text-muted">
-                        This skill does not expose configurable schema fields.
-                      </div>
-                    )}
-
-                    <div className="space-y-2 rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <h3 className="text-sm font-semibold text-text-primary">Install & Requirements</h3>
-                        <div className="text-xs text-text-muted">
-                          Missing: {[
-                            ...(skill.missing?.bins || []).map((b) => `bin:${b}`),
-                            ...(skill.missing?.anyBins || []).map((b) => `any:${b}`),
-                            ...(skill.missing?.env || []).map((e) => `env:${e}`),
-                            ...(skill.missing?.config || []).map((c) => `config:${c}`),
-                            ...(skill.missing?.os || []).map((o) => `os:${o}`),
-                          ].join(', ') || 'none'}
-                        </div>
-                      </div>
-                      {skill.install && skill.install.length > 0 ? (
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={async () => {
-                              try {
-                                await gatewayFetch(`/api/skills/${skill.id}/install`, {
-                                  method: 'POST',
-                                  body: JSON.stringify({ approve: true }),
-                                });
-                                await loadSkills();
-                              } catch (err: any) {
-                                setError(err.message || String(err));
-                              }
-                            }}
-                          >
-                            Install missing deps
-                          </Button>
-                          <p className="text-xs text-text-muted">
-                            Uses manifest install hints (brew supported).
-                          </p>
-                        </div>
-                      ) : (
-                        <p className="text-xs text-text-muted">No installer hints provided.</p>
                       )}
                     </div>
-
-                    <div className="space-y-3 rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4">
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <h3 className="text-sm font-semibold text-text-primary">Skill Prompt</h3>
-                        {selectedInstructionFiles.length > 1 && (
-                          <select
-                            value={selectedInstructionPath}
-                            onChange={(e) => {
-                              const nextPath = e.target.value;
-                              setSelectedInstructionFileBySkill((prev) => ({
-                                ...prev,
-                                [skill.id]: nextPath,
-                              }));
-                            }}
-                            className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-xs text-text-primary focus:border-accent-primary/50 focus:outline-none"
-                          >
-                            {selectedInstructionFiles.map((file) => (
-                              <option key={file.relativePath} value={file.relativePath}>
-                                {file.relativePath}
-                              </option>
-                            ))}
-                          </select>
-                        )}
-                      </div>
-
-                      {instructionLoadingSkillId === skill.id ? (
-                        <div className="flex items-center gap-2 text-sm text-text-muted">
-                          <Spinner size="sm" />
-                          Loading instructions...
-                        </div>
-                      ) : selectedInstructionFiles.length === 0 ? (
-                        <p className="text-sm text-text-muted">No instruction files found for this skill.</p>
-                      ) : (
-                        <>
-                          <textarea
-                            value={selectedInstructionContent}
-                            onChange={(e) => {
-                              if (!selectedInstructionPath) return;
-                              const key = instructionContentKey(skill.id, selectedInstructionPath);
-                              setInstructionDrafts((prev) => ({
-                                ...prev,
-                                [key]: e.target.value,
-                              }));
-                            }}
-                            className="min-h-[220px] w-full rounded-lg border border-border-primary bg-bg-tertiary px-3 py-2 font-mono text-xs leading-relaxed text-text-primary focus:border-accent-primary/50 focus:outline-none"
-                            spellCheck={false}
-                          />
-
-                          <div className="flex items-center justify-end gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={() => {
-                                if (!selectedInstructionPath) return;
-                                const key = instructionContentKey(skill.id, selectedInstructionPath);
-                                setInstructionDrafts((prev) => ({
-                                  ...prev,
-                                  [key]: instructionOriginals[key] || '',
-                                }));
-                              }}
-                              disabled={!selectedInstructionPath || !hasInstructionChanges(skill.id, selectedInstructionPath)}
-                            >
-                              Reset Prompt
-                            </Button>
-                            <Button
-                              variant="primary"
-                              size="sm"
-                              isLoading={instructionSavingSkillId === skill.id}
-                              onClick={() => saveSkillInstructions(skill.id)}
-                              disabled={
-                                !selectedInstructionPath ||
-                                !hasInstructionChanges(skill.id, selectedInstructionPath) ||
-                                instructionSavingSkillId === skill.id ||
-                                skill.readonly
-                              }
-                            >
-                              <Save className="h-3.5 w-3.5" />
-                              Save Prompt
-                            </Button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-
-                    {/* Global Save/Reset for skill config and enabled state */}
-                    {hasSkillChanges(skill.id) && (
-                      <div className="flex items-center justify-end gap-3 pt-4 border-t border-border-primary/40">
-                        {hasSkillChanges(skill.id) && (
-                          <span className="text-xs text-warning animate-pulse">
-                            You have unsaved changes
-                          </span>
-                        )}
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => {
-                            setDraftConfig((prev) => ({ ...prev, [skill.id]: originalConfig[skill.id] || {} }));
-                            setDraftEnabled((prev) => ({ ...prev, [skill.id]: originalEnabled[skill.id] }));
-                          }}
-                          disabled={!hasSkillChanges(skill.id) || savingSkillId === skill.id || skill.readonly}
-                        >
-                          Reset
-                        </Button>
-                        <Button
-                          variant="primary"
-                          size="sm"
-                          isLoading={savingSkillId === skill.id}
-                          onClick={() => saveSkill(skill.id)}
-                          disabled={!hasSkillChanges(skill.id) || savingSkillId === skill.id || skill.readonly}
-                        >
-                          <Save className="h-3.5 w-3.5" />
-                          Save Skill
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                </Card>
-              );
-            })() : (
+                  </Card>
+                );
+              })()
+            ) : (
               <EmptyState
                 icon={Puzzle}
                 title="Select a skill"

@@ -42,7 +42,12 @@ export function ThinkingIndicator({
   pendingTools: string[];
   activities: ThinkingActivityEntry[];
   startedAt: number | null;
-  approvals?: Array<{ id: string; description: string; kind: string; status?: 'pending' | 'approved' | 'denied' }>;
+  approvals?: Array<{
+    id: string;
+    description: string;
+    kind: string;
+    status?: 'pending' | 'approved' | 'denied';
+  }>;
   onApproval?: (id: string, approved: boolean) => void;
 }) {
   const [now, setNow] = useState(() => Date.now());
@@ -99,14 +104,22 @@ export function ThinkingIndicator({
               >
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="text-[11px] font-bold text-text-primary uppercase tracking-wider">Approval Required</p>
-                    <p className="text-xs text-text-muted mt-0.5 leading-tight">{req.description || req.kind}</p>
+                    <p className="text-[11px] font-bold text-text-primary uppercase tracking-wider">
+                      Approval Required
+                    </p>
+                    <p className="text-xs text-text-muted mt-0.5 leading-tight">
+                      {req.description || req.kind}
+                    </p>
                   </div>
                   {req.status !== 'pending' && (
-                    <span className={clsx(
-                      "text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-tighter",
-                      req.status === 'approved' ? "bg-success/20 text-success" : "bg-error/20 text-error"
-                    )}>
+                    <span
+                      className={clsx(
+                        'text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-tighter',
+                        req.status === 'approved'
+                          ? 'bg-success/20 text-success'
+                          : 'bg-error/20 text-error',
+                      )}
+                    >
                       {req.status}
                     </span>
                   )}

@@ -69,7 +69,9 @@ export default function PermissionsPage() {
         if (skillsRes.global?.permissions) {
           setInstallPerm(skillsRes.global.permissions.install || 'ask');
         }
-        const comm = (skillsRes.skills || []).filter((s) => s.communication).map((s) => ({ id: s.id, name: s.name }));
+        const comm = (skillsRes.skills || [])
+          .filter((s) => s.communication)
+          .map((s) => ({ id: s.id, name: s.name }));
         setCommSkills(comm);
         if (skillsRes.execution) {
           setExecPerms((prev) => ({
@@ -84,7 +86,9 @@ export default function PermissionsPage() {
         /* ignore */
       }
       try {
-        const exec = await gatewayFetch<{ execution: ExecutionPermissions }>('/api/execution/permissions');
+        const exec = await gatewayFetch<{ execution: ExecutionPermissions }>(
+          '/api/execution/permissions',
+        );
         if (exec.execution) {
           setExecPerms({
             shell: exec.execution.shell || 'ask',
@@ -148,8 +152,12 @@ export default function PermissionsPage() {
       <div className="px-8 pt-8 pb-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted font-medium">Security</p>
-            <h1 className="text-2xl font-semibold text-text-primary tracking-tight mt-1">Permissions</h1>
+            <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted font-medium">
+              Security
+            </p>
+            <h1 className="text-2xl font-semibold text-text-primary tracking-tight mt-1">
+              Permissions
+            </h1>
           </div>
           <Button variant="primary" size="sm" onClick={() => setShowGrant(!showGrant)}>
             <Plus className="h-3.5 w-3.5" />
@@ -163,7 +171,9 @@ export default function PermissionsPage() {
           <h3 className="text-sm font-semibold text-text-primary mb-3">Agent Settings</h3>
           <div className="grid gap-3 md:grid-cols-2">
             <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Install permissions</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Install permissions
+              </p>
               <Select
                 value={installPerm}
                 onChange={(val) => setInstallPerm(val as 'auto' | 'ask' | 'deny')}
@@ -176,10 +186,14 @@ export default function PermissionsPage() {
               />
             </div>
             <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Terminal commands</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Terminal commands
+              </p>
               <Select
                 value={execPerms.shell}
-                onChange={(val) => setExecPerms((prev) => ({ ...prev, shell: val as 'auto' | 'ask' | 'deny' }))}
+                onChange={(val) =>
+                  setExecPerms((prev) => ({ ...prev, shell: val as 'auto' | 'ask' | 'deny' }))
+                }
                 options={[
                   { value: 'auto', label: 'Auto' },
                   { value: 'ask', label: 'Ask' },
@@ -189,39 +203,57 @@ export default function PermissionsPage() {
               />
             </div>
             <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Default approval channel</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Default approval channel
+              </p>
               <input
                 value={execPerms.defaultChannel || ''}
-                onChange={(e) => setExecPerms((prev) => ({ ...prev, defaultChannel: e.target.value }))}
+                onChange={(e) =>
+                  setExecPerms((prev) => ({ ...prev, defaultChannel: e.target.value }))
+                }
                 placeholder="e.g. Discord channel ID"
                 className="w-full rounded-lg bg-bg-tertiary border border-border-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-primary/50"
               />
             </div>
             <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Default approval user</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Default approval user
+              </p>
               <input
                 value={execPerms.defaultUser || ''}
                 onChange={(e) => setExecPerms((prev) => ({ ...prev, defaultUser: e.target.value }))}
                 placeholder="e.g. Discord user ID (DM)"
                 className="w-full rounded-lg bg-bg-tertiary border border-border-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-primary/50"
               />
-              <p className="text-[11px] text-text-tertiary">If set, approval notices will also be sent via DM.</p>
+              <p className="text-[11px] text-text-tertiary">
+                If set, approval notices will also be sent via DM.
+              </p>
             </div>
             <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Public approval base URL</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Public approval base URL
+              </p>
               <input
                 value={execPerms.approvalBaseUrl || ''}
-                onChange={(e) => setExecPerms((prev) => ({ ...prev, approvalBaseUrl: e.target.value }))}
+                onChange={(e) =>
+                  setExecPerms((prev) => ({ ...prev, approvalBaseUrl: e.target.value }))
+                }
                 placeholder="https://your-ngrok-url"
                 className="w-full rounded-lg bg-bg-tertiary border border-border-primary px-3 py-2 text-sm text-text-primary focus:outline-none focus:border-accent-primary/50"
               />
-              <p className="text-[11px] text-text-tertiary">Optional. If set, approval links use this base instead of localhost.</p>
+              <p className="text-[11px] text-text-tertiary">
+                Optional. If set, approval links use this base instead of localhost.
+              </p>
             </div>
             <div className="space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">Communication skill</p>
+              <p className="text-xs font-semibold uppercase tracking-wider text-text-muted">
+                Communication skill
+              </p>
               <Select
                 value={execPerms.defaultCommSkillId || ''}
-                onChange={(val) => setExecPerms((prev) => ({ ...prev, defaultCommSkillId: val || undefined }))}
+                onChange={(val) =>
+                  setExecPerms((prev) => ({ ...prev, defaultCommSkillId: val || undefined }))
+                }
                 options={[
                   { value: '', label: 'None' },
                   ...commSkills.map((skill) => ({
@@ -265,7 +297,9 @@ export default function PermissionsPage() {
             <h3 className="text-sm font-semibold text-text-primary mb-4">Grant New Permission</h3>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
-                <label className="block text-[11px] text-text-muted mb-1.5 font-medium uppercase tracking-wider">Path</label>
+                <label className="block text-[11px] text-text-muted mb-1.5 font-medium uppercase tracking-wider">
+                  Path
+                </label>
                 <input
                   type="text"
                   value={grantPath}
@@ -275,7 +309,9 @@ export default function PermissionsPage() {
                 />
               </div>
               <div>
-                <label className="block text-[11px] text-text-muted mb-1.5 font-medium uppercase tracking-wider">Mode</label>
+                <label className="block text-[11px] text-text-muted mb-1.5 font-medium uppercase tracking-wider">
+                  Mode
+                </label>
                 <Select
                   value={grantMode}
                   onChange={(val) => setGrantMode(val)}
@@ -288,7 +324,9 @@ export default function PermissionsPage() {
                 />
               </div>
               <div>
-                <label className="block text-[11px] text-text-muted mb-1.5 font-medium uppercase tracking-wider">Duration (mins)</label>
+                <label className="block text-[11px] text-text-muted mb-1.5 font-medium uppercase tracking-wider">
+                  Duration (mins)
+                </label>
                 <input
                   type="number"
                   value={grantDuration}
@@ -299,8 +337,12 @@ export default function PermissionsPage() {
               </div>
             </div>
             <div className="flex gap-2 mt-4">
-              <Button variant="primary" size="sm" onClick={handleGrant}>Grant</Button>
-              <Button variant="ghost" size="sm" onClick={() => setShowGrant(false)}>Cancel</Button>
+              <Button variant="primary" size="sm" onClick={handleGrant}>
+                Grant
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => setShowGrant(false)}>
+                Cancel
+              </Button>
             </div>
           </Card>
         )}
@@ -327,13 +369,17 @@ export default function PermissionsPage() {
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium text-text-primary font-mono">{perm.path}</span>
+                        <span className="text-sm font-medium text-text-primary font-mono">
+                          {perm.path}
+                        </span>
                         <Badge variant={MODE_VARIANTS[perm.mode] || 'default'}>
                           {MODE_LABELS[perm.mode] || perm.mode}
                         </Badge>
                       </div>
                       <div className="flex items-center gap-3 mt-1 text-[11px] text-text-muted">
-                        <span>Granted {formatDistanceToNow(perm.grantedAt, { addSuffix: true })}</span>
+                        <span>
+                          Granted {formatDistanceToNow(perm.grantedAt, { addSuffix: true })}
+                        </span>
                         {perm.expiresAt && (
                           <span className="flex items-center gap-1">
                             <Clock className="h-3 w-3" />

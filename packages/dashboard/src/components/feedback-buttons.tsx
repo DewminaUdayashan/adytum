@@ -1,9 +1,8 @@
 'use client';
 
 import { useState } from 'react';
-import { ThumbsUp, ThumbsDown, ChevronDown } from 'lucide-react';
+import { ThumbsUp, ThumbsDown } from 'lucide-react';
 import { gatewayFetch } from '@/lib/api';
-import { clsx } from 'clsx';
 
 const REASON_CODES = [
   { code: 'inaccurate', label: 'Inaccurate' },

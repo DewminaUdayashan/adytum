@@ -16,7 +16,6 @@ import {
   Cpu,
 } from 'lucide-react';
 
-
 const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: Brain, group: 'main' },
   { href: '/chat', label: 'Chat Interface', icon: MessageCircle, group: 'main' },
@@ -29,7 +28,6 @@ const NAV_ITEMS = [
   { href: '/skills', label: 'Skills', icon: Puzzle, group: 'config' },
   { href: '/permissions', label: 'Access Control', icon: Shield, group: 'config' },
 ];
-
 
 const GROUPS: Record<string, string> = {
   main: 'Platform',
@@ -55,58 +53,70 @@ export function Sidebar() {
             <span className="font-bold text-lg">⚡</span>
           </div>
           <div className="flex flex-col">
-            <span className="text-[15px] font-bold text-text-primary tracking-tight leading-none">ADYTUM</span>
-            <span className="mt-1 text-[10px] font-medium text-accent-primary uppercase tracking-widest">Agent OS</span>
+            <span className="text-[15px] font-bold text-text-primary tracking-tight leading-none">
+              ADYTUM
+            </span>
+            <span className="mt-1 text-[10px] font-medium text-accent-primary uppercase tracking-widest">
+              Agent OS
+            </span>
           </div>
         </div>
       </div>
 
       {/* ── Nav ── */}
       <nav className="flex-1 overflow-y-auto px-4 py-6 scrollbar-hide space-y-8">
-        {grouped.map(({ key, label, items }) =>
-          items.length > 0 && (
-            <div key={key}>
-              <h3 className="px-3 mb-3 text-[10px] font-bold text-text-tertiary/70 uppercase tracking-[0.15em]">
-                {label}
-              </h3>
-              <div className="space-y-1">
-                {items.map(({ href, label: navLabel, icon: Icon }) => {
-                  const isActive = pathname === href;
-                  return (
-                    <Link
-                      key={href}
-                      href={href}
-                      className={clsx(
-                        'group/item relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-all duration-200',
-                        isActive
-                          ? 'bg-accent-primary/[0.1] text-accent-primary'
-                          : 'text-text-secondary hover:text-text-primary hover:bg-bg-hover'
-                      )}
-                    >
-                      {isActive && (
-                         <div className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-r-full bg-accent-primary" />
-                      )}
-                      <Icon className={clsx('h-[18px] w-[18px] transition-colors', isActive ? 'text-accent-primary' : 'text-text-tertiary group-hover/item:text-text-secondary')} />
-                      <span>{navLabel}</span>
-                    </Link>
-                  );
-                })}
+        {grouped.map(
+          ({ key, label, items }) =>
+            items.length > 0 && (
+              <div key={key}>
+                <h3 className="px-3 mb-3 text-[10px] font-bold text-text-tertiary/70 uppercase tracking-[0.15em]">
+                  {label}
+                </h3>
+                <div className="space-y-1">
+                  {items.map(({ href, label: navLabel, icon: Icon }) => {
+                    const isActive = pathname === href;
+                    return (
+                      <Link
+                        key={href}
+                        href={href}
+                        className={clsx(
+                          'group/item relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-[13px] font-medium transition-all duration-200',
+                          isActive
+                            ? 'bg-accent-primary/[0.1] text-accent-primary'
+                            : 'text-text-secondary hover:text-text-primary hover:bg-bg-hover',
+                        )}
+                      >
+                        {isActive && (
+                          <div className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-r-full bg-accent-primary" />
+                        )}
+                        <Icon
+                          className={clsx(
+                            'h-[18px] w-[18px] transition-colors',
+                            isActive
+                              ? 'text-accent-primary'
+                              : 'text-text-tertiary group-hover/item:text-text-secondary',
+                          )}
+                        />
+                        <span>{navLabel}</span>
+                      </Link>
+                    );
+                  })}
+                </div>
               </div>
-            </div>
-          ),
+            ),
         )}
       </nav>
 
       {/* ── Footer ── */}
       <div className="flex-none p-4 mt-auto border-t border-border-primary/40">
         <div className="rounded-xl border border-border-primary/50 bg-bg-primary/50 p-3 shadow-inner">
-           <div className="flex items-center gap-3">
-             <div className="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 shadow-md"></div>
-             <div className="flex flex-col">
-               <span className="text-[12px] font-medium text-text-primary">Admin User</span>
-               <span className="text-[10px] text-text-muted">Pro Plan</span>
-             </div>
-           </div>
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 shadow-md"></div>
+            <div className="flex flex-col">
+              <span className="text-[12px] font-medium text-text-primary">Admin User</span>
+              <span className="text-[10px] text-text-muted">Pro Plan</span>
+            </div>
+          </div>
         </div>
       </div>
     </aside>

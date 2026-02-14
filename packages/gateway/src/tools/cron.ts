@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { ToolDefinition } from '@adytum/shared';
-import type { CronManager } from '../agent/cron-manager.js';
+import type { CronManager } from '../application/services/cron-manager.js';
 import cron from 'node-cron';
 
 const CronScheduleSchema = z.object({
@@ -28,7 +28,7 @@ export function createCronTools(cronManager: CronManager): ToolDefinition[] {
         }
 
         // Check availability
-        const existing = cronManager.getAllJobs().find(j => j.name === name);
+        const existing = cronManager.getAllJobs().find((j) => j.name === name);
         if (existing) {
           return `Job with name "${name}" already exists (ID: ${existing.id}). Remove it first or use a unique name.`;
         }
@@ -42,12 +42,15 @@ export function createCronTools(cronManager: CronManager): ToolDefinition[] {
       description: 'List all active cron jobs.',
       parameters: CronListSchema,
       execute: async () => {
-         const jobs = cronManager.getAllJobs();
-         if (jobs.length === 0) return 'No active cron jobs.';
-         
-         return jobs.map(j => 
-             `- [${j.enabled ? 'ACTIVE' : 'PAUSED'}] ${j.name} (${j.schedule}): ${j.task} (ID: ${j.id})`
-         ).join('\n');
+        const jobs = cronManager.getAllJobs();
+        if (jobs.length === 0) return 'No active cron jobs.';
+
+        return jobs
+          .map(
+            (j) =>
+              `- [${j.enabled ? 'ACTIVE' : 'PAUSED'}] ${j.name} (${j.schedule}): ${j.task} (ID: ${j.id})`,
+          )
+          .join('\n');
       },
     },
     {
@@ -56,15 +59,15 @@ export function createCronTools(cronManager: CronManager): ToolDefinition[] {
       parameters: CronRemoveSchema,
       execute: async (args: unknown) => {
         const { name_or_id } = CronRemoveSchema.parse(args);
-        
+
         let job = cronManager.getJob(name_or_id);
         if (!job) {
-             // Try searching by name
-            job = cronManager.getAllJobs().find(j => j.name === name_or_id);
+          // Try searching by name
+          job = cronManager.getAllJobs().find((j) => j.name === name_or_id);
         }
 
         if (!job) return `Job "${name_or_id}" not found.`;
-        
+
         cronManager.removeJob(job.id);
         return `Job "${job.name}" removed.`;
       },
