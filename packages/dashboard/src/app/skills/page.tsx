@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @file packages/dashboard/src/app/skills/page.tsx
+ * @description Defines route-level UI composition and page behavior.
+ */
+
 import { useEffect, useMemo, useState } from 'react';
 import { gatewayFetch } from '@/lib/api';
 import { Badge, Button, Card, EmptyState, Spinner } from '@/components/ui';

@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @file packages/dashboard/src/components/chat/link-previews.tsx
+ * @description Defines reusable UI components for the dashboard.
+ */
+
 import { gatewayFetch } from '@/lib/api';
 import { clsx } from 'clsx';
 import { ExternalLink, Globe } from 'lucide-react';

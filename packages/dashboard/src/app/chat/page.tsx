@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @file packages/dashboard/src/app/chat/page.tsx
+ * @description Defines route-level UI composition and page behavior.
+ */
+
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useGatewaySocket, type StreamEvent } from '@/hooks/use-gateway-socket';
 import { Send, Bot, User, Zap, Sparkles } from 'lucide-react';

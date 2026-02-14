@@ -1,7 +1,16 @@
+/**
+ * @file packages/gateway/src/api/routes/system.routes.ts
+ * @description Defines API route registration and endpoint wiring.
+ */
+
 import { FastifyInstance } from 'fastify';
 import { container } from 'tsyringe';
 import { SystemController } from '../controllers/system.controller.js';
 
+/**
+ * Executes system routes.
+ * @param app - App.
+ */
 export async function systemRoutes(app: FastifyInstance) {
   const controller = container.resolve(SystemController);
 

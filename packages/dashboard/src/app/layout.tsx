@@ -1,3 +1,8 @@
+/**
+ * @file packages/dashboard/src/app/layout.tsx
+ * @description Defines route-level UI composition and page behavior.
+ */
+
 import type { Metadata } from 'next';
 import './globals.css';
 import { Sidebar } from '@/components/sidebar';

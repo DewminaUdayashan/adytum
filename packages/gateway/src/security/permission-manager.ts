@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/security/permission-manager.ts
+ * @description Provides security utilities and policy enforcement logic.
+ */
+
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import type { PermissionEntry, AccessMode } from '@adytum/shared';

@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @file packages/dashboard/src/components/feedback-buttons.tsx
+ * @description Defines reusable UI components for the dashboard.
+ */
+
 import { useState } from 'react';
 import { ThumbsUp, ThumbsDown } from 'lucide-react';
 import { gatewayFetch } from '@/lib/api';

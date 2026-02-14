@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/domain/interfaces/model-repository.interface.ts
+ * @description Declares domain contracts used across the gateway.
+ */
+
 export interface ModelEntry {
   id: string; // "provider/model"
   name: string; // Display name

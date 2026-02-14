@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/domain/logic/agent-runtime.ts
+ * @description Contains domain logic and core business behavior.
+ */
+
 import { v4 as uuid } from 'uuid';
 import type OpenAI from 'openai';
 import type { ModelRole, ToolCall, Trace } from '@adytum/shared';
@@ -182,7 +187,7 @@ export class AgentRuntime extends EventEmitter {
         lastMessage = message;
 
         // Track tokens
-        tokenTracker.record(usage, sessionId);
+        this.trackTokenUsage(usage, sessionId);
         auditLogger.logModelResponse(traceId, usage.model, usage);
         if (this.config.memoryDb) {
           this.config.memoryDb.addActionLog(
@@ -388,6 +393,11 @@ export class AgentRuntime extends EventEmitter {
     };
   }
 
+  /**
+   * Executes compact context.
+   * @param traceId - Trace id.
+   * @param sessionId - Session id.
+   */
   private async compactContext(traceId: string, sessionId: string): Promise<void> {
     this.emit('stream', {
       traceId,
@@ -405,7 +415,7 @@ export class AgentRuntime extends EventEmitter {
       { temperature: 0.3, fallbackRole: 'fast' as any },
     );
 
-    tokenTracker.record(usage, sessionId);
+    this.trackTokenUsage(usage, sessionId);
 
     if (message.content) {
       this.context.applyCompaction(message.content);
@@ -424,6 +434,11 @@ export class AgentRuntime extends EventEmitter {
     }
   }
 
+  /**
+   * Executes build memory context.
+   * @param query - Query.
+   * @returns The build memory context result.
+   */
   private buildMemoryContext(query: string): string | null {
     if (!this.config.memoryStore) return null;
     const topK = this.config.memoryTopK ?? 3;
@@ -434,6 +449,11 @@ export class AgentRuntime extends EventEmitter {
     return `## Relevant memories (persistent)\n${lines.join('\n')}`;
   }
 
+  /**
+   * Executes extract user memory.
+   * @param text - Text.
+   * @returns The extract user memory result.
+   */
   private extractUserMemory(text: string): string | null {
     const patterns: Array<{ regex: RegExp; format: (m: RegExpMatchArray) => string }> = [
       { regex: /\bmy name is\s+([\w .'-]{2,})/i, format: (m) => `User name is ${m[1].trim()}` },
@@ -456,6 +476,70 @@ export class AgentRuntime extends EventEmitter {
     return null;
   }
 
+  /**
+   * Executes track token usage.
+   * @param usage - Usage.
+   * @param sessionId - Session id.
+   */
+  private trackTokenUsage(
+    usage: {
+      model: string;
+      role: ModelRole;
+      promptTokens: number;
+      completionTokens: number;
+      totalTokens: number;
+      estimatedCost?: number;
+    },
+    sessionId: string,
+  ): void {
+    tokenTracker.record(usage, sessionId);
+
+    if (!this.config.memoryDb) return;
+
+    const identity = this.parseModelIdentity(usage.model);
+    this.config.memoryDb.addTokenUsage({
+      sessionId,
+      provider: identity.provider,
+      model: identity.model,
+      modelId: identity.modelId,
+      role: usage.role,
+      promptTokens: usage.promptTokens,
+      completionTokens: usage.completionTokens,
+      totalTokens: usage.totalTokens,
+      cost: usage.estimatedCost ?? 0,
+    });
+  }
+
+  /**
+   * Parses model identity.
+   * @param modelRef - Model ref.
+   * @returns The parse model identity result.
+   */
+  private parseModelIdentity(modelRef: string): {
+    provider: string;
+    model: string;
+    modelId: string;
+  } {
+    const normalized = (modelRef || '').trim();
+    if (!normalized) {
+      return { provider: 'unknown', model: 'unknown', modelId: 'unknown' };
+    }
+
+    const slashIndex = normalized.indexOf('/');
+    if (slashIndex <= 0 || slashIndex >= normalized.length - 1) {
+      return { provider: 'unknown', model: normalized, modelId: normalized };
+    }
+
+    return {
+      provider: normalized.slice(0, slashIndex),
+      model: normalized.slice(slashIndex + 1),
+      modelId: normalized,
+    };
+  }
+
+  /**
+   * Executes build system prompt.
+   */
   private buildSystemPrompt(): void {
     const soul = this.config.soulEngine.getSoulPrompt();
     const skills = this.config.skillLoader.getSkillsContext();

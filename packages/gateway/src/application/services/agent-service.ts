@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/application/services/agent-service.ts
+ * @description Implements application-level service logic and coordination.
+ */
+
 import { singleton, inject } from 'tsyringe';
 import { Logger } from '../../logger.js';
 import { ConfigService } from '../../infrastructure/config/config-service.js';
@@ -11,6 +16,9 @@ import { ModelRouter } from '../../infrastructure/llm/model-router.js';
 import { SoulEngine } from '../../domain/logic/soul-engine.js';
 import type { ModelRepository } from '../../domain/interfaces/model-repository.interface.js';
 
+/**
+ * Encapsulates agent service behavior.
+ */
 @singleton()
 export class AgentService {
   constructor(
@@ -19,11 +27,21 @@ export class AgentService {
     @inject(AgentRuntime) private runtime: AgentRuntime
   ) {}
 
+  /**
+   * Retrieves runtime.
+   * @returns The get runtime result.
+   */
   public getRuntime(): AgentRuntime {
     return this.runtime;
   }
 
   // Application implementation methods (delegates to runtime)
+  /**
+   * Executes process message.
+   * @param sessionId - Session id.
+   * @param content - Content.
+   * @returns The process message result.
+   */
   public async processMessage(sessionId: string, content: string): Promise<any> {
     const runtime = this.getRuntime();
     // runtime.handleMessage... logic involves context manager & reasoning loop

@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @file packages/dashboard/src/components/chat/thinking-indicator.tsx
+ * @description Defines reusable UI components for the dashboard.
+ */
+
 import { Spinner } from '@/components/ui';
 import { clsx } from 'clsx';
 import {

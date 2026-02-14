@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @file packages/dashboard/src/components/chat/markdown-renderer.tsx
+ * @description Defines reusable UI components for the dashboard.
+ */
+
 import { clsx } from 'clsx';
 import { Fragment, type ReactNode } from 'react';
 import { sanitizeLinkUrl, stripTrailingPunctuation } from './markdown-utils';

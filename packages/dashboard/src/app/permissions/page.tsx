@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @file packages/dashboard/src/app/permissions/page.tsx
+ * @description Defines route-level UI composition and page behavior.
+ */
+
 import { useState, useEffect } from 'react';
 import { usePolling } from '@/hooks/use-polling';
 import { gatewayFetch } from '@/lib/api';

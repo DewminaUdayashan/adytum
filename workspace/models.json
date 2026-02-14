@@ -218,6 +218,20 @@
     "apiKey": "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"
   },
   {
+    "id": "openrouter/tngtech/tng-r1t-chimera:free",
+    "name": "TNG: R1T Chimera (free)",
+    "provider": "openrouter",
+    "model": "tngtech/tng-r1t-chimera:free",
+    "contextWindow": 163840,
+    "reasoning": true,
+    "input": [
+      "text"
+    ],
+    "source": "user",
+    "baseUrl": "https://openrouter.ai/api/v1",
+    "apiKey": "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"
+  },
+  {
     "id": "openrouter/z-ai/glm-4.5-air:free",
     "name": "Z.AI: GLM 4.5 Air (free)",
     "provider": "openrouter",

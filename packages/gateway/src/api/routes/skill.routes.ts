@@ -1,7 +1,16 @@
+/**
+ * @file packages/gateway/src/api/routes/skill.routes.ts
+ * @description Defines API route registration and endpoint wiring.
+ */
+
 import { FastifyInstance } from 'fastify';
 import { container } from 'tsyringe';
 import { SkillController } from '../controllers/skill.controller.js';
 
+/**
+ * Executes skill routes.
+ * @param app - App.
+ */
 export async function skillRoutes(app: FastifyInstance) {
   const controller = container.resolve(SkillController);
 

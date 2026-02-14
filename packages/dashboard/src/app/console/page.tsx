@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @file packages/dashboard/src/app/console/page.tsx
+ * @description Defines route-level UI composition and page behavior.
+ */
+
 import { useEffect, useRef, useState } from 'react';
 import { useGatewaySocket, type StreamEvent } from '@/hooks/use-gateway-socket';
 import { Badge, Button } from '@/components/ui';

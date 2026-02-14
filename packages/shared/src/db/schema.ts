@@ -1,3 +1,8 @@
+/**
+ * @file packages/shared/src/db/schema.ts
+ * @description Defines database access utilities and schema bindings.
+ */
+
 import {
   pgTable,
   uuid,

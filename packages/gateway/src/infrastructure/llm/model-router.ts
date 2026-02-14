@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/infrastructure/llm/model-router.ts
+ * @description Implements infrastructure adapters and external integrations.
+ */
+
 import OpenAI from 'openai';
 import type { ModelRole, TokenUsage, AdytumConfig, ModelConfig } from '@adytum/shared';
 import { LLMClient, isLiteLLMAvailable } from './llm-client.js';
@@ -55,7 +60,7 @@ export class ModelRouter {
     });
 
     // LLMClient also needs update to use ModelRepository, or we cast for now
-    this.llmClient = new LLMClient(config.modelCatalog as any); 
+    this.llmClient = new LLMClient(config.modelCatalog as any);
 
     this.roleMap = new Map();
     this.modelMap = new Map();
@@ -77,6 +82,10 @@ export class ModelRouter {
     this.modelChains = chains;
   }
 
+  /**
+   * Executes update routing.
+   * @param routing - Routing.
+   */
   updateRouting(routing: AdytumConfig['routing']): void {
     this.routing = {
       maxRetries: Math.min(Math.max(routing.maxRetries ?? 5, 1), 10),
@@ -119,23 +128,22 @@ export class ModelRouter {
   /**
    * Resolve the list of models (the chain) to use for a given request.
    */
-  async resolveChain(
-    roleOrTask: string,
-    override?: string,
-  ): Promise<ModelConfig[]> {
+  async resolveChain(roleOrTask: string, override?: string): Promise<ModelConfig[]> {
     const chainIds: string[] = [];
 
     // If override is a specific model ID
     if (override && override.includes('/')) {
       const entry = await this.modelCatalog.get(override);
       if (entry) {
-        return [{
-          provider: entry.provider,
-          model: entry.model,
-          role: 'fast', // or generic role
-          baseUrl: entry.baseUrl,
-          apiKey: entry.apiKey,
-        } as ModelConfig];
+        return [
+          {
+            provider: entry.provider,
+            model: entry.model,
+            role: 'fast', // or generic role
+            baseUrl: entry.baseUrl,
+            apiKey: entry.apiKey,
+          } as ModelConfig,
+        ];
       }
     }
 
@@ -151,17 +159,19 @@ export class ModelRouter {
       if (this.taskOverrides[roleOrTask]) {
         const mapped = this.taskOverrides[roleOrTask];
         if (mapped.includes('/')) {
-           // It maps to a specific model ID
-           const entry = await this.modelCatalog.get(mapped);
-           if (entry) {
-             return [{
-               provider: entry.provider,
-               model: entry.model,
-               role: 'fast',
-               baseUrl: entry.baseUrl,
-               apiKey: entry.apiKey,
-             } as ModelConfig];
-           }
+          // It maps to a specific model ID
+          const entry = await this.modelCatalog.get(mapped);
+          if (entry) {
+            return [
+              {
+                provider: entry.provider,
+                model: entry.model,
+                role: 'fast',
+                baseUrl: entry.baseUrl,
+                apiKey: entry.apiKey,
+              } as ModelConfig,
+            ];
+          }
         } else {
           // It maps to a role, recurse (but limit recursion?)
           // actually better to just check modelChains directly for the mapped role
@@ -180,30 +190,32 @@ export class ModelRouter {
     }
 
     // Resolve IDs to ModelConfig objects
-    const resolved = await Promise.all(chainIds.map(async (id) => {
-      // 1. Try fast map (config models)
-      let model = this.modelMap.get(id);
+    const resolved = await Promise.all(
+      chainIds.map(async (id) => {
+        // 1. Try fast map (config models)
+        let model = this.modelMap.get(id);
 
-      // 2. If not in map, try catalog
-      if (!model) {
-        const entry = await this.modelCatalog.get(id);
-        if (entry) {
-          model = {
-            provider: entry.provider,
-            model: entry.model,
-            role: 'fast',
-            baseUrl: entry.baseUrl,
-            apiKey: entry.apiKey,
-          } as ModelConfig;
-          this.modelMap.set(id, model);
+        // 2. If not in map, try catalog
+        if (!model) {
+          const entry = await this.modelCatalog.get(id);
+          if (entry) {
+            model = {
+              provider: entry.provider,
+              model: entry.model,
+              role: 'fast',
+              baseUrl: entry.baseUrl,
+              apiKey: entry.apiKey,
+            } as ModelConfig;
+            this.modelMap.set(id, model);
+          }
         }
-      }
 
-      if (model) {
-        model = await this.mergeCatalogDetails(id, model);
-      }
-      return model;
-    }));
+        if (model) {
+          model = await this.mergeCatalogDetails(id, model);
+        }
+        return model;
+      }),
+    );
 
     return resolved.filter((m): m is ModelConfig => !!m);
   }
@@ -251,6 +263,11 @@ export class ModelRouter {
     return updated;
   }
 
+  /**
+   * Determines whether is rate limited.
+   * @param modelId - Model id.
+   * @returns True when is rate limited.
+   */
   private isRateLimited(modelId: string): boolean {
     const until = this.cooldowns.get(modelId);
     if (!until) return false;
@@ -261,15 +278,30 @@ export class ModelRouter {
     return true;
   }
 
+  /**
+   * Sets rate limited.
+   * @param modelId - Model id.
+   * @param ttlMs - Ttl ms.
+   */
   private setRateLimited(modelId: string, ttlMs: number = 60_000) {
     this.cooldowns.set(modelId, Date.now() + ttlMs);
   }
 
+  /**
+   * Determines whether is rate limit error.
+   * @param err - Err.
+   * @returns True when is rate limit error.
+   */
   private isRateLimitError(err: any): boolean {
     const msg = String(err?.message || '').toLowerCase();
     return msg.includes('429') || msg.includes('rate limit') || msg.includes('rate-limit');
   }
 
+  /**
+   * Determines whether is retriable error.
+   * @param err - Err.
+   * @returns True when is retriable error.
+   */
   private isRetriableError(err: any): boolean {
     const msg = String(err?.message || '').toLowerCase();
     return (
@@ -443,7 +475,7 @@ export class ModelRouter {
     if (!message) throw new Error('No response from model');
 
     const usage: TokenUsage = {
-      model: modelConfig.model,
+      model: `${modelConfig.provider}/${modelConfig.model}`,
       role,
       promptTokens: completion.usage?.prompt_tokens ?? 0,
       completionTokens: completion.usage?.completion_tokens ?? 0,
@@ -477,7 +509,7 @@ export class ModelRouter {
     });
 
     const usage: TokenUsage = {
-      model: modelConfig.model,
+      model: `${modelConfig.provider}/${modelConfig.model}`,
       role,
       promptTokens: result.usage.promptTokens,
       completionTokens: result.usage.completionTokens,
@@ -510,7 +542,7 @@ export class ModelRouter {
     done: boolean;
   }> {
     // Resolve the chain of models to try (reuse logic from chat())
-    let chain = await this.resolveChain(role);
+    const chain = await this.resolveChain(role);
 
     // If no chain found, fallback
     if (chain.length === 0) {
@@ -602,11 +634,23 @@ export class ModelRouter {
     );
   }
 
+  /**
+   * Retrieves model for role.
+   * @param role - Role.
+   * @returns The get model for role result.
+   */
   getModelForRole(role: ModelRole): string | undefined {
     const mc = this.roleMap.get(role);
     return mc?.model;
   }
 
+  /**
+   * Executes estimate cost.
+   * @param model - Model.
+   * @param promptTokens - Prompt tokens.
+   * @param completionTokens - Completion tokens.
+   * @returns The resulting numeric value.
+   */
   private estimateCost(model: string, promptTokens: number, completionTokens: number): number {
     // Cost per million tokens: [input, output]
     const costs: Record<string, [number, number]> = {

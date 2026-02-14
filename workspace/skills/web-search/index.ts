@@ -1,3 +1,8 @@
+/**
+ * @file workspace/skills/web-search/index.ts
+ * @description Defines module behavior for the Adytum workspace.
+ */
+
 import { z } from 'zod';
 import type { AdytumSkillPluginApi, ToolDefinition } from '@adytum/shared';
 

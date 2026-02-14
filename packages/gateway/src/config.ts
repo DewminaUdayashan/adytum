@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/config.ts
+ * @description Defines module behavior for the Adytum workspace.
+ */
+
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
@@ -13,6 +18,11 @@ const DEFAULT_DATA_DIR = join(
 
 let cachedConfig: AdytumConfig | null = null;
 
+/**
+ * Parses bool.
+ * @param value - Value.
+ * @returns The parse bool result.
+ */
 const parseBool = (value?: string): boolean | undefined => {
   if (value === undefined) return undefined;
   const normalized = value.toLowerCase().trim();
@@ -21,6 +31,11 @@ const parseBool = (value?: string): boolean | undefined => {
   return undefined;
 };
 
+/**
+ * Parses list.
+ * @param value - Value.
+ * @returns The parse list result.
+ */
 const parseList = (value?: string | string[]): string[] | undefined => {
   if (!value) return undefined;
   if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean);
@@ -30,9 +45,19 @@ const parseList = (value?: string | string[]): string[] | undefined => {
     .filter(Boolean);
 };
 
+/**
+ * Determines whether is record.
+ * @param value - Value.
+ * @returns The is record result.
+ */
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+/**
+ * Parses skill entries.
+ * @param value - Value.
+ * @returns The parse skill entries result.
+ */
 const parseSkillEntries = (
   value: unknown,
 ):
@@ -85,6 +110,11 @@ const parseSkillEntries = (
   return entries;
 };
 
+/**
+ * Loads config.
+ * @param projectRoot - Project root.
+ * @returns The load config result.
+ */
 export function loadConfig(projectRoot?: string): AdytumConfig {
   if (cachedConfig) return cachedConfig;
 
@@ -203,6 +233,11 @@ export function loadConfig(projectRoot?: string): AdytumConfig {
   return cachedConfig;
 }
 
+/**
+ * Persists config.
+ * @param updates - Updates.
+ * @param projectRoot - Project root.
+ */
 export function saveConfig(updates: Partial<AdytumConfig>, projectRoot?: string): void {
   const root = projectRoot || process.cwd();
   const configPath = join(root, 'adytum.config.yaml');
@@ -224,6 +259,9 @@ export function saveConfig(updates: Partial<AdytumConfig>, projectRoot?: string)
   cachedConfig = null; // Invalidate cache
 }
 
+/**
+ * Resets config cache.
+ */
 export function resetConfigCache(): void {
   cachedConfig = null;
 }

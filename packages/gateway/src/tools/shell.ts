@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/tools/shell.ts
+ * @description Defines tool handlers exposed to the runtime.
+ */
+
 import { z } from 'zod';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -94,6 +99,11 @@ export function createShellToolWithApproval(
   };
 }
 
+/**
+ * Creates shell tool.
+ * @param onApprovalRequired - On approval required.
+ * @returns The create shell tool result.
+ */
 export function createShellTool(onApprovalRequired: ShellApprovalFn): ToolDefinition {
   return {
     name: 'shell_execute',

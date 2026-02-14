@@ -1,8 +1,16 @@
+/**
+ * @file packages/gateway/src/logger.ts
+ * @description Defines module behavior for the Adytum workspace.
+ */
+
 import pino from 'pino';
 import { singleton } from 'tsyringe';
 
 const isDev = process.env.NODE_ENV !== 'production';
 
+/**
+ * Encapsulates logger behavior.
+ */
 @singleton()
 export class Logger {
   private pino: pino.Logger;
@@ -23,6 +31,11 @@ export class Logger {
     });
   }
 
+  /**
+   * Executes info.
+   * @param msgOrObj - Msg or obj.
+   * @param args - Args.
+   */
   info(msgOrObj: string | object, ...args: any[]) {
     if (typeof msgOrObj === 'string') {
       this.pino.info(msgOrObj, ...args);
@@ -31,6 +44,11 @@ export class Logger {
     }
   }
 
+  /**
+   * Executes error.
+   * @param msgOrObj - Msg or obj.
+   * @param args - Args.
+   */
   error(msgOrObj: string | object, ...args: any[]) {
     if (typeof msgOrObj === 'string') {
       this.pino.error(msgOrObj, ...args);
@@ -39,6 +57,11 @@ export class Logger {
     }
   }
 
+  /**
+   * Executes warn.
+   * @param msgOrObj - Msg or obj.
+   * @param args - Args.
+   */
   warn(msgOrObj: string | object, ...args: any[]) {
     if (typeof msgOrObj === 'string') {
       this.pino.warn(msgOrObj, ...args);
@@ -47,6 +70,11 @@ export class Logger {
     }
   }
 
+  /**
+   * Executes debug.
+   * @param msgOrObj - Msg or obj.
+   * @param args - Args.
+   */
   debug(msgOrObj: string | object, ...args: any[]) {
     if (typeof msgOrObj === 'string') {
       this.pino.debug(msgOrObj, ...args);
@@ -55,6 +83,11 @@ export class Logger {
     }
   }
 
+  /**
+   * Executes fatal.
+   * @param msgOrObj - Msg or obj.
+   * @param args - Args.
+   */
   fatal(msgOrObj: string | object, ...args: any[]) {
     if (typeof msgOrObj === 'string') {
       this.pino.fatal(msgOrObj, ...args);

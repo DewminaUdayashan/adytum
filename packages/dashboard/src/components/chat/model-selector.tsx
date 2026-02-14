@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @file packages/dashboard/src/components/chat/model-selector.tsx
+ * @description Defines reusable UI components for the dashboard.
+ */
+
 import { useState, useEffect } from 'react';
 import { clsx } from 'clsx';
 import { Brain, Zap, Cpu, type LucideIcon } from 'lucide-react';

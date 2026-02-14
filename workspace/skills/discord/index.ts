@@ -1,3 +1,8 @@
+/**
+ * @file workspace/skills/discord/index.ts
+ * @description Defines module behavior for the Adytum workspace.
+ */
+
 import { z } from 'zod';
 import {
   ChannelType,

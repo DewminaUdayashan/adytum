@@ -1,7 +1,17 @@
+/**
+ * @file packages/gateway/src/tools/memory.ts
+ * @description Defines tool handlers exposed to the runtime.
+ */
+
 import { z } from 'zod';
 import type { ToolDefinition } from '@adytum/shared';
 import type { MemoryStore } from '../infrastructure/repositories/memory-store.js';
 
+/**
+ * Creates memory tools.
+ * @param memoryStore - Memory store.
+ * @returns The resulting collection of values.
+ */
 export function createMemoryTools(memoryStore: MemoryStore): ToolDefinition[] {
   return [
     {

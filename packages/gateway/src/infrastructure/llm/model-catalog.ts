@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/infrastructure/llm/model-catalog.ts
+ * @description Implements infrastructure adapters and external integrations.
+ */
+
 import { join } from 'node:path';
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { type AdytumConfig } from '@adytum/shared';
@@ -16,6 +21,9 @@ try {
 
 export { ModelEntry };
 
+/**
+ * Encapsulates model catalog behavior.
+ */
 @singleton()
 export class ModelCatalog implements ModelRepository {
   private catalogPath: string;
@@ -32,6 +40,9 @@ export class ModelCatalog implements ModelRepository {
     this.load();
   }
 
+  /**
+   * Executes load.
+   */
   private load() {
     this.models.clear();
     const config = this.configService.getFullConfig();
@@ -104,6 +115,9 @@ export class ModelCatalog implements ModelRepository {
     }
   }
 
+  /**
+   * Executes save.
+   */
   save() {
     const config = this.configService.getFullConfig();
     const userModels = Array.from(this.models.values()).filter((m) => m.source === 'user');
@@ -117,19 +131,38 @@ export class ModelCatalog implements ModelRepository {
     }
   }
 
+  /**
+   * Retrieves all.
+   * @returns The resulting collection of values.
+   */
   async getAll(): Promise<ModelEntry[]> {
     return Array.from(this.models.values());
   }
 
+  /**
+   * Executes get.
+   * @param id - Id.
+   * @returns The get result.
+   */
   async get(id: string): Promise<ModelEntry | undefined> {
     return this.models.get(id);
   }
 
+  /**
+   * Executes add.
+   * @param entry - Entry.
+   */
   async add(entry: ModelEntry): Promise<void> {
     this.models.set(entry.id, { ...entry, source: 'user' as const });
     this.save();
   }
 
+  /**
+   * Executes update.
+   * @param id - Id.
+   * @param updates - Updates.
+   * @returns Whether the operation succeeded.
+   */
   async update(id: string, updates: Partial<Pick<ModelEntry, 'baseUrl' | 'apiKey' | 'name'>>): Promise<boolean> {
     const entry = this.models.get(id);
     if (!entry) return false;
@@ -144,6 +177,10 @@ export class ModelCatalog implements ModelRepository {
     return true;
   }
 
+  /**
+   * Executes remove.
+   * @param id - Id.
+   */
   async remove(id: string): Promise<void> {
     if (this.models.has(id)) {
       // If it's a default model, we can't really "remove" it permanently from pi-ai,
@@ -233,6 +270,11 @@ export class ModelCatalog implements ModelRepository {
     return discovered;
   }
 
+  /**
+   * Retrieves pi model.
+   * @param aliasOrId - Alias or id.
+   * @returns The get pi model result.
+   */
   async getPiModel(aliasOrId: string): Promise<any> {
     if (this.detailsCache.has(aliasOrId)) return this.detailsCache.get(aliasOrId);
     // If alias, resolve first

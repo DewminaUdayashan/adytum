@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @file packages/dashboard/src/app/heartbeat/page.tsx
+ * @description Defines route-level UI composition and page behavior.
+ */
+
 import { useState, useEffect } from 'react';
 import { gatewayFetch } from '@/lib/api';
 import { Card, Button, Spinner, Badge, EmptyState } from '@/components/ui';

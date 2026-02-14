@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/cli/birth-protocol.ts
+ * @description Provides command-line entrypoints and CLI workflows.
+ */
+
 import chalk from 'chalk';
 import figlet from 'figlet';
 import gradient from 'gradient-string';
@@ -11,6 +16,10 @@ import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
 
+/**
+ * Executes sleep.
+ * @param ms - Ms.
+ */
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 // ─── ASCII Animation Frames ──────────────────────────────────
@@ -123,6 +132,10 @@ const GENESIS_FRAMES = [
 
 // ─── Birth Protocol ──────────────────────────────────────────
 
+/**
+ * Runs birth protocol.
+ * @param projectRoot - Project root.
+ */
 export async function runBirthProtocol(projectRoot: string): Promise<void> {
   const workspacePath = join(projectRoot, 'workspace');
   const dataPath = join(projectRoot, 'data');

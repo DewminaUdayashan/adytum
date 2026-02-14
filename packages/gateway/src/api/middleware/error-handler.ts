@@ -1,8 +1,19 @@
+/**
+ * @file packages/gateway/src/api/middleware/error-handler.ts
+ * @description Provides middleware behavior for the API layer.
+ */
+
 import { FastifyError, FastifyReply, FastifyRequest } from 'fastify';
 import { AppError } from '../../domain/errors/app-error.js';
 import { Logger } from '../../logger.js';
 import { container } from '../../container.js';
 
+/**
+ * Executes error handler.
+ * @param error - Error.
+ * @param request - Request.
+ * @param reply - Reply.
+ */
 export function errorHandler(error: FastifyError, request: FastifyRequest, reply: FastifyReply) {
   const logger = container.resolve(Logger);
 

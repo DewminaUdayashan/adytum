@@ -1,13 +1,25 @@
+/**
+ * @file packages/gateway/src/infrastructure/config/config-service.ts
+ * @description Implements infrastructure adapters and external integrations.
+ */
+
 import { singleton } from 'tsyringe';
 import { loadConfig, saveConfig, type AdytumConfig } from '../../config.js';
 import { Logger } from '../../logger.js';
 
+/**
+ * Encapsulates config service behavior.
+ */
 @singleton()
 export class ConfigService {
   private config: AdytumConfig | null = null;
 
   constructor(private logger: Logger) {}
 
+  /**
+   * Executes load.
+   * @returns The load result.
+   */
   public load(): AdytumConfig {
     try {
       this.config = loadConfig();
@@ -18,6 +30,11 @@ export class ConfigService {
     }
   }
 
+  /**
+   * Executes get.
+   * @param key - Key.
+   * @returns The get result.
+   */
   public get<K extends keyof AdytumConfig>(key: K): AdytumConfig[K] {
     if (!this.config) {
       this.load();
@@ -25,6 +42,10 @@ export class ConfigService {
     return this.config![key];
   }
 
+  /**
+   * Executes set.
+   * @param updates - Updates.
+   */
   public set(updates: Partial<AdytumConfig>): void {
     saveConfig(updates);
     // Reload internal state
@@ -32,6 +53,10 @@ export class ConfigService {
     this.logger.info('Config updated', Object.keys(updates));
   }
   
+  /**
+   * Retrieves full config.
+   * @returns The get full config result.
+   */
   public getFullConfig(): AdytumConfig {
     if (!this.config) {
       this.load();

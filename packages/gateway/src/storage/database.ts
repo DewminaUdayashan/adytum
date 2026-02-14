@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/storage/database.ts
+ * @description Implements storage setup and persistence helpers.
+ */
+
 import { drizzle as drizzlePg } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '@adytum/shared';

@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/server.ts
+ * @description Defines module behavior for the Adytum workspace.
+ */
+
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
 import cors from '@fastify/cors';
@@ -70,6 +75,9 @@ export class GatewayServer extends EventEmitter {
     this.approvals = container.resolve(ApprovalService);
   }
 
+  /**
+   * Executes start.
+   */
   async start(): Promise<void> {
     await this.app.register(websocket);
     await this.app.register(cors, {
@@ -126,6 +134,11 @@ export class GatewayServer extends EventEmitter {
     return this.approvals.resolve(id, approved);
   }
 
+  /**
+   * Executes request approval.
+   * @param payload - Payload.
+   * @returns Whether the operation succeeded.
+   */
   async requestApproval(payload: {
     kind: string;
     description: string;
@@ -156,6 +169,9 @@ export class GatewayServer extends EventEmitter {
     return 0; // Or delegate to agentController if we add a getter
   }
 
+  /**
+   * Executes stop.
+   */
   async stop(): Promise<void> {
     await this.app.close();
   }

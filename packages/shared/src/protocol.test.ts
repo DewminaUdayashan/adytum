@@ -1,3 +1,8 @@
+/**
+ * @file packages/shared/src/protocol.test.ts
+ * @description Defines module behavior for the Adytum workspace.
+ */
+
 import { describe, it, expect } from 'vitest';
 import { parseFrame, serializeFrame } from './protocol.js';
 import type { MessageFrame, ConnectFrame } from './protocol.js';

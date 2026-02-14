@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/domain/logic/token-tracker.ts
+ * @description Contains domain logic and core business behavior.
+ */
+
 import type { TokenUsage, ModelRole } from '@adytum/shared';
 import { EventEmitter } from 'node:events';
 
@@ -22,6 +27,12 @@ export class TokenTracker extends EventEmitter {
   private modelTotals = new Map<string, { tokens: number; cost: number }>();
   private grandTotal = { tokens: 0, cost: 0 };
 
+  /**
+   * Executes filter records.
+   * @param from - From.
+   * @param to - To.
+   * @returns The resulting collection of values.
+   */
   private filterRecords(from?: number, to?: number): TokenRecord[] {
     return this.records.filter((r) => {
       const afterFrom = typeof from === 'number' ? r.timestamp >= from : true;
@@ -30,6 +41,11 @@ export class TokenTracker extends EventEmitter {
     });
   }
 
+  /**
+   * Executes record.
+   * @param usage - Usage.
+   * @param sessionId - Session id.
+   */
   record(usage: TokenUsage, sessionId: string): void {
     const record: TokenRecord = {
       ...usage,
@@ -64,14 +80,30 @@ export class TokenTracker extends EventEmitter {
     });
   }
 
+  /**
+   * Retrieves session usage.
+   * @param sessionId - Session id.
+   * @returns The get session usage result.
+   */
   getSessionUsage(sessionId: string): { tokens: number; cost: number } {
     return this.sessionTotals.get(sessionId) || { tokens: 0, cost: 0 };
   }
 
+  /**
+   * Retrieves model usage.
+   * @param model - Model.
+   * @returns The get model usage result.
+   */
   getModelUsage(model: string): { tokens: number; cost: number } {
     return this.modelTotals.get(model) || { tokens: 0, cost: 0 };
   }
 
+  /**
+   * Retrieves total usage.
+   * @param from - From.
+   * @param to - To.
+   * @returns The get total usage result.
+   */
   getTotalUsage(from?: number, to?: number): { tokens: number; cost: number } {
     if (from || to) {
       const records = this.filterRecords(from, to);
@@ -87,6 +119,12 @@ export class TokenTracker extends EventEmitter {
     return { ...this.grandTotal };
   }
 
+  /**
+   * Retrieves daily usage.
+   * @param from - From.
+   * @param to - To.
+   * @returns The get daily usage result.
+   */
   getDailyUsage(
     from?: number,
     to?: number,
@@ -125,6 +163,13 @@ export class TokenTracker extends EventEmitter {
     }));
   }
 
+  /**
+   * Retrieves recent records.
+   * @param count - Count.
+   * @param from - From.
+   * @param to - To.
+   * @returns The resulting collection of values.
+   */
   getRecentRecords(count: number = 50, from?: number, to?: number): TokenRecord[] {
     const filtered = this.filterRecords(from, to);
     return filtered.slice(-count);

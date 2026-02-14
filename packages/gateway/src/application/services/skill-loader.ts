@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/application/services/skill-loader.ts
+ * @description Implements application-level service logic and coordination.
+ */
+
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { createJiti } from 'jiti';
@@ -138,6 +143,11 @@ type ParsedFrontmatter = {
   body: string;
 };
 
+/**
+ * Parses frontmatter.
+ * @param raw - Raw.
+ * @returns The parse frontmatter result.
+ */
 const parseFrontmatter = (raw: string): ParsedFrontmatter => {
   const match = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!match) {
@@ -151,9 +161,18 @@ const parseFrontmatter = (raw: string): ParsedFrontmatter => {
   }
 };
 
+/**
+ * Executes resolve string array.
+ * @param value - Value.
+ * @returns The resulting collection of values.
+ */
 const resolveStringArray = (value: unknown): string[] =>
   Array.isArray(value) ? value.map((v) => String(v).trim()).filter(Boolean) : [];
 
+/**
+ * Executes resolve metadata.
+ * @param data - Data.
+ */
 const resolveMetadata = (data: Record<string, unknown>) => {
   const rawMeta = isRecord(data.metadata) ? (data.metadata as Record<string, unknown>) : {};
   const manifestBlock = isRecord(rawMeta.manifest)
@@ -215,6 +234,12 @@ const resolveMetadata = (data: Record<string, unknown>) => {
   };
 };
 
+/**
+ * Executes resolve config path truthy.
+ * @param cfg - Cfg.
+ * @param pathStr - Path str.
+ * @returns Whether the operation succeeded.
+ */
 const resolveConfigPathTruthy = (cfg: AdytumConfig, pathStr: string): boolean => {
   const parts = pathStr.split('.').filter(Boolean);
   let cursor: any = cfg;
@@ -498,6 +523,11 @@ export class SkillLoader {
     this.activeAgent = null;
   }
 
+  /**
+   * Executes update config.
+   * @param config - Config.
+   * @param projectRoot - Project root.
+   */
   updateConfig(config: AdytumConfig, projectRoot?: string): void {
     this.config = config;
     if (projectRoot) {
@@ -507,6 +537,10 @@ export class SkillLoader {
     this.skillsDir = join(config.workspacePath, 'skills');
   }
 
+  /**
+   * Executes reload.
+   * @param agent - Agent.
+   */
   async reload(agent: AgentRuntime): Promise<void> {
     if (!this.toolRegistry) {
       throw new Error('Skill loader has not been initialized yet');
@@ -517,6 +551,10 @@ export class SkillLoader {
     await this.start(agent);
   }
 
+  /**
+   * Sets secrets.
+   * @param secrets - Secrets.
+   */
   setSecrets(secrets: Record<string, Record<string, string>>): void {
     this.secrets = secrets;
   }
@@ -581,10 +619,19 @@ export class SkillLoader {
     return result;
   }
 
+  /**
+   * Retrieves skill instructions.
+   * @param name - Name.
+   * @returns The get skill instructions result.
+   */
   getSkillInstructions(name: string): string | undefined {
     return this.get(name)?.instructions;
   }
 
+  /**
+   * Executes discover candidates.
+   * @returns The resulting collection of values.
+   */
   private discoverCandidates(): SkillCandidate[] {
     const buckets: Array<{ roots: string[]; origin: SkillOrigin; priority: number }> = [
       { roots: [this.skillsDir], origin: 'workspace', priority: 3 },
@@ -614,6 +661,10 @@ export class SkillLoader {
     const candidates: SkillCandidate[] = [];
     const seen = new Set<string>();
 
+    /**
+     * Executes add candidate.
+     * @param candidate - Candidate.
+     */
     const addCandidate = (candidate: SkillCandidate) => {
       const key = resolve(candidate.rootDir);
       if (seen.has(key)) return;
@@ -678,6 +729,11 @@ export class SkillLoader {
     return candidates;
   }
 
+  /**
+   * Executes resolve entry source.
+   * @param rootDir - Root dir.
+   * @returns The resolve entry source result.
+   */
   private resolveEntrySource(rootDir: string): string | undefined {
     const packageJsonPath = join(rootDir, 'package.json');
 
@@ -707,6 +763,12 @@ export class SkillLoader {
     return undefined;
   }
 
+  /**
+   * Loads manifest.
+   * @param rootDir - Root dir.
+   * @param allowInstructionOnly - Allow instruction only.
+   * @returns The load manifest result.
+   */
   private loadManifest(
     rootDir: string,
     allowInstructionOnly = false,
@@ -800,6 +862,12 @@ export class SkillLoader {
     return { ok: true, manifest, manifestPath };
   }
 
+  /**
+   * Executes collect skill instructions.
+   * @param rootDir - Root dir.
+   * @param manifest - Manifest.
+   * @returns The collect skill instructions result.
+   */
   private collectSkillInstructions(
     rootDir: string,
     manifest: SkillManifest,
@@ -841,6 +909,12 @@ export class SkillLoader {
     };
   }
 
+  /**
+   * Executes resolve enable state.
+   * @param id - Id.
+   * @param metadata - Metadata.
+   * @returns The resolve enable state result.
+   */
   private resolveEnableState(
     id: string,
     metadata?: ReturnType<typeof resolveMetadata>,
@@ -922,17 +996,31 @@ export class SkillLoader {
     };
   }
 
+  /**
+   * Executes resolve plugin config.
+   * @param id - Id.
+   * @returns The resolve plugin config result.
+   */
   private resolvePluginConfig(id: string): Record<string, unknown> | undefined {
     const value = this.config.skills?.entries?.[id]?.config;
     if (!isRecord(value)) return undefined;
     return { ...value };
   }
 
+  /**
+   * Executes apply env overrides.
+   * @param skill - Skill.
+   */
   private applyEnvOverrides(skill: LoadedSkill) {
     const entry = this.config.skills?.entries?.[skill.id];
     const secrets = this.secrets[skill.id] || {};
     const entryConfig = (entry?.config as Record<string, any> | undefined) || {};
 
+    /**
+     * Sets if absent.
+     * @param key - Key.
+     * @param val - Val.
+     */
     const setIfAbsent = (key: string, val?: string) => {
       if (!key || !val) return;
       if (!process.env[key]) {
@@ -981,6 +1069,11 @@ export class SkillLoader {
     }
   }
 
+  /**
+   * Executes resolve skill module.
+   * @param rawModule - Raw module.
+   * @returns The resolve skill module result.
+   */
   private resolveSkillModule(
     rawModule: unknown,
   ):
@@ -1022,6 +1115,12 @@ export class SkillLoader {
     return null;
   }
 
+  /**
+   * Loads legacy skill.
+   * @param skill - Skill.
+   * @param legacy - Legacy.
+   * @param toolRegistry - Tool registry.
+   */
   private async loadLegacySkill(
     skill: LoadedSkill,
     legacy: LegacySkillModule,
@@ -1054,6 +1153,12 @@ export class SkillLoader {
     }
   }
 
+  /**
+   * Loads plugin skill.
+   * @param skill - Skill.
+   * @param definition - Definition.
+   * @param toolRegistry - Tool registry.
+   */
   private async loadPluginSkill(
     skill: LoadedSkill,
     definition: AdytumSkillPluginDefinition,
@@ -1128,6 +1233,11 @@ export class SkillLoader {
     skill.version = definition.version || skill.version;
   }
 
+  /**
+   * Creates skill logger.
+   * @param skillId - Skill id.
+   * @returns The create skill logger result.
+   */
   private createSkillLogger(skillId: string): SkillLogger {
     const prefix = chalk.dim(`[skill:${skillId}]`);
     return {
@@ -1147,11 +1257,21 @@ export class SkillLoader {
   }
 }
 
+/**
+ * Executes normalize string list.
+ * @param value - Value.
+ * @returns The resulting collection of values.
+ */
 function normalizeStringList(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
   return value.map((entry) => (typeof entry === 'string' ? entry.trim() : '')).filter(Boolean);
 }
 
+/**
+ * Determines whether has binary.
+ * @param bin - Bin.
+ * @returns True when has binary.
+ */
 function hasBinary(bin: string): boolean {
   const pathEnv = process.env.PATH || '';
   const parts = pathEnv.split(process.platform === 'win32' ? ';' : ':').filter(Boolean);
@@ -1169,6 +1289,11 @@ function hasBinary(bin: string): boolean {
   return false;
 }
 
+/**
+ * Executes strip frontmatter.
+ * @param raw - Raw.
+ * @returns The resulting string value.
+ */
 function stripFrontmatter(raw: string): string {
   const match = raw.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
   if (!match) return raw;
@@ -1184,11 +1309,24 @@ function stripFrontmatter(raw: string): string {
 
 type ValidationResult = { ok: true } | { ok: false; errors: string[] };
 
+/**
+ * Validates json schema value.
+ * @param value - Value.
+ * @param schema - Schema.
+ * @param path - Path.
+ * @returns The validate json schema value result.
+ */
 function validateJsonSchemaValue(value: unknown, schema: unknown, path: string): ValidationResult {
   if (!isRecord(schema)) return { ok: true };
 
   const errors: string[] = [];
 
+  /**
+   * Executes validate.
+   * @param currentValue - Current value.
+   * @param currentSchema - Current schema.
+   * @param currentPath - Current path.
+   */
   const validate = (currentValue: unknown, currentSchema: unknown, currentPath: string) => {
     if (!isRecord(currentSchema)) return;
 
@@ -1283,6 +1421,11 @@ function validateJsonSchemaValue(value: unknown, schema: unknown, path: string):
   return { ok: false, errors };
 }
 
+/**
+ * Determines whether is record.
+ * @param value - Value.
+ * @returns The is record result.
+ */
 function isRecord(value: unknown): value is Record<string, any> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }

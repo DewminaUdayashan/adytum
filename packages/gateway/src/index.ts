@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/index.ts
+ * @description Defines module behavior for the Adytum workspace.
+ */
+
 import { v4 as uuid } from 'uuid';
 import chalk from 'chalk';
 import { createInterface } from 'node:readline';
@@ -147,6 +152,9 @@ export async function startGateway(projectRoot: string): Promise<void> {
   agent.seedContext(recentMessages.map((m) => ({ role: m.role as any, content: m.content })));
   await skillLoader.start(agent);
 
+  /**
+   * Executes reload skills.
+   */
   const reloadSkills = async (): Promise<void> => {
     const latestConfig = loadConfig(projectRoot);
     skillLoader.updateConfig(latestConfig, projectRoot);
@@ -157,9 +165,15 @@ export async function startGateway(projectRoot: string): Promise<void> {
 
   // Auto-reload skills when files change under workspace/skills
   const skillsPath = resolve(config.workspacePath, 'skills');
+  /**
+   * Starts skills watcher.
+   */
   const startSkillsWatcher = () => {
     if (!existsSync(skillsPath)) return;
     let timer: NodeJS.Timeout | null = null;
+    /**
+     * Executes debounce reload.
+     */
     const debounceReload = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(async () => {
@@ -180,6 +194,9 @@ export async function startGateway(projectRoot: string): Promise<void> {
   startSkillsWatcher();
 
   // One-time migration: move known skill env vars into secrets store, then reload if changed.
+  /**
+   * Executes migrate skill envs.
+   */
   const migrateSkillEnvs = async () => {
     let changed = false;
     for (const skill of skillLoader.getAll()) {
@@ -217,6 +234,10 @@ export async function startGateway(projectRoot: string): Promise<void> {
   let dreamerTask: cron.ScheduledTask | null = null;
   let monologueTask: cron.ScheduledTask | null = null;
 
+  /**
+   * Executes schedule dreamer.
+   * @param minutes - Minutes.
+   */
   function scheduleDreamer(minutes: number) {
     dreamerTask?.stop();
     const safe = Math.max(1, Math.floor(minutes));
@@ -231,6 +252,10 @@ export async function startGateway(projectRoot: string): Promise<void> {
     });
   }
 
+  /**
+   * Executes schedule monologue.
+   * @param minutes - Minutes.
+   */
   function scheduleMonologue(minutes: number) {
     monologueTask?.stop();
     const safe = Math.max(1, Math.floor(minutes));
@@ -267,17 +292,18 @@ export async function startGateway(projectRoot: string): Promise<void> {
   // ── Dependency Injection Wiring ───────────────────────────
   // Register the live instances we just created into the container
   // so that Controllers can resolve them.
-  
+
   container.register(AgentRuntime, { useValue: agent });
   container.register(SkillLoader, { useValue: skillLoader });
   container.register(CronManager, { useValue: cronManager });
   container.register(ModelCatalog, { useValue: modelCatalog });
   container.register(SoulEngine, { useValue: soulEngine });
   container.register(ToolRegistry, { useValue: toolRegistry });
+  container.register('MemoryDB', { useValue: memoryDb });
   container.register('MemoryRepository', { useValue: memoryDb });
   container.register(PermissionManager, { useValue: permissionManager });
   container.register(SecretsStore, { useValue: secretsStore });
-  
+
   // Wire up SkillService reload callback
   const skillService = container.resolve(SkillService);
   skillService.setReloadCallback(reloadSkills);
@@ -349,6 +375,9 @@ export async function startGateway(projectRoot: string): Promise<void> {
   });
 
   // Graceful shutdown on Ctrl+C
+  /**
+   * Executes shutdown.
+   */
   const shutdown = async () => {
     console.log(chalk.dim(`\n  ${config.agentName} is resting. Goodbye.\n`));
     rl.close();
@@ -363,6 +392,11 @@ export async function startGateway(projectRoot: string): Promise<void> {
 
   // Shared approval prompt that pauses/resumes the main REPL
   // to prevent double character echo
+  /**
+   * Executes prompt approval.
+   * @param promptText - Prompt text.
+   * @returns Whether the operation succeeded.
+   */
   const promptApproval = async (promptText: string): Promise<boolean> => {
     rl.pause();
     // Remove the main readline from stdin so it doesn't intercept keys

@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 
+/**
+ * @file packages/gateway/src/cli/index.ts
+ * @description Provides command-line entrypoints and CLI workflows.
+ */
+
 import 'reflect-metadata';
 import { Command } from 'commander';
 import chalk from 'chalk';

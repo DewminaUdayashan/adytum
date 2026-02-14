@@ -1,3 +1,8 @@
+/**
+ * @file packages/dashboard/src/lib/api.ts
+ * @description Provides shared utility functions for client/server modules.
+ */
+
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || '/api';
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001/ws';
 

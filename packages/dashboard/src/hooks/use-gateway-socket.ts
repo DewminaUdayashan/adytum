@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @file packages/dashboard/src/hooks/use-gateway-socket.ts
+ * @description Provides reusable React hooks for dashboard behavior.
+ */
+
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { getWebSocketUrl } from '@/lib/api';
 

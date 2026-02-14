@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/domain/logic/sub-agent.ts
+ * @description Contains domain logic and core business behavior.
+ */
+
 import { v4 as uuid } from 'uuid';
 import { AgentRuntime, type AgentRuntimeConfig, type AgentTurnResult } from './agent-runtime.js';
 import { ContextManager } from './context-manager.js';

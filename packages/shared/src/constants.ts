@@ -1,3 +1,8 @@
+/**
+ * @file packages/shared/src/constants.ts
+ * @description Defines module behavior for the Adytum workspace.
+ */
+
 // ─── Adytum Constants ─────────────────────────────────────────
 
 export const ADYTUM_VERSION = '0.1.0';

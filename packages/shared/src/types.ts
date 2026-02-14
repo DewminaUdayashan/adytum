@@ -1,3 +1,8 @@
+/**
+ * @file packages/shared/src/types.ts
+ * @description Defines module behavior for the Adytum workspace.
+ */
+
 import { z } from 'zod';
 
 // ─── Core Message Types ───────────────────────────────────────

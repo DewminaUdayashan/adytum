@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/api/controllers/skill.controller.ts
+ * @description Handles API controller orchestration and response shaping.
+ */
+
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { singleton, inject } from 'tsyringe';
 import { Logger } from '../../logger.js';
@@ -7,6 +12,9 @@ import { AppError } from '../../domain/errors/app-error.js';
 import { relative } from 'node:path';
 import { readFileSync } from 'node:fs';
 
+/**
+ * Encapsulates skill controller behavior.
+ */
 @singleton()
 export class SkillController {
   constructor(
@@ -15,6 +23,11 @@ export class SkillController {
     @inject(ConfigService) private configService: ConfigService
   ) {}
 
+  /**
+   * Retrieves skills.
+   * @param request - Request.
+   * @param reply - Reply.
+   */
   public async getSkills(request: FastifyRequest, reply: FastifyReply) {
     const skills = this.skillService.getAllSkills();
     const config = this.configService.getFullConfig();
@@ -59,6 +72,11 @@ export class SkillController {
 
   // TODO: Implement install, secrets management, instructions editing
   // For now, focusing on read operations to stabilize build/architecture
+  /**
+   * Retrieves skill.
+   * @param request - Request.
+   * @param reply - Reply.
+   */
   public async getSkill(request: FastifyRequest, reply: FastifyReply) {
     const { id } = request.params as { id: string };
     const skill = this.skillService.getSkill(id);
@@ -99,6 +117,11 @@ export class SkillController {
     return { skill: formatted };
   }
 
+  /**
+   * Retrieves skill instructions.
+   * @param request - Request.
+   * @param reply - Reply.
+   */
   public async getSkillInstructions(request: FastifyRequest, reply: FastifyReply) {
     const { id } = request.params as { id: string };
     const instructions = this.skillService.getSkillInstructions(id);
@@ -108,6 +131,11 @@ export class SkillController {
     return instructions;
   }
 
+  /**
+   * Executes update skill instructions.
+   * @param request - Request.
+   * @param reply - Reply.
+   */
   public async updateSkillInstructions(request: FastifyRequest, reply: FastifyReply) {
     const { id } = request.params as { id: string };
     const { relativePath, content } = request.body as { relativePath: string; content: string };
@@ -120,6 +148,11 @@ export class SkillController {
     return { success: true };
   }
 
+  /**
+   * Executes update skill.
+   * @param request - Request.
+   * @param reply - Reply.
+   */
   public async updateSkill(request: FastifyRequest, reply: FastifyReply) {
     const { id } = request.params as { id: string };
     const data = request.body as { enabled?: boolean; config?: any; installPermission?: string };
@@ -128,6 +161,11 @@ export class SkillController {
     return { success: true };
   }
 
+  /**
+   * Executes update skill secrets.
+   * @param request - Request.
+   * @param reply - Reply.
+   */
   public async updateSkillSecrets(request: FastifyRequest, reply: FastifyReply) {
     const { id } = request.params as { id: string };
     const { secrets } = request.body as { secrets: Record<string, string> };

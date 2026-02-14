@@ -1,3 +1,8 @@
+/**
+ * @file workspace/skills/weather/index.ts
+ * @description Defines module behavior for the Adytum workspace.
+ */
+
 import { z } from 'zod';
 
 const WEATHER_PROVIDERS = ['wttr', 'open-meteo'] as const;

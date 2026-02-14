@@ -1,3 +1,8 @@
+/**
+ * @file packages/dashboard/src/components/chat/markdown-utils.ts
+ * @description Defines reusable UI components for the dashboard.
+ */
+
 const MARKDOWN_LINK_REGEX = /\[[^\]]*]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
 const AUTO_LINK_REGEX = /https?:\/\/[^\s<>()]+[^\s<>().,!?;:'"]/g;
 

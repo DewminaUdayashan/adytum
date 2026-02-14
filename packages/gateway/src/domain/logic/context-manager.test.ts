@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/domain/logic/context-manager.test.ts
+ * @description Contains domain logic and core business behavior.
+ */
+
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ContextManager } from './context-manager.js';
 

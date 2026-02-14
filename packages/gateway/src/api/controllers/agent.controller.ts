@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/api/controllers/agent.controller.ts
+ * @description Handles API controller orchestration and response shaping.
+ */
+
 import { FastifyRequest, FastifyReply } from 'fastify';
 // import { SocketStream } from '@fastify/websocket';
 import { singleton, inject } from 'tsyringe';
@@ -14,10 +19,17 @@ import { SoulEngine } from '../../domain/logic/soul-engine.js';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
+/**
+ * Encapsulates agent controller behavior.
+ */
 @singleton()
 export class AgentController {
   private connections = new Map<string, any>(); 
   
+  /**
+   * Executes broadcast.
+   * @param frame - Frame.
+   */
   public broadcast(frame: WebSocketFrame): void {
     const data = serializeFrame(frame);
     for (const socket of this.connections.values()) {
@@ -36,6 +48,11 @@ export class AgentController {
     @inject(SoulEngine) private soulEngine: SoulEngine
   ) {}
 
+  /**
+   * Handles web socket.
+   * @param connection - Connection.
+   * @param req - Req.
+   */
   public handleWebSocket(connection: any /* SocketStream | WebSocket */, req: FastifyRequest) {
     // Handle both Fastify SocketStream and raw WebSocket
     const socket = connection.socket || connection;
@@ -92,6 +109,10 @@ export class AgentController {
             const { content, sessionId = 'default' } = frame as any;
             const runtime = this.agentService.getRuntime();
             
+            /**
+             * Executes on stream.
+             * @param event - Event.
+             */
             const onStream = (event: any) => {
                if (event.sessionId === sessionId || event.sessionId === 'default') {
                   if (socket.readyState === 1) {
@@ -154,6 +175,11 @@ export class AgentController {
     }
   }
 
+  /**
+   * Retrieves memories.
+   * @param request - Request.
+   * @param reply - Reply.
+   */
   public async getMemories(request: FastifyRequest, reply: FastifyReply) {
     const { category, limit, offset } = request.query as { category?: string | string[]; limit?: string; offset?: string };
     const categories = Array.isArray(category) ? category : category ? category.split(',').map(c => c.trim()).filter(Boolean) : [];
@@ -164,6 +190,10 @@ export class AgentController {
     return { items, total: items.length, hasMore: false };
   }
 
+  /**
+   * Executes update memory.
+   * @param request - Request.
+   */
   public async updateMemory(request: FastifyRequest) {
     const { id } = request.params as { id: string };
     const body = request.body as any;
@@ -177,6 +207,10 @@ export class AgentController {
     return { memory: updated };
   }
 
+  /**
+   * Executes delete memory.
+   * @param request - Request.
+   */
   public async deleteMemory(request: FastifyRequest) {
     const { id } = request.params as { id: string };
     const success = await this.memoryRepo.deleteMemory(id);
@@ -184,10 +218,18 @@ export class AgentController {
     return { success: true };
   }
 
+  /**
+   * Retrieves approvals.
+   * @param request - Request.
+   */
   public async getApprovals(request: FastifyRequest) {
     return { approvals: this.approvals.getAllPending() };
   }
 
+  /**
+   * Executes resolve approval.
+   * @param request - Request.
+   */
   public async resolveApproval(request: FastifyRequest) {
     const { id } = request.params as { id: string };
     const body = request.body as { approved?: boolean };
@@ -196,6 +238,10 @@ export class AgentController {
     return { success: true, id, approved: Boolean(body?.approved) };
   }
 
+  /**
+   * Handles feedback.
+   * @param request - Request.
+   */
   public async handleFeedback(request: FastifyRequest) {
     const body = request.body as {
       traceId: string;
@@ -226,10 +272,18 @@ export class AgentController {
     return { success: true, feedback };
   }
 
+  /**
+   * Retrieves personality.
+   * @param request - Request.
+   */
   public async getPersonality(request: FastifyRequest) {
     return { content: this.soulEngine.getSoulPrompt() };
   }
 
+  /**
+   * Executes update personality.
+   * @param request - Request.
+   */
   public async updatePersonality(request: FastifyRequest) {
     const body = request.body as { content: string };
     if (!body.content) throw new AppError('content required', 400);
@@ -240,6 +294,10 @@ export class AgentController {
     return { success: true, content: body.content };
   }
 
+  /**
+   * Retrieves heartbeat.
+   * @param request - Request.
+   */
   public async getHeartbeat(request: FastifyRequest) {
     const workspacePath = this.configService.get('workspacePath');
     const heartbeatFile = join(workspacePath, 'HEARTBEAT.md');
@@ -252,6 +310,10 @@ export class AgentController {
     return { content };
   }
 
+  /**
+   * Executes update heartbeat.
+   * @param request - Request.
+   */
   public async updateHeartbeat(request: FastifyRequest) {
     const body = request.body as { content: string };
     if (body.content === undefined) throw new AppError('content required', 400);

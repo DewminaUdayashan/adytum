@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @file packages/dashboard/src/app/memories/page.tsx
+ * @description Defines route-level UI composition and page behavior.
+ */
+
 import { useEffect, useMemo, useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { gatewayFetch } from '@/lib/api';

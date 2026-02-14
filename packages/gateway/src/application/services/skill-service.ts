@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/application/services/skill-service.ts
+ * @description Implements application-level service logic and coordination.
+ */
+
 import { relative, join } from 'node:path';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { singleton, inject } from 'tsyringe';
@@ -6,6 +11,9 @@ import { ConfigService } from '../../infrastructure/config/config-service.js';
 import { SkillLoader, type LoadedSkill as Skill } from '../services/skill-loader.js';
 import { type AdytumConfig } from '@adytum/shared';
 
+/**
+ * Encapsulates skill service behavior.
+ */
 @singleton()
 export class SkillService {
   private onReloadCallback: (() => Promise<void>) | null = null;
@@ -16,18 +24,35 @@ export class SkillService {
     @inject(SkillLoader) private loader: SkillLoader
   ) {}
 
+  /**
+   * Sets reload callback.
+   * @param cb - Cb.
+   */
   public setReloadCallback(cb: () => Promise<void>) {
     this.onReloadCallback = cb;
   }
 
+  /**
+   * Retrieves all skills.
+   * @returns The resulting collection of values.
+   */
   public getAllSkills(): Skill[] {
     return this.loader.getAll();
   }
 
+  /**
+   * Retrieves skill.
+   * @param id - Id.
+   * @returns The get skill result.
+   */
   public getSkill(id: string): Skill | undefined {
     return this.loader?.getAll().find((s) => s.id === id);
   }
 
+  /**
+   * Retrieves skill instructions.
+   * @param id - Id.
+   */
   public getSkillInstructions(id: string) {
     const skill = this.getSkill(id);
     if (!skill) return null;
@@ -54,6 +79,12 @@ export class SkillService {
     };
   }
 
+  /**
+   * Executes update skill instructions.
+   * @param id - Id.
+   * @param relativePath - Relative path.
+   * @param content - Content.
+   */
   public async updateSkillInstructions(id: string, relativePath: string, content: string): Promise<void> {
     const skill = this.getSkill(id);
     if (!skill) throw new Error(`Skill ${id} not found`);
@@ -70,6 +101,11 @@ export class SkillService {
     await this.reloadSkills();
   }
 
+  /**
+   * Executes update skill.
+   * @param id - Id.
+   * @param data - Data.
+   */
   public async updateSkill(id: string, data: { enabled?: boolean; config?: any; installPermission?: string }): Promise<void> {
     const config = this.configService.getFullConfig();
     const skills = config.skills || { enabled: true, entries: {}, allow: [], deny: [] };
@@ -86,12 +122,20 @@ export class SkillService {
     await this.reloadSkills();
   }
 
+  /**
+   * Sets skill secrets.
+   * @param id - Id.
+   * @param secrets - Secrets.
+   */
   public async setSkillSecrets(id: string, secrets: Record<string, string>): Promise<void> {
     this.loader.setSkillSecrets(id, secrets);
     this.logger.info(`Updated secrets for skill ${id}`);
     await this.reloadSkills();
   }
 
+  /**
+   * Executes reload skills.
+   */
   public async reloadSkills(): Promise<void> {
     if (this.onReloadCallback) {
       await this.onReloadCallback();

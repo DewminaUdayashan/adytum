@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @file packages/dashboard/src/app/settings/llm/page.tsx
+ * @description Defines route-level UI composition and page behavior.
+ */
+
 import { useState, useEffect, useRef } from 'react';
 import { usePolling } from '@/hooks/use-polling';
 import { gatewayFetch } from '@/lib/api';

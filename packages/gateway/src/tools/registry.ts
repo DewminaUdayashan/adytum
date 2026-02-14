@@ -1,33 +1,67 @@
+/**
+ * @file packages/gateway/src/tools/registry.ts
+ * @description Defines tool handlers exposed to the runtime.
+ */
+
 import { z } from 'zod';
 import type { ToolCall, ToolResult, ToolDefinition } from '@adytum/shared';
 
 // ─── Tool Registry ────────────────────────────────────────────
 
+/**
+ * Encapsulates tool registry behavior.
+ */
 export class ToolRegistry {
   private tools = new Map<string, ToolDefinition>();
 
+  /**
+   * Executes register.
+   * @param tool - Tool.
+   */
   register(tool: ToolDefinition): void {
     this.tools.set(tool.name, tool);
   }
 
+  /**
+   * Executes get.
+   * @param name - Name.
+   * @returns The get result.
+   */
   get(name: string): ToolDefinition | undefined {
     return this.tools.get(name);
   }
 
+  /**
+   * Executes unregister.
+   * @param name - Name.
+   */
   unregister(name: string): void {
     this.tools.delete(name);
   }
 
+  /**
+   * Executes unregister many.
+   * @param names - Names.
+   */
   unregisterMany(names: string[]): void {
     for (const name of names) {
       this.tools.delete(name);
     }
   }
 
+  /**
+   * Executes has.
+   * @param name - Name.
+   * @returns True when has.
+   */
   has(name: string): boolean {
     return this.tools.has(name);
   }
 
+  /**
+   * Retrieves all.
+   * @returns The resulting collection of values.
+   */
   getAll(): ToolDefinition[] {
     return Array.from(this.tools.values());
   }
@@ -112,6 +146,11 @@ export class ToolRegistry {
     };
   }
 
+  /**
+   * Executes zod type to json.
+   * @param type - Type.
+   * @returns The zod type to json result.
+   */
   private zodTypeToJson(type: z.ZodTypeAny): Record<string, unknown> {
     if (type instanceof z.ZodString) return { type: 'string', description: type.description };
     if (type instanceof z.ZodNumber) return { type: 'number', description: type.description };

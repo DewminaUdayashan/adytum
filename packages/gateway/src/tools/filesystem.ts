@@ -1,9 +1,19 @@
+/**
+ * @file packages/gateway/src/tools/filesystem.ts
+ * @description Defines tool handlers exposed to the runtime.
+ */
+
 import { z } from 'zod';
 import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import type { ToolDefinition } from '@adytum/shared';
 import type { PermissionManager } from '../security/permission-manager.js';
 
+/**
+ * Creates file system tools.
+ * @param permissionManager - Permission manager.
+ * @returns The resulting collection of values.
+ */
 export function createFileSystemTools(permissionManager: PermissionManager): ToolDefinition[] {
   return [
     {
@@ -73,6 +83,12 @@ export function createFileSystemTools(permissionManager: PermissionManager): Too
         };
         const resolved = permissionManager.validatePath(path, 'read');
 
+        /**
+         * Executes list dir.
+         * @param dir - Dir.
+         * @param depth - Depth.
+         * @returns The resulting collection of values.
+         */
         const listDir = (dir: string, depth: number): any[] => {
           if (depth > maxDepth) return [];
           const entries = readdirSync(dir, { withFileTypes: true });
@@ -118,6 +134,10 @@ export function createFileSystemTools(permissionManager: PermissionManager): Too
         const results: Array<{ file: string; line: number; content: string }> = [];
         const regex = new RegExp(query, 'gi');
 
+        /**
+         * Executes search dir.
+         * @param dir - Dir.
+         */
         const searchDir = (dir: string): void => {
           if (results.length >= maxResults) return;
           const entries = readdirSync(dir, { withFileTypes: true });

@@ -36,6 +36,9 @@ export interface LLMChatResult {
   finishReason?: string;
 }
 
+/**
+ * Encapsulates llmclient behavior.
+ */
 export class LLMClient {
   private catalog: ModelCatalog;
 

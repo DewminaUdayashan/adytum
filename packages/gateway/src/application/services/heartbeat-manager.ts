@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/application/services/heartbeat-manager.ts
+ * @description Implements application-level service logic and coordination.
+ */
+
 import { existsSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { AgentRuntime } from '../../domain/logic/agent-runtime.js';
@@ -13,6 +18,9 @@ Your task is to check the file "HEARTBEAT.md" and execute any pending tasks.
 5. Do NOT chat. Do NOT act on previous conversation history. Only act on "HEARTBEAT.md".
 `;
 
+/**
+ * Encapsulates heartbeat manager behavior.
+ */
 export class HeartbeatManager {
   private task: cron.ScheduledTask | null = null;
 
@@ -21,15 +29,26 @@ export class HeartbeatManager {
     private workspacePath: string,
   ) {}
 
+  /**
+   * Executes start.
+   * @param intervalMinutes - Interval minutes.
+   */
   start(intervalMinutes: number) {
     this.schedule(intervalMinutes);
   }
 
+  /**
+   * Executes stop.
+   */
   stop() {
     this.task?.stop();
     this.task = null;
   }
 
+  /**
+   * Executes schedule.
+   * @param minutes - Minutes.
+   */
   schedule(minutes: number) {
     this.stop();
     const safeMinutes = Math.max(1, Math.floor(minutes));
@@ -49,6 +68,9 @@ export class HeartbeatManager {
     });
   }
 
+  /**
+   * Executes run.
+   */
   async run(): Promise<void> {
     const heartbeatFile = join(this.workspacePath, 'HEARTBEAT.md');
     let hasHeartbeatFile = false;

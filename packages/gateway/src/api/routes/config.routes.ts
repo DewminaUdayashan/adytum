@@ -1,7 +1,16 @@
+/**
+ * @file packages/gateway/src/api/routes/config.routes.ts
+ * @description Defines API route registration and endpoint wiring.
+ */
+
 import { FastifyInstance } from 'fastify';
 import { container } from 'tsyringe';
 import { ConfigController } from '../controllers/config.controller.js';
 
+/**
+ * Executes config routes.
+ * @param app - App.
+ */
 export async function configRoutes(app: FastifyInstance) {
   const controller = container.resolve(ConfigController);
 

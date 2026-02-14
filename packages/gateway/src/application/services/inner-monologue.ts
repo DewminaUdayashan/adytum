@@ -1,8 +1,16 @@
+/**
+ * @file packages/gateway/src/application/services/inner-monologue.ts
+ * @description Implements application-level service logic and coordination.
+ */
+
 import type { ModelRouter } from '../../infrastructure/llm/model-router.js';
 import type { MemoryDB } from '../../infrastructure/repositories/memory-db.js';
 import { redactSecrets, type MemoryStore } from '../../infrastructure/repositories/memory-store.js';
 import { auditLogger } from '../../security/audit-logger.js';
 
+/**
+ * Encapsulates inner monologue behavior.
+ */
 export class InnerMonologue {
   constructor(
     private modelRouter: ModelRouter,
@@ -10,6 +18,9 @@ export class InnerMonologue {
     private memoryStore: MemoryStore,
   ) {}
 
+  /**
+   * Executes run.
+   */
   async run(): Promise<void> {
     auditLogger.log({
       traceId: crypto.randomUUID(),

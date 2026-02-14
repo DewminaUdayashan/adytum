@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/application/services/cron-manager.ts
+ * @description Implements application-level service logic and coordination.
+ */
+
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import cron from 'node-cron';
@@ -16,6 +21,9 @@ export const CronJobSchema = z.object({
 
 export type CronJob = z.infer<typeof CronJobSchema>;
 
+/**
+ * Encapsulates cron manager behavior.
+ */
 export class CronManager {
   private jobs = new Map<string, CronJob>();
   private tasks = new Map<string, cron.ScheduledTask>();
@@ -29,6 +37,9 @@ export class CronManager {
     this.load();
   }
 
+  /**
+   * Executes load.
+   */
   private load() {
     if (!existsSync(this.filePath)) {
       this.jobs.clear();
@@ -51,6 +62,9 @@ export class CronManager {
     }
   }
 
+  /**
+   * Executes save.
+   */
   private save() {
     try {
       const data = Array.from(this.jobs.values());
@@ -60,6 +74,10 @@ export class CronManager {
     }
   }
 
+  /**
+   * Executes schedule.
+   * @param job - Job.
+   */
   private schedule(job: CronJob) {
     if (this.tasks.has(job.id)) {
       this.tasks.get(job.id)?.stop();
@@ -97,6 +115,13 @@ export class CronManager {
 
   // ── Public API ────────────────────────────────────────────────
 
+  /**
+   * Executes add job.
+   * @param name - Name.
+   * @param schedule - Schedule.
+   * @param taskDescription - Task description.
+   * @returns The add job result.
+   */
   addJob(name: string, schedule: string, taskDescription: string): CronJob {
     const id = crypto.randomUUID();
     const job: CronJob = {
@@ -114,6 +139,12 @@ export class CronManager {
     return job;
   }
 
+  /**
+   * Executes update job.
+   * @param id - Id.
+   * @param updates - Updates.
+   * @returns The update job result.
+   */
   updateJob(id: string, updates: Partial<Omit<CronJob, 'id' | 'createdAt'>>): CronJob {
     const job = this.jobs.get(id);
     if (!job) throw new Error(`Job ${id} not found`);
@@ -133,6 +164,10 @@ export class CronManager {
     return updated;
   }
 
+  /**
+   * Executes remove job.
+   * @param id - Id.
+   */
   removeJob(id: string) {
     this.tasks.get(id)?.stop();
     this.tasks.delete(id);
@@ -140,10 +175,18 @@ export class CronManager {
     this.save();
   }
 
+  /**
+   * Retrieves job.
+   * @param id - Id.
+   */
   getJob(id: string) {
     return this.jobs.get(id);
   }
 
+  /**
+   * Retrieves all jobs.
+   * @returns The resulting collection of values.
+   */
   getAllJobs(): CronJob[] {
     return Array.from(this.jobs.values());
   }

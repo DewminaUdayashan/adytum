@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/application/services/dreamer.ts
+ * @description Implements application-level service logic and coordination.
+ */
+
 import { mkdirSync, writeFileSync, appendFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { auditLogger } from '../../security/audit-logger.js';
@@ -7,6 +12,9 @@ import { redactSecrets, type MemoryStore } from '../../infrastructure/repositori
 
 import type { SoulEngine } from '../../domain/logic/soul-engine.js';
 
+/**
+ * Encapsulates dreamer behavior.
+ */
 export class Dreamer {
   constructor(
     private modelRouter: ModelRouter,
@@ -17,6 +25,9 @@ export class Dreamer {
     private workspacePath: string,
   ) {}
 
+  /**
+   * Executes run.
+   */
   async run(): Promise<void> {
     auditLogger.log({
       traceId: crypto.randomUUID(),
@@ -80,6 +91,10 @@ export class Dreamer {
       return;
     }
 
+    /**
+     * Executes scrub file.
+     * @param path - Path.
+     */
     const scrubFile = (path: string) => {
       if (!existsSync(path)) return;
       const raw = readFileSync(path, 'utf-8');
@@ -125,6 +140,10 @@ export class Dreamer {
     });
   }
 
+  /**
+   * Executes evolve soul.
+   * @param summary - Summary.
+   */
   private async evolveSoul(summary: string): Promise<void> {
     // Check if auto-update is enabled (defaulting to true for v0.2.0)
     // We can't easily access global config here without passing it, but we can rely on

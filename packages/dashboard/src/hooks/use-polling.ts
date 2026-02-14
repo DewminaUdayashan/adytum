@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @file packages/dashboard/src/hooks/use-polling.ts
+ * @description Provides reusable React hooks for dashboard behavior.
+ */
+
 import { useState, useEffect, useCallback } from 'react';
 import { gatewayFetch } from '@/lib/api';
 

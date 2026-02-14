@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/vitest.config.ts
+ * @description Defines module behavior for the Adytum workspace.
+ */
+
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({

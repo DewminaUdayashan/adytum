@@ -1,3 +1,8 @@
+/**
+ * @file packages/dashboard/src/components/ui/select.tsx
+ * @description Defines reusable UI components for the dashboard.
+ */
+
 import { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { ChevronDown, Check } from 'lucide-react';

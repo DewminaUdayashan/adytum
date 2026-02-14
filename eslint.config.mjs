@@ -1,3 +1,8 @@
+/**
+ * @file eslint.config.mjs
+ * @description Defines module behavior for the Adytum workspace.
+ */
+
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import prettier from 'eslint-plugin-prettier/recommended';

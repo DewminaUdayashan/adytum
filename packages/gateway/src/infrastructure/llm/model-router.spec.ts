@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/infrastructure/llm/model-router.spec.ts
+ * @description Implements infrastructure adapters and external integrations.
+ */
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ModelRouter } from './model-router.js';
 import { LLMClient } from './llm-client.js';
@@ -161,6 +166,9 @@ describe('ModelRouter', () => {
 
         const stream = modelRouter.chatStream('fast', [{ role: 'user', content: 'hi' }]);
         
+        /**
+         * Executes iterate stream.
+         */
         const iterateStream = async () => {
             for await (const _ of stream) {
                 // ...

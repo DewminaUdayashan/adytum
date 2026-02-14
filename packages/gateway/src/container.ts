@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/container.ts
+ * @description Defines module behavior for the Adytum workspace.
+ */
+
 import 'reflect-metadata';
 import { container } from 'tsyringe';
 import { Logger } from './logger.js';
@@ -17,6 +22,9 @@ import { SkillController } from './api/controllers/skill.controller.js';
 import { SystemController } from './api/controllers/system.controller.js';
 import { TaskController } from './api/controllers/task.controller.js';
 
+/**
+ * Executes setup container.
+ */
 export function setupContainer() {
   // Register singletons
   container.register(Logger, { useValue: new Logger() });

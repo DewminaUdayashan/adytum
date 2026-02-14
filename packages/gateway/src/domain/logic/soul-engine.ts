@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/domain/logic/soul-engine.ts
+ * @description Contains domain logic and core business behavior.
+ */
+
 import { readFileSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -73,6 +78,10 @@ ${params.soulPersona || '- I think in public — I share my reasoning process tr
     return soul;
   }
 
+  /**
+   * Retrieves default soul.
+   * @returns The resulting string value.
+   */
   private getDefaultSoul(): string {
     return `You are Adytum, an autonomous AI assistant. You help your human with software development, research, and daily tasks. You think transparently, act responsibly, and learn from feedback.`;
   }

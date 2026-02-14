@@ -1,7 +1,16 @@
+/**
+ * @file packages/gateway/src/api/routes/task.routes.ts
+ * @description Defines API route registration and endpoint wiring.
+ */
+
 import { FastifyInstance } from 'fastify';
 import { container } from 'tsyringe';
 import { TaskController } from '../controllers/task.controller.js';
 
+/**
+ * Executes task routes.
+ * @param app - App.
+ */
 export async function taskRoutes(app: FastifyInstance) {
   const controller = container.resolve(TaskController);
 

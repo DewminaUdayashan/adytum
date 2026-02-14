@@ -1,6 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+/**
+ * @file packages/dashboard/src/app/page.tsx
+ * @description Defines route-level UI composition and page behavior.
+ */
+
+import { useMemo, useState } from 'react';
 import { usePolling } from '@/hooks/use-polling';
 import { useGatewaySocket } from '@/hooks/use-gateway-socket';
 import { Badge, Spinner, Button, Card } from '@/components/ui';
@@ -10,6 +15,7 @@ import {
   Brain,
   MessageSquare,
   Zap,
+  Coins,
   Cpu,
   GitBranch,
   ShieldAlert,
@@ -40,6 +46,20 @@ interface ActivityResponse {
   activities: LogEntry[];
   total: number;
   hasMore: boolean;
+}
+
+interface TokenOverview {
+  total: { tokens: number; cost: number; calls: number };
+  byProvider: Array<{ provider: string; tokens: number; cost: number; calls: number }>;
+  byModel: Array<{
+    provider: string;
+    model: string;
+    modelId: string;
+    tokens: number;
+    cost: number;
+    calls: number;
+  }>;
+  recent: Array<{ sessionId: string }>;
 }
 
 /* ── Configuration ── */
@@ -166,17 +186,51 @@ function ActivityItem({ activity }: { activity: LogEntry }) {
 
 export default function ActivityPage() {
   const { data, loading } = usePolling<ActivityResponse>('/api/activity?limit=50', 3000);
+  const { data: tokenData } = usePolling<TokenOverview>('/api/tokens?limit=80', 5000);
   const { connected } = useGatewaySocket();
 
   const activities = data?.activities || [];
+  const stats = useMemo(() => {
+    const toolCalls = activities.filter((activity) => activity.actionType === 'tool_call').length;
+    const modelCalls = tokenData?.total.calls || 0;
+    const totalTokens = tokenData?.total.tokens || 0;
+    const totalCost = tokenData?.total.cost || 0;
+    const activeSessions = new Set(
+      (tokenData?.recent || []).map((row) => row.sessionId).filter(Boolean),
+    ).size;
+    const modelCount = tokenData?.byModel.length || 0;
 
-  // Stats calculation
-  const stats = [
-    { label: 'Active Context', value: '1,024', icon: Brain, trend: '+12%', trendUp: true },
-    { label: 'Latency (avg)', value: '89ms', icon: Zap, trend: '-5%', trendUp: true },
-    { label: 'Tool Usage', value: '452', icon: Wrench, trend: '+8%', trendUp: true },
-    { label: 'Events', value: '2.4k', icon: Activity, trend: '+24%', trendUp: true },
-  ];
+    return [
+      {
+        label: 'Total Tokens',
+        value: totalTokens.toLocaleString(),
+        icon: Coins,
+        trend: `$${totalCost.toFixed(4)}`,
+        trendUp: totalCost >= 0,
+      },
+      {
+        label: 'Model Calls',
+        value: modelCalls.toLocaleString(),
+        icon: Cpu,
+        trend: `${modelCount} models`,
+        trendUp: modelCount > 0,
+      },
+      {
+        label: 'Tool Usage',
+        value: toolCalls.toLocaleString(),
+        icon: Wrench,
+        trend: `${activities.length} events`,
+        trendUp: toolCalls > 0,
+      },
+      {
+        label: 'Active Sessions',
+        value: activeSessions.toLocaleString(),
+        icon: MessageCircle,
+        trend: connected ? 'live' : 'offline',
+        trendUp: connected,
+      },
+    ];
+  }, [activities, connected, tokenData]);
 
   if (loading && !data) {
     return (

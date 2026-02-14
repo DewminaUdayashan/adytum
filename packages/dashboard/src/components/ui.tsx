@@ -1,3 +1,8 @@
+/**
+ * @file packages/dashboard/src/components/ui.tsx
+ * @description Defines reusable UI components for the dashboard.
+ */
+
 import { clsx } from 'clsx';
 import React from 'react';
 

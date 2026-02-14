@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/domain/logic/runtime.integration.test.ts
+ * @description Contains domain logic and core business behavior.
+ */
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AgentRuntime } from './agent-runtime.js';
 import { ModelRouter } from '../../infrastructure/llm/model-router.js';

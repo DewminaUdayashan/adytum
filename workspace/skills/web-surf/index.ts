@@ -1,3 +1,8 @@
+/**
+ * @file workspace/skills/web-surf/index.ts
+ * @description Defines module behavior for the Adytum workspace.
+ */
+
 import { z } from 'zod';
 
 const SEARCH_PROVIDERS = ['duckduckgo', 'serpapi', 'searxng'] as const;

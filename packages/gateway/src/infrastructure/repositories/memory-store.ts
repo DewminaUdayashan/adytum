@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/infrastructure/repositories/memory-store.ts
+ * @description Implements infrastructure adapters and external integrations.
+ */
+
 import type { MemoryDB, MemoryRow } from './memory-db.js';
 
 export type MemoryCategory =
@@ -11,6 +16,11 @@ export type MemoryCategory =
 
 export interface MemoryRecord extends MemoryRow {}
 
+/**
+ * Executes redact secrets.
+ * @param input - Input.
+ * @returns The resulting string value.
+ */
 export function redactSecrets(input: string): string {
   if (!input) return input;
 
@@ -60,11 +70,23 @@ export function redactSecrets(input: string): string {
   return patterns.reduce((text, { regex, replace }) => text.replace(regex, replace as any), input);
 }
 
+/**
+ * Encapsulates memory store behavior.
+ */
 export class MemoryStore {
   constructor(private db: MemoryDB) {
     this.db.redactSensitiveData(redactSecrets);
   }
 
+  /**
+   * Executes add.
+   * @param content - Content.
+   * @param source - Source.
+   * @param tags - Tags.
+   * @param metadata - Metadata.
+   * @param category - Category.
+   * @returns The add result.
+   */
   add(
     content: string,
     source: MemoryRow['source'],
@@ -76,10 +98,21 @@ export class MemoryStore {
     return this.db.addMemory({ content: sanitized, source, category, tags, metadata });
   }
 
+  /**
+   * Executes list.
+   * @param limit - Limit.
+   * @returns The resulting collection of values.
+   */
   list(limit: number = 50): MemoryRecord[] {
     return this.db.listMemories(limit);
   }
 
+  /**
+   * Executes search.
+   * @param query - Query.
+   * @param topK - Top k.
+   * @returns The resulting collection of values.
+   */
   search(query: string, topK: number = 3): MemoryRecord[] {
     return this.db.searchMemories(query, topK);
   }

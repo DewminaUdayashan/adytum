@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/domain/interfaces/memory-repository.interface.ts
+ * @description Declares domain contracts used across the gateway.
+ */
+
 export interface RequestContext {
   sessionId: string;
   role: string;

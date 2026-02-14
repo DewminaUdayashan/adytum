@@ -1,3 +1,8 @@
+/**
+ * @file packages/dashboard/src/app/not-found.tsx
+ * @description Defines route-level UI composition and page behavior.
+ */
+
 export default function NotFound() {
   return (
     <div className="flex items-center justify-center h-screen bg-bg-primary">

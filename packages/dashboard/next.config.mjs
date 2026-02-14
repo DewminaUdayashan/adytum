@@ -1,3 +1,8 @@
+/**
+ * @file packages/dashboard/next.config.mjs
+ * @description Defines module behavior for the Adytum workspace.
+ */
+
 import { dirname, resolve } from 'path';
 import { fileURLToPath } from 'url';
 

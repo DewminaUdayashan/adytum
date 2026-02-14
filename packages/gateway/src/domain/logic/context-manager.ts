@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/domain/logic/context-manager.ts
+ * @description Contains domain logic and core business behavior.
+ */
+
 import type OpenAI from 'openai';
 
 /**

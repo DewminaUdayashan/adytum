@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/domain/logic/approval-service.ts
+ * @description Contains domain logic and core business behavior.
+ */
+
 import { singleton, inject } from 'tsyringe';
 import { Logger } from '../../logger.js';
 import { randomUUID } from 'node:crypto';
@@ -13,6 +18,9 @@ export interface PendingApproval {
   };
 }
 
+/**
+ * Encapsulates approval service behavior.
+ */
 @singleton()
 export class ApprovalService {
   private pending = new Map<string, PendingApproval>();
@@ -21,6 +29,11 @@ export class ApprovalService {
     this.logger.info('ApprovalService initialized');
   }
 
+  /**
+   * Executes request.
+   * @param payload - Payload.
+   * @returns Whether the operation succeeded.
+   */
   public request(payload: {
     kind: string;
     description: string;
@@ -30,6 +43,12 @@ export class ApprovalService {
     return this.requestManual(id, payload);
   }
 
+  /**
+   * Executes request manual.
+   * @param id - Id.
+   * @param payload - Payload.
+   * @returns Whether the operation succeeded.
+   */
   public requestManual(id: string, payload: {
     kind: string;
     description: string;
@@ -52,6 +71,12 @@ export class ApprovalService {
     });
   }
 
+  /**
+   * Executes resolve.
+   * @param id - Id.
+   * @param approved - Approved.
+   * @returns Whether the operation succeeded.
+   */
   public resolve(id: string, approved: boolean): boolean {
     const item = this.pending.get(id);
     if (!item) return false;
@@ -61,10 +86,18 @@ export class ApprovalService {
     return true;
   }
 
+  /**
+   * Retrieves pending.
+   * @param id - Id.
+   * @returns The get pending result.
+   */
   public getPending(id: string): PendingApproval | undefined {
     return this.pending.get(id);
   }
 
+  /**
+   * Retrieves all pending.
+   */
   public getAllPending() {
      return Array.from(this.pending.entries()).map(([id, p]) => ({
         id,

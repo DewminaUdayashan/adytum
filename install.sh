@@ -1,4 +1,7 @@
 #!/bin/bash
+# @file install.sh
+# @description Provides project automation commands used during setup or maintenance.
+
 
 # Adytum One-Click Setup
 # This script installs dependencies, builds the project, links the CLI, and starts the setup.

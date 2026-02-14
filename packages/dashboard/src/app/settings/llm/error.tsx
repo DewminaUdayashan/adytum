@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @file packages/dashboard/src/app/settings/llm/error.tsx
+ * @description Defines route-level UI composition and page behavior.
+ */
+
 import { useEffect } from 'react';
 import { Button, Card, EmptyState } from '@/components/ui';
 import { AlertCircle } from 'lucide-react';

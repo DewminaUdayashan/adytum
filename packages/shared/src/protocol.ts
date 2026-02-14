@@ -1,3 +1,8 @@
+/**
+ * @file packages/shared/src/protocol.ts
+ * @description Defines module behavior for the Adytum workspace.
+ */
+
 import { z } from 'zod';
 
 // ─── WebSocket Frame Types ────────────────────────────────────
@@ -146,11 +151,21 @@ export type WebSocketFrame = z.infer<typeof WebSocketFrameSchema>;
 
 // ─── Frame Helpers ────────────────────────────────────────────
 
+/**
+ * Parses frame.
+ * @param raw - Raw.
+ * @returns The parse frame result.
+ */
 export function parseFrame(raw: string): WebSocketFrame {
   const parsed = JSON.parse(raw);
   return WebSocketFrameSchema.parse(parsed);
 }
 
+/**
+ * Executes serialize frame.
+ * @param frame - Frame.
+ * @returns The resulting string value.
+ */
 export function serializeFrame(frame: WebSocketFrame): string {
   return JSON.stringify(frame);
 }

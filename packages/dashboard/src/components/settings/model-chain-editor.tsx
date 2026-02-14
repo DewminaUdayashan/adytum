@@ -1,3 +1,8 @@
+/**
+ * @file packages/dashboard/src/components/settings/model-chain-editor.tsx
+ * @description Defines reusable UI components for the dashboard.
+ */
+
 import { useState, useEffect } from 'react';
 import { Card, Button, Badge, Spinner, Select } from '../ui';
 import { gatewayFetch } from '@/lib/api';

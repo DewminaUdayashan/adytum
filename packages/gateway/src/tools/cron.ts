@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/tools/cron.ts
+ * @description Defines tool handlers exposed to the runtime.
+ */
+
 import { z } from 'zod';
 import type { ToolDefinition } from '@adytum/shared';
 import type { CronManager } from '../application/services/cron-manager.js';
@@ -14,6 +19,11 @@ const CronRemoveSchema = z.object({
   name_or_id: z.string().describe('Name OR ID of the job to remove'),
 });
 
+/**
+ * Creates cron tools.
+ * @param cronManager - Cron manager.
+ * @returns The resulting collection of values.
+ */
 export function createCronTools(cronManager: CronManager): ToolDefinition[] {
   return [
     {
