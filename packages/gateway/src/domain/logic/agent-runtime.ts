@@ -373,7 +373,7 @@ export class AgentRuntime extends EventEmitter {
       // Do NOT add ephemeral errors to context or memory history.
       // This prevents the agent from "hallucinating" that it is still broken in future turns.
       // We only return the error to the user via the response.
-      
+
       if (this.config.memoryDb) {
         this.config.memoryDb.addActionLog(traceId, 'error', { message: finalResponse }, 'error');
       }
@@ -503,7 +503,6 @@ ${skills}
   /** Rebuild the system prompt (e.g., after SOUL.md changes). */
   refreshSystemPrompt(): void {
     this.config.soulEngine.reload();
-    this.config.skillLoader.discover();
     this.buildSystemPrompt();
   }
 
