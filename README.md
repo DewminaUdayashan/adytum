@@ -67,14 +67,28 @@ Adytum is as smart as you make it. Use the **Dashboard** to manage your agent's 
 
 ### Adding Skills
 
-- **Instructions**: Drop a folder with a `SKILL.md` file into the `skills/` directory.
+- **Instructions**: Drop a folder with a `SKILL.md` file into `workspace/skills/`.
 - **Plugins**: Create functional plugins with `adytum.plugin.json` to integrate with external APIs.
 
 ### Configuring Skills
 
 1.  Navigate to the **Skills** page in the Dashboard.
 2.  Select a skill to see its documentation.
-3.  Set its **Secrets** (API Keys, tokens) directly in the UI. They are stored securely in your local `.env` file.
+3.  Set its **Secrets** (API Keys, tokens) directly in the UI. They are persisted in local runtime storage under `data/secrets.json`.
+
+---
+
+## 📚 Documentation
+
+For architecture and contributor docs:
+
+- **Docs index**: [`docs/README.md`](docs/README.md)
+- **Architecture**: [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)
+- **Gateway internals**: [`docs/GATEWAY_RUNTIME.md`](docs/GATEWAY_RUNTIME.md)
+- **API reference**: [`docs/API_REFERENCE.md`](docs/API_REFERENCE.md)
+- **Skill system internals**: [`docs/SKILL_SYSTEM.md`](docs/SKILL_SYSTEM.md)
+- **Skill development guide**: [`docs/SKILL_DEVELOPMENT_GUIDE.md`](docs/SKILL_DEVELOPMENT_GUIDE.md)
+- **Developer entrypoint**: [`DEV.README.md`](DEV.README.md)
 
 ---
 
