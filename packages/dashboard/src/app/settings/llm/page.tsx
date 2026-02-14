@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { usePolling } from '@/hooks/use-polling';
 import { gatewayFetch } from '@/lib/api';
 import { PageHeader, Card, Badge, Button, EmptyState, Spinner, Select } from '@/components/ui';
@@ -25,6 +25,7 @@ import {
   Save,
   RotateCcw,
   Search,
+  GripVertical,
 } from 'lucide-react';
 import { clsx } from 'clsx';
 
@@ -117,6 +118,11 @@ export default function ModelSettingsPage() {
   const [routingSaving, setRoutingSaving] = useState(false);
   const [routingModified, setRoutingModified] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [draggingItem, setDraggingItem] = useState<{ role: string; index: number } | null>(null);
+  const [dragInsertIndex, setDragInsertIndex] = useState<{ role: string; index: number } | null>(
+    null,
+  );
+  const dragPreviewRef = useRef<HTMLDivElement | null>(null);
 
   const parseParameters = (name: string): string | null => {
     // Matches patterns like "7b", "7.5b", "70b", "1.5t", etc.
@@ -146,11 +152,11 @@ export default function ModelSettingsPage() {
 
   // Load chains
   useEffect(() => {
-    loadChains();
+    void loadChains();
   }, []);
 
   useEffect(() => {
-    loadRouting();
+    void loadRouting();
   }, []);
 
   const loadChains = async () => {
@@ -238,7 +244,7 @@ export default function ModelSettingsPage() {
       }
       const newChains = { ...prev, [role]: updated };
       // Auto-save when toggling from detail panel
-      saveChains(newChains);
+      void saveChains(newChains);
       return newChains;
     });
   };
@@ -261,16 +267,88 @@ export default function ModelSettingsPage() {
   };
 
   const moveModelInChain = (role: string, index: number, direction: 'up' | 'down') => {
+    const targetIndex = direction === 'up' ? index - 1 : index + 1;
+    reorderModelInChain(role, index, targetIndex);
+  };
+
+  const reorderModelInChain = (role: string, fromIndex: number, toIndex: number) => {
     setChains((prev) => {
       const newChain = [...(prev[role] || [])];
-      if (direction === 'up' && index > 0) {
-        [newChain[index], newChain[index - 1]] = [newChain[index - 1], newChain[index]];
-      } else if (direction === 'down' && index < newChain.length - 1) {
-        [newChain[index], newChain[index + 1]] = [newChain[index + 1], newChain[index]];
+      if (
+        fromIndex < 0 ||
+        toIndex < 0 ||
+        fromIndex >= newChain.length ||
+        toIndex >= newChain.length ||
+        fromIndex === toIndex
+      ) {
+        return prev;
       }
+
+      const [movedModel] = newChain.splice(fromIndex, 1);
+      newChain.splice(toIndex, 0, movedModel);
+      setChainsModified(true);
       return { ...prev, [role]: newChain };
     });
-    setChainsModified(true);
+  };
+
+  const reorderModelByInsertPosition = (role: string, fromIndex: number, insertIndex: number) => {
+    setChains((prev) => {
+      const newChain = [...(prev[role] || [])];
+      if (fromIndex < 0 || fromIndex >= newChain.length) {
+        return prev;
+      }
+
+      const boundedInsertIndex = Math.max(0, Math.min(insertIndex, newChain.length));
+      const targetIndex =
+        boundedInsertIndex > fromIndex ? boundedInsertIndex - 1 : boundedInsertIndex;
+      if (targetIndex === fromIndex) {
+        return prev;
+      }
+
+      const [movedModel] = newChain.splice(fromIndex, 1);
+      newChain.splice(targetIndex, 0, movedModel);
+      setChainsModified(true);
+      return { ...prev, [role]: newChain };
+    });
+  };
+
+  const cleanupDragPreview = () => {
+    if (dragPreviewRef.current?.parentNode) {
+      dragPreviewRef.current.parentNode.removeChild(dragPreviewRef.current);
+    }
+    dragPreviewRef.current = null;
+  };
+
+  const setTileDragPreview = (e: React.DragEvent<HTMLDivElement>) => {
+    cleanupDragPreview();
+
+    const sourceEl = e.currentTarget;
+    const rect = sourceEl.getBoundingClientRect();
+    const clone = sourceEl.cloneNode(true) as HTMLDivElement;
+
+    clone.style.width = `${rect.width}px`;
+    clone.style.boxSizing = 'border-box';
+    clone.style.position = 'fixed';
+    clone.style.top = '-9999px';
+    clone.style.left = '-9999px';
+    clone.style.margin = '0';
+    clone.style.pointerEvents = 'none';
+    clone.style.opacity = '0.96';
+    clone.style.transform = 'none';
+    clone.style.zIndex = '9999';
+
+    document.body.appendChild(clone);
+    dragPreviewRef.current = clone;
+
+    const offsetX = Math.min(Math.max(e.clientX - rect.left, 0), Math.max(rect.width - 1, 0));
+    const offsetY = Math.min(Math.max(e.clientY - rect.top, 0), Math.max(rect.height - 1, 0));
+    e.dataTransfer.setDragImage(clone, offsetX, offsetY);
+  };
+
+  const clearDragState = () => {
+    setDraggingItem(null);
+    setDragInsertIndex(null);
+    cleanupDragPreview();
   };
 
   const handleScan = async () => {
@@ -408,7 +486,7 @@ export default function ModelSettingsPage() {
                 )}
                 {providers.map((p) => (
                   <button
-                      key={p}
+                    key={p}
                     onClick={() => {
                       setSelectedProvider(p);
                       setSelectedModel(null);
@@ -518,7 +596,10 @@ export default function ModelSettingsPage() {
             {/* Right Content: Models for Selected Provider */}
             <div className="flex-1 min-w-0 space-y-4">
               <div className="relative">
-                <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary" />
+                <Search
+                  size={14}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-text-tertiary"
+                />
                 <input
                   type="text"
                   value={searchQuery}
@@ -785,7 +866,7 @@ export default function ModelSettingsPage() {
                                 <button
                                   onClick={(e) => {
                                     e.stopPropagation();
-                                    if (activeProvider) handleDelete(model.id, activeProvider);
+                                    if (activeProvider) void handleDelete(model.id, activeProvider);
                                   }}
                                   className="p-1.5 text-text-tertiary hover:text-error hover:bg-bg-tertiary rounded transition-colors"
                                   title="Delete Model"
@@ -933,63 +1014,178 @@ export default function ModelSettingsPage() {
                       ) : (
                         <div className="space-y-2">
                           {chains[role.value].map((modelId, idx) => (
-                            <div
-                              key={`${role.value}-${idx}`}
-                              className="group flex items-center justify-between p-3 bg-bg-primary border border-border-primary rounded-xl shadow-sm hover:border-accent-primary/30 transition-all duration-200"
-                            >
-                              <div className="flex items-center gap-3">
-                                <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-bg-tertiary text-[11px] font-bold text-text-secondary border border-border-primary/50">
-                                  {idx + 1}
-                                </div>
-                                <div className="flex flex-col min-w-0">
-                                  <div className="flex items-center gap-2">
-                                    <span className="text-sm font-bold text-text-primary truncate">
-                                      {getModelName(modelId)}
-                                    </span>
-                                    {parseParameters(modelId) && (
-                                      <Badge
-                                        variant="default"
-                                        size="sm"
-                                        className="text-[9px] h-4 px-1 border-accent-primary/20 text-accent-primary/70 bg-accent-primary/10"
-                                      >
-                                        {parseParameters(modelId)}
-                                      </Badge>
-                                    )}
-                                  </div>
-                                  <span className="text-[10px] text-text-tertiary font-mono truncate">
-                                    {modelId}
-                                  </span>
-                                </div>
-                              </div>
+                            <div key={`${role.value}-${idx}`}>
+                              <div
+                                onDragOver={(e) => {
+                                  if (!draggingItem || draggingItem.role !== role.value) return;
+                                  e.preventDefault();
+                                  if (
+                                    dragInsertIndex?.role !== role.value ||
+                                    dragInsertIndex.index !== idx
+                                  ) {
+                                    setDragInsertIndex({ role: role.value, index: idx });
+                                  }
+                                }}
+                                onDrop={(e) => {
+                                  e.preventDefault();
+                                  if (!draggingItem || draggingItem.role !== role.value) return;
+                                  reorderModelByInsertPosition(role.value, draggingItem.index, idx);
+                                  clearDragState();
+                                }}
+                                className={clsx(
+                                  'transition-all rounded-full',
+                                  draggingItem?.role === role.value ? 'h-1.5 mb-2' : 'h-0 mb-0',
+                                  dragInsertIndex?.role === role.value &&
+                                    dragInsertIndex.index === idx
+                                    ? 'bg-accent-primary/80'
+                                    : 'bg-transparent',
+                                )}
+                              />
 
-                              <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                                <button
-                                  onClick={() => moveModelInChain(role.value, idx, 'up')}
-                                  disabled={idx === 0}
-                                  className="p-1.5 rounded-lg hover:bg-bg-tertiary text-text-secondary disabled:opacity-20 transition-colors"
-                                  title="Move Up"
-                                >
-                                  <ArrowUp size={14} />
-                                </button>
-                                <button
-                                  onClick={() => moveModelInChain(role.value, idx, 'down')}
-                                  disabled={idx === chains[role.value].length - 1}
-                                  className="p-1.5 rounded-lg hover:bg-bg-tertiary text-text-secondary disabled:opacity-20 transition-colors"
-                                  title="Move Down"
-                                >
-                                  <ArrowDown size={14} />
-                                </button>
-                                <div className="w-px h-4 bg-border-primary/50 mx-1" />
-                                <button
-                                  onClick={() => removeModelFromChain(role.value, idx)}
-                                  className="p-1.5 rounded-lg hover:bg-error/10 text-text-secondary hover:text-error transition-colors"
-                                  title="Remove from chain"
-                                >
-                                  <X size={14} />
-                                </button>
+                              <div
+                                draggable
+                                onDragStart={(e) => {
+                                  e.dataTransfer.effectAllowed = 'move';
+                                  e.dataTransfer.setData('text/plain', `${role.value}:${idx}`);
+                                  setTileDragPreview(e);
+
+                                  setDraggingItem({ role: role.value, index: idx });
+                                  setDragInsertIndex({ role: role.value, index: idx });
+                                }}
+                                onDragEnd={clearDragState}
+                                onDragOver={(e) => {
+                                  if (!draggingItem || draggingItem.role !== role.value) return;
+                                  e.preventDefault();
+                                  const rect = e.currentTarget.getBoundingClientRect();
+                                  const nextInsertIndex =
+                                    e.clientY >= rect.top + rect.height / 2 ? idx + 1 : idx;
+                                  if (
+                                    dragInsertIndex?.role !== role.value ||
+                                    dragInsertIndex.index !== nextInsertIndex
+                                  ) {
+                                    setDragInsertIndex({
+                                      role: role.value,
+                                      index: nextInsertIndex,
+                                    });
+                                  }
+                                }}
+                                onDrop={(e) => {
+                                  e.preventDefault();
+                                  if (!draggingItem || draggingItem.role !== role.value) return;
+                                  const insertIndex =
+                                    dragInsertIndex?.role === role.value
+                                      ? dragInsertIndex.index
+                                      : idx;
+                                  reorderModelByInsertPosition(
+                                    role.value,
+                                    draggingItem.index,
+                                    insertIndex,
+                                  );
+                                  clearDragState();
+                                }}
+                                className={clsx(
+                                  'group flex items-center justify-between p-3 bg-bg-primary border rounded-xl shadow-sm transition-all duration-150 select-none',
+                                  dragInsertIndex?.role === role.value &&
+                                    (dragInsertIndex.index === idx ||
+                                      dragInsertIndex.index === idx + 1)
+                                    ? 'border-accent-primary/60'
+                                    : 'border-border-primary hover:border-accent-primary/30',
+                                  draggingItem?.role === role.value && draggingItem.index === idx
+                                    ? 'opacity-40'
+                                    : '',
+                                )}
+                              >
+                                <div className="flex items-center gap-3">
+                                  <div
+                                    className="p-1 text-text-tertiary cursor-grab active:cursor-grabbing"
+                                    title="Drag to reorder"
+                                  >
+                                    <GripVertical size={14} />
+                                  </div>
+                                  <div className="flex items-center justify-center w-7 h-7 rounded-lg bg-bg-tertiary text-[11px] font-bold text-text-secondary border border-border-primary/50">
+                                    {idx + 1}
+                                  </div>
+                                  <div className="flex flex-col min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-sm font-bold text-text-primary truncate">
+                                        {getModelName(modelId)}
+                                      </span>
+                                      {parseParameters(modelId) && (
+                                        <Badge
+                                          variant="default"
+                                          size="sm"
+                                          className="text-[9px] h-4 px-1 border-accent-primary/20 text-accent-primary/70 bg-accent-primary/10"
+                                        >
+                                          {parseParameters(modelId)}
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <span className="text-[10px] text-text-tertiary font-mono truncate">
+                                      {modelId}
+                                    </span>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                                  <button
+                                    onClick={() => moveModelInChain(role.value, idx, 'up')}
+                                    disabled={idx === 0}
+                                    className="p-1.5 rounded-lg hover:bg-bg-tertiary text-text-secondary disabled:opacity-20 transition-colors"
+                                    title="Move Up"
+                                  >
+                                    <ArrowUp size={14} />
+                                  </button>
+                                  <button
+                                    onClick={() => moveModelInChain(role.value, idx, 'down')}
+                                    disabled={idx === chains[role.value].length - 1}
+                                    className="p-1.5 rounded-lg hover:bg-bg-tertiary text-text-secondary disabled:opacity-20 transition-colors"
+                                    title="Move Down"
+                                  >
+                                    <ArrowDown size={14} />
+                                  </button>
+                                  <div className="w-px h-4 bg-border-primary/50 mx-1" />
+                                  <button
+                                    onClick={() => removeModelFromChain(role.value, idx)}
+                                    className="p-1.5 rounded-lg hover:bg-error/10 text-text-secondary hover:text-error transition-colors"
+                                    title="Remove from chain"
+                                  >
+                                    <X size={14} />
+                                  </button>
+                                </div>
                               </div>
                             </div>
                           ))}
+                          <div
+                            onDragOver={(e) => {
+                              if (!draggingItem || draggingItem.role !== role.value) return;
+                              e.preventDefault();
+                              const endIndex = chains[role.value].length;
+                              if (
+                                dragInsertIndex?.role !== role.value ||
+                                dragInsertIndex.index !== endIndex
+                              ) {
+                                setDragInsertIndex({ role: role.value, index: endIndex });
+                              }
+                            }}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              if (!draggingItem || draggingItem.role !== role.value) return;
+                              reorderModelByInsertPosition(
+                                role.value,
+                                draggingItem.index,
+                                chains[role.value].length,
+                              );
+                              clearDragState();
+                            }}
+                            className={clsx(
+                              'transition-all rounded-full',
+                              draggingItem?.role === role.value ? 'h-1.5 mt-2' : 'h-0 mt-0',
+                              dragInsertIndex?.role === role.value &&
+                                dragInsertIndex.index === chains[role.value].length
+                                ? 'bg-accent-primary/80'
+                                : 'bg-transparent',
+                            )}
+                          />
                         </div>
                       )}
                     </div>
