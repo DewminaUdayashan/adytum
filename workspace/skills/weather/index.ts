@@ -1,3 +1,8 @@
+/**
+ * @file workspace/skills/weather/index.ts
+ * @description Defines module behavior for the Adytum workspace.
+ */
+
 import { z } from 'zod';
 
 const WEATHER_PROVIDERS = ['wttr', 'open-meteo'] as const;
@@ -162,11 +167,7 @@ function providerOrder(preferred: WeatherProvider): WeatherProvider[] {
   return preferred === 'wttr' ? ['wttr', 'open-meteo'] : ['open-meteo', 'wttr'];
 }
 
-async function fetchCurrentFromWttr(
-  location: string,
-  units: WeatherUnits,
-  timeoutMs: number,
-) {
+async function fetchCurrentFromWttr(location: string, units: WeatherUnits, timeoutMs: number) {
   const data = await fetchWttr(location, units, timeoutMs);
   const current = data.current_condition?.[0];
   if (!current) {
@@ -209,14 +210,17 @@ async function fetchForecastFromWttr(
     days: daily.length,
     forecast: daily.map((entry: any) => ({
       date: entry.date,
-      condition: entry.hourly?.[4]?.weatherDesc?.[0]?.value
-        || entry.hourly?.[0]?.weatherDesc?.[0]?.value
-        || 'Unknown',
+      condition:
+        entry.hourly?.[4]?.weatherDesc?.[0]?.value ||
+        entry.hourly?.[0]?.weatherDesc?.[0]?.value ||
+        'Unknown',
       tempMax: pickUnit(units, entry.maxtempC, entry.maxtempF),
       tempMin: pickUnit(units, entry.mintempC, entry.mintempF),
       avgTemp: pickUnit(units, entry.avgtempC, entry.avgtempF),
       sunHours: toNumber(entry.sunHour),
-      chanceOfRainPercent: toNumber(entry.hourly?.[4]?.chanceofrain || entry.hourly?.[0]?.chanceofrain),
+      chanceOfRainPercent: toNumber(
+        entry.hourly?.[4]?.chanceofrain || entry.hourly?.[0]?.chanceofrain,
+      ),
     })),
     sourceUrl: `https://wttr.in/${encodeURIComponent(location)}?format=j1`,
   };
@@ -232,11 +236,7 @@ async function fetchWttr(location: string, units: WeatherUnits, timeoutMs: numbe
   return response.json();
 }
 
-async function fetchCurrentFromOpenMeteo(
-  location: string,
-  units: WeatherUnits,
-  timeoutMs: number,
-) {
+async function fetchCurrentFromOpenMeteo(location: string, units: WeatherUnits, timeoutMs: number) {
   const geo = await geocodeLocation(location, timeoutMs);
   const unitConfig = openMeteoUnits(units);
   const url = new URL('https://api.open-meteo.com/v1/forecast');

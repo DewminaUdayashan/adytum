@@ -1,3 +1,8 @@
+/**
+ * @file workspace/skills/hello-world/index.ts
+ * @description Defines module behavior for the Adytum workspace.
+ */
+
 import { z } from 'zod';
 
 const helloSchema = z.object({

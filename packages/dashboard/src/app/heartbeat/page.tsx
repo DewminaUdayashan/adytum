@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @file packages/dashboard/src/app/heartbeat/page.tsx
+ * @description Defines route-level UI composition and page behavior.
+ */
+
 import { useState, useEffect } from 'react';
 import { gatewayFetch } from '@/lib/api';
 import { Card, Button, Spinner, Badge, EmptyState } from '@/components/ui';
@@ -21,8 +26,6 @@ export default function HeartbeatPage() {
   const [view, setView] = useState<'editor' | 'goals'>('goals');
   const [goals, setGoals] = useState<Goal[]>([]);
   const [error, setError] = useState<string | null>(null);
-
-
 
   useEffect(() => {
     loadHeartbeat();
@@ -80,9 +83,7 @@ export default function HeartbeatPage() {
     setGoals(goals.filter((g) => g.id !== id));
   };
 
-  const hasChanges = view === 'goals'
-    ? goalsToMarkdown(goals) !== original
-    : content !== original;
+  const hasChanges = view === 'goals' ? goalsToMarkdown(goals) !== original : content !== original;
 
   if (loading) {
     return (
@@ -98,8 +99,12 @@ export default function HeartbeatPage() {
       <div className="px-8 pt-8 pb-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted font-medium">Monitoring</p>
-            <h1 className="text-2xl font-semibold text-text-primary tracking-tight mt-1">Heartbeat</h1>
+            <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted font-medium">
+              Monitoring
+            </p>
+            <h1 className="text-2xl font-semibold text-text-primary tracking-tight mt-1">
+              Heartbeat
+            </h1>
           </div>
           <div className="flex items-center gap-2">
             {hasChanges && <Badge variant="warning">Unsaved</Badge>}
@@ -119,15 +124,25 @@ export default function HeartbeatPage() {
               <Calendar className="h-3 w-3" />
               Editor
             </Button>
-            <Button size="sm" variant="ghost" onClick={() => {
+            <Button
+              size="sm"
+              variant="ghost"
+              onClick={() => {
                 loadHeartbeat();
-            }} disabled={!hasChanges}>
+              }}
+              disabled={!hasChanges}
+            >
               <RotateCcw className="h-3 w-3" />
               Reset
             </Button>
-            <Button size="sm" variant="primary" onClick={() => {
+            <Button
+              size="sm"
+              variant="primary"
+              onClick={() => {
                 handleSave();
-            }} disabled={!hasChanges || saving}>
+              }}
+              disabled={!hasChanges || saving}
+            >
               <Save className="h-3 w-3" />
               {saving ? 'Saving…' : 'Save'}
             </Button>

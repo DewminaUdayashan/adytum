@@ -1,7 +1,17 @@
+/**
+ * @file packages/gateway/src/tools/memory.ts
+ * @description Defines tool handlers exposed to the runtime.
+ */
+
 import { z } from 'zod';
 import type { ToolDefinition } from '@adytum/shared';
-import type { MemoryStore } from '../agent/memory-store.js';
+import type { MemoryStore } from '../infrastructure/repositories/memory-store.js';
 
+/**
+ * Creates memory tools.
+ * @param memoryStore - Memory store.
+ * @returns The resulting collection of values.
+ */
 export function createMemoryTools(memoryStore: MemoryStore): ToolDefinition[] {
   return [
     {
@@ -10,11 +20,26 @@ export function createMemoryTools(memoryStore: MemoryStore): ToolDefinition[] {
       parameters: z.object({
         content: z.string().describe('Memory content to store'),
         tags: z.array(z.string()).optional().describe('Optional tags for the memory'),
-        category: z.string().optional().describe('Memory category (episodic_raw, episodic_summary, dream, monologue, curiosity, general, user_fact)'),
+        category: z
+          .string()
+          .optional()
+          .describe(
+            'Memory category (episodic_raw, episodic_summary, dream, monologue, curiosity, general, user_fact)',
+          ),
       }),
       execute: async (args: any) => {
-        const { content, tags, category } = args as { content: string; tags?: string[]; category?: string };
-        const record = memoryStore.add(content, 'user', tags, undefined, (category as any) || 'general');
+        const { content, tags, category } = args as {
+          content: string;
+          tags?: string[];
+          category?: string;
+        };
+        const record = memoryStore.add(
+          content,
+          'user',
+          tags,
+          undefined,
+          (category as any) || 'general',
+        );
         return { success: true, memory: record };
       },
     },

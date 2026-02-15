@@ -1,7 +1,15 @@
+/**
+ * @file packages/gateway/src/security/path-validator.ts
+ * @description Provides security utilities and policy enforcement logic.
+ */
+
 import { resolve, relative, sep, basename } from 'node:path';
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
 import type { AccessMode, PermissionEntry } from '@adytum/shared';
 
+/**
+ * Encapsulates path validator behavior.
+ */
 export class PathValidator {
   private workspaceRoot: string;
   private whitelist: PermissionEntry[] = [];
@@ -51,7 +59,7 @@ export class PathValidator {
           const realParent = realpathSync(parent);
           resolved = resolve(realParent, basename(resolved));
         } catch {
-           // Parent might be restricted or invalid, let specific checks handle it
+          // Parent might be restricted or invalid, let specific checks handle it
         }
       }
     }
@@ -59,11 +67,11 @@ export class PathValidator {
     // 3. Blacklist Check (Critical Config Files)
     // We block writing to these files to prevent privilege escalation or breaking the agent.
     if (this.isCriticalPath(resolved) && operation === 'write') {
-        throw new PathSecurityError(
-            `Access denied: "${basename(resolved)}" is a critical system file and cannot be modified.`,
-            resolved,
-            'critical_file'
-        );
+      throw new PathSecurityError(
+        `Access denied: "${basename(resolved)}" is a critical system file and cannot be modified.`,
+        resolved,
+        'critical_file',
+      );
     }
 
     // 4. Sensitive System Path Check
@@ -114,6 +122,11 @@ export class PathValidator {
     return resolved;
   }
 
+  /**
+   * Executes find permission.
+   * @param targetPath - Target path.
+   * @returns The find permission result.
+   */
   private findPermission(targetPath: string): PermissionEntry | undefined {
     return this.whitelist.find((entry) => {
       const entryPath = resolve(entry.path);
@@ -121,21 +134,39 @@ export class PathValidator {
     });
   }
 
+  /**
+   * Determines whether is critical path.
+   * @param p - P.
+   * @returns True when is critical path.
+   */
   private isCriticalPath(p: string): boolean {
     const filename = basename(p);
     return this.criticalFiles.includes(filename) || p === this.securityManifestPath;
   }
 
+  /**
+   * Determines whether is sensitive path.
+   * @param p - P.
+   * @returns True when is sensitive path.
+   */
   private isSensitivePath(p: string): boolean {
     const sensitive = [
-      '/etc/shadow', '/etc/passwd', '/etc/sudoers',
-      '/root', '/private/etc',
-      '.ssh', '.gnupg', '.aws/credentials',
+      '/etc/shadow',
+      '/etc/passwd',
+      '/etc/sudoers',
+      '/root',
+      '/private/etc',
+      '.ssh',
+      '.gnupg',
+      '.aws/credentials',
     ];
     const lower = p.toLowerCase();
     return sensitive.some((s) => lower.includes(s));
   }
 
+  /**
+   * Loads whitelist.
+   */
   loadWhitelist(): void {
     if (existsSync(this.securityManifestPath)) {
       try {
@@ -148,20 +179,35 @@ export class PathValidator {
     }
   }
 
+  /**
+   * Executes add permission.
+   * @param entry - Entry.
+   */
   addPermission(entry: PermissionEntry): void {
     this.whitelist.push(entry);
     this.saveWhitelist();
   }
 
+  /**
+   * Executes remove permission.
+   * @param path - Path.
+   */
   removePermission(path: string): void {
     this.whitelist = this.whitelist.filter((e) => resolve(e.path) !== resolve(path));
     this.saveWhitelist();
   }
 
+  /**
+   * Retrieves permissions.
+   * @returns The resulting collection of values.
+   */
   getPermissions(): PermissionEntry[] {
     return [...this.whitelist];
   }
 
+  /**
+   * Persists whitelist.
+   */
   private saveWhitelist(): void {
     // We use basic fs imports here to avoid circular dep issues if any
     const { writeFileSync, mkdirSync } = require('node:fs');
@@ -175,6 +221,9 @@ export class PathValidator {
   }
 }
 
+/**
+ * Encapsulates path security error behavior.
+ */
 export class PathSecurityError extends Error {
   constructor(
     message: string,

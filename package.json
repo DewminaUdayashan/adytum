@@ -1,6 +1,6 @@
 {
   "name": "adytum",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "private": true,
   "description": "Self-hosted autonomous AI assistant ecosystem",
   "workspaces": [
@@ -13,11 +13,24 @@
     "dev": "npm run dev --workspace=packages/gateway",
     "dev:dashboard": "npm run dev --workspace=packages/dashboard",
     "test": "npm run test --workspaces --if-present",
-    "lint": "eslint packages/*/src/**/*.ts",
-    "clean": "rm -rf packages/*/dist packages/*/.next packages/*/node_modules node_modules"
+    "lint": "eslint . --max-warnings=0",
+    "format": "prettier --write .",
+    "clean": "rm -rf packages/*/dist packages/*/.next packages/*/node_modules node_modules",
+    "prepare": "husky"
   },
   "engines": {
     "node": ">=22.0.0"
   },
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "eslint": "^9.39.2",
+    "eslint-config-prettier": "^10.1.8",
+    "eslint-plugin-prettier": "^5.5.5",
+    "globals": "^17.3.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "prettier": "^3.8.1",
+    "typescript-eslint": "^8.55.0"
+  }
 }

@@ -3,9 +3,9 @@ name: discord
 description: Comprehensive Discord skill for inbound and outbound messaging.
 metadata:
   {
-    "communication": true,
-    "requires": { "env": ["ADYTUM_DISCORD_BOT_TOKEN"] },
-    "primaryEnv": "ADYTUM_DISCORD_BOT_TOKEN"
+    'communication': true,
+    'requires': { 'env': ['ADYTUM_DISCORD_BOT_TOKEN'] },
+    'primaryEnv': 'ADYTUM_DISCORD_BOT_TOKEN',
   }
 ---
 

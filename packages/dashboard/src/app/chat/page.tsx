@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @file packages/dashboard/src/app/chat/page.tsx
+ * @description Defines route-level UI composition and page behavior.
+ */
+
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useGatewaySocket, type StreamEvent } from '@/hooks/use-gateway-socket';
 import { Send, Bot, User, Zap, Sparkles } from 'lucide-react';
@@ -56,8 +61,8 @@ export default function ChatPage() {
         if (Array.isArray(parsed)) {
           setMessages(parsed);
           // Populate processed approvals
-          parsed.forEach(msg => {
-            msg.approvals?.forEach(a => processedApprovalsRef.current.add(a.id));
+          parsed.forEach((msg) => {
+            msg.approvals?.forEach((a) => processedApprovalsRef.current.add(a.id));
           });
         }
       } catch {
@@ -74,28 +79,25 @@ export default function ChatPage() {
     window.localStorage.setItem('adytum.chat.messages', JSON.stringify(messages));
   }, [messages, hasRestored]);
 
-  const pushActivity = useCallback(
-    (type: ThinkingActivityEntry['type'], text: string) => {
-      const compact = compactActivityText(text);
-      if (!compact) return;
+  const pushActivity = useCallback((type: ThinkingActivityEntry['type'], text: string) => {
+    const compact = compactActivityText(text);
+    if (!compact) return;
 
-      setActivityFeed((prev) => {
-        const last = prev[prev.length - 1];
-        if (last && last.type === type && last.text === compact) {
-          return prev;
-        }
+    setActivityFeed((prev) => {
+      const last = prev[prev.length - 1];
+      if (last && last.type === type && last.text === compact) {
+        return prev;
+      }
 
-        const next: ThinkingActivityEntry = {
-          id: crypto.randomUUID(),
-          type,
-          text: compact,
-          timestamp: Date.now(),
-        };
-        return [...prev.slice(-29), next];
-      });
-    },
-    [],
-  );
+      const next: ThinkingActivityEntry = {
+        id: crypto.randomUUID(),
+        type,
+        text: compact,
+        timestamp: Date.now(),
+      };
+      return [...prev.slice(-29), next];
+    });
+  }, []);
 
   // Handle incoming WebSocket events
   useEffect(() => {
@@ -155,7 +157,7 @@ export default function ChatPage() {
       if (event.type === 'approval_request') {
         const id = String(event.id);
         if (processedApprovalsRef.current.has(id)) continue;
-        
+
         processedApprovalsRef.current.add(id);
 
         const approval = {
@@ -166,7 +168,7 @@ export default function ChatPage() {
         };
 
         // Add to active approvals for current ThinkingIndicator
-        setActiveApprovals(prev => [...(prev || []), approval]);
+        setActiveApprovals((prev) => [...(prev || []), approval]);
 
         // Also add to message history
         setMessages((prev) => {
@@ -174,7 +176,7 @@ export default function ChatPage() {
           if (lastMsg && lastMsg.role === 'assistant') {
             const updatedMsg = {
               ...lastMsg,
-              approvals: [...(lastMsg.approvals || []), approval]
+              approvals: [...(lastMsg.approvals || []), approval],
             };
             return [...prev.slice(0, -1), updatedMsg];
           } else {
@@ -260,14 +262,22 @@ export default function ChatPage() {
   // Auto-scroll
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
-  }, [messages.length, isThinking, activityFeed.length, pendingTools.length, activeApprovals?.length]);
+  }, [
+    messages.length,
+    isThinking,
+    activityFeed.length,
+    pendingTools.length,
+    activeApprovals?.length,
+  ]);
 
   const handleApproval = useCallback(
     (id: string, approved: boolean) => {
       sendFrame({ type: 'approval_response', id, approved });
 
       // Update active approvals
-      setActiveApprovals(prev => prev?.map(a => a.id === id ? { ...a, status: approved ? 'approved' : 'denied' } : a));
+      setActiveApprovals((prev) =>
+        prev?.map((a) => (a.id === id ? { ...a, status: approved ? 'approved' : 'denied' } : a)),
+      );
 
       // Update message history
       setMessages((prev) => {
@@ -276,7 +286,7 @@ export default function ChatPage() {
             return {
               ...msg,
               approvals: msg.approvals.map((a) =>
-                a.id === id ? { ...a, status: approved ? 'approved' : 'denied' } : a
+                a.id === id ? { ...a, status: approved ? 'approved' : 'denied' } : a,
               ),
             };
           }
@@ -325,15 +335,23 @@ export default function ChatPage() {
       <div className="px-8 pt-8 pb-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted font-medium">Conversation</p>
+            <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted font-medium">
+              Conversation
+            </p>
             <h1 className="text-2xl font-semibold text-text-primary tracking-tight mt-1">Chat</h1>
           </div>
           <div className="flex items-center gap-2 text-xs font-medium">
             <span className="relative flex h-2 w-2">
-              <span className={`absolute inline-flex h-full w-full rounded-full ${connected ? 'bg-success animate-ping' : 'bg-text-muted'} opacity-75`} />
-              <span className={`relative inline-flex h-2 w-2 rounded-full ${connected ? 'bg-success' : 'bg-text-muted'}`} />
+              <span
+                className={`absolute inline-flex h-full w-full rounded-full ${connected ? 'bg-success animate-ping' : 'bg-text-muted'} opacity-75`}
+              />
+              <span
+                className={`relative inline-flex h-2 w-2 rounded-full ${connected ? 'bg-success' : 'bg-text-muted'}`}
+              />
             </span>
-            <span className={connected ? 'text-success' : 'text-text-muted'}>{connected ? 'Connected' : 'Offline'}</span>
+            <span className={connected ? 'text-success' : 'text-text-muted'}>
+              {connected ? 'Connected' : 'Offline'}
+            </span>
           </div>
         </div>
       </div>
@@ -353,10 +371,10 @@ export default function ChatPage() {
         )}
 
         {messages.map((msg, idx) => (
-          <MessageBubble 
-            key={msg.id} 
-            message={msg} 
-            onApproval={handleApproval} 
+          <MessageBubble
+            key={msg.id}
+            message={msg}
+            onApproval={handleApproval}
             hidePending={isThinking && idx === messages.length - 1}
             disabled={!connected}
           />
@@ -427,9 +445,7 @@ function MessageBubble({
       <div
         className={clsx(
           'flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-[11px] font-semibold',
-          isUser
-            ? 'bg-accent-primary text-white'
-            : 'bg-bg-tertiary text-text-tertiary',
+          isUser ? 'bg-accent-primary text-white' : 'bg-bg-tertiary text-text-tertiary',
         )}
       >
         {isUser ? <User className="h-3.5 w-3.5" /> : <Bot className="h-3.5 w-3.5" />}
@@ -444,10 +460,7 @@ function MessageBubble({
           )}
         >
           {message.content && (
-            <MarkdownRenderer
-              content={message.content}
-              variant={isUser ? 'user' : 'assistant'}
-            />
+            <MarkdownRenderer content={message.content} variant={isUser ? 'user' : 'assistant'} />
           )}
 
           {!isUser && <LinkPreviewList content={message.content} />}
@@ -476,14 +489,22 @@ function MessageBubble({
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div>
-                      <p className="text-[11px] font-bold text-text-primary uppercase tracking-wider">Approval Required</p>
-                      <p className="text-xs text-text-muted mt-0.5 leading-tight">{req.description || req.kind}</p>
+                      <p className="text-[11px] font-bold text-text-primary uppercase tracking-wider">
+                        Approval Required
+                      </p>
+                      <p className="text-xs text-text-muted mt-0.5 leading-tight">
+                        {req.description || req.kind}
+                      </p>
                     </div>
                     {req.status !== 'pending' && (
-                      <span className={clsx(
-                        "text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-tighter",
-                        req.status === 'approved' ? "bg-success/20 text-success" : "bg-error/20 text-error"
-                      )}>
+                      <span
+                        className={clsx(
+                          'text-[10px] font-bold px-1.5 py-0.5 rounded uppercase tracking-tighter',
+                          req.status === 'approved'
+                            ? 'bg-success/20 text-success'
+                            : 'bg-error/20 text-error',
+                        )}
+                      >
                         {req.status}
                       </span>
                     )}

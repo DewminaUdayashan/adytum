@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/tools/shell.ts
+ * @description Defines tool handlers exposed to the runtime.
+ */
+
 import { z } from 'zod';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -34,21 +39,23 @@ export function createShellToolWithApproval(
     // Always consult approval policy (policy decides auto/ask/deny)
     // Heuristic: Check for critical files in command
     const criticalFiles = ['adytum.config.yaml', '.env', 'security.json', 'litellm_config.yaml'];
-    const isCritical = criticalFiles.some(file => command.includes(file));
-    
+    const isCritical = criticalFiles.some((file) => command.includes(file));
+
     // If critical file detected, force ASK mode and append warning
     // This is a basic string check, but better than nothing
     let wrappedApprovalFn = onApprovalRequired;
     if (isCritical) {
-        wrappedApprovalFn = async (cmd: string) => {
-            const result = await onApprovalRequired(cmd);
-            if (result.mode === 'auto') {
-                // Downgrade AUTO to ASK for critical files
-                result.mode = 'ask';
-                result.message = (result.message || '') + '\n⚠️  CRITICAL FILE DETECTED: This command targets sensitive configuration files.';
-            }
-            return result;
+      wrappedApprovalFn = async (cmd: string) => {
+        const result = await onApprovalRequired(cmd);
+        if (result.mode === 'auto') {
+          // Downgrade AUTO to ASK for critical files
+          result.mode = 'ask';
+          result.message =
+            (result.message || '') +
+            '\n⚠️  CRITICAL FILE DETECTED: This command targets sensitive configuration files.';
         }
+        return result;
+      };
     }
 
     const approval = await wrappedApprovalFn(command);
@@ -56,7 +63,8 @@ export function createShellToolWithApproval(
       return {
         exitCode: -1,
         stdout: '',
-        stderr: approval.message || 'Command cancelled by user request. You may try again if necessary.',
+        stderr:
+          approval.message || 'Command cancelled by user request. You may try again if necessary.',
         approved: false,
         approvalRequired: true,
         defaultChannel: approval.defaultChannel,
@@ -91,12 +99,16 @@ export function createShellToolWithApproval(
   };
 }
 
-export function createShellTool(
-  onApprovalRequired: ShellApprovalFn,
-): ToolDefinition {
+/**
+ * Creates shell tool.
+ * @param onApprovalRequired - On approval required.
+ * @returns The create shell tool result.
+ */
+export function createShellTool(onApprovalRequired: ShellApprovalFn): ToolDefinition {
   return {
     name: 'shell_execute',
-    description: 'Execute a shell command. Permissions: You are AUTHORIZED to use this tool. If a command requires approval, the system will ask the user. Do NOT refuse to run commands because you think you lack permission. DYNAMIC DATA: Always run this tool to get fresh output. Do NOT rely on memory or previous conversation history for command outputs, as they may be stale.',
+    description:
+      'Execute a shell command. Permissions: You are AUTHORIZED to use this tool. If a command requires approval, the system will ask the user. Do NOT refuse to run commands because you think you lack permission. DYNAMIC DATA: Always run this tool to get fresh output. Do NOT rely on memory or previous conversation history for command outputs, as they may be stale.',
     requiresApproval: false,
     parameters: z.object({
       command: z.string().describe('The shell command to execute'),

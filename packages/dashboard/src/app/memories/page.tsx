@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @file packages/dashboard/src/app/memories/page.tsx
+ * @description Defines route-level UI composition and page behavior.
+ */
+
 import { useEffect, useMemo, useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { gatewayFetch } from '@/lib/api';
@@ -103,7 +108,9 @@ export default function MemoriesPage() {
   };
 
   const toggleCategory = (value: string) => {
-    setActiveCats((prev) => (prev.includes(value) ? prev.filter((c) => c !== value) : [...prev, value]));
+    setActiveCats((prev) =>
+      prev.includes(value) ? prev.filter((c) => c !== value) : [...prev, value],
+    );
   };
 
   return (
@@ -206,7 +213,9 @@ export default function MemoriesPage() {
                       </div>
                     </div>
                   ) : (
-                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-text-primary">{m.content}</p>
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-text-primary">
+                      {m.content}
+                    </p>
                   )}
 
                   <div className="flex items-center justify-end gap-2 pt-1">

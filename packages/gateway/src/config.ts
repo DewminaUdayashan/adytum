@@ -1,8 +1,14 @@
+/**
+ * @file packages/gateway/src/config.ts
+ * @description Defines module behavior for the Adytum workspace.
+ */
+
 import { readFileSync, existsSync, writeFileSync, mkdirSync } from 'node:fs';
 import { resolve, join } from 'node:path';
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml';
 import { config as loadDotenv } from 'dotenv';
 import { AdytumConfigSchema, type AdytumConfig } from '@adytum/shared';
+export type { AdytumConfig };
 
 const DEFAULT_DATA_DIR = join(
   process.env.HOME || process.env.USERPROFILE || '.',
@@ -12,6 +18,11 @@ const DEFAULT_DATA_DIR = join(
 
 let cachedConfig: AdytumConfig | null = null;
 
+/**
+ * Parses bool.
+ * @param value - Value.
+ * @returns The parse bool result.
+ */
 const parseBool = (value?: string): boolean | undefined => {
   if (value === undefined) return undefined;
   const normalized = value.toLowerCase().trim();
@@ -20,21 +31,59 @@ const parseBool = (value?: string): boolean | undefined => {
   return undefined;
 };
 
+/**
+ * Parses list.
+ * @param value - Value.
+ * @returns The parse list result.
+ */
 const parseList = (value?: string | string[]): string[] | undefined => {
   if (!value) return undefined;
   if (Array.isArray(value)) return value.map((v) => String(v).trim()).filter(Boolean);
-  return value.split(',').map((v) => v.trim()).filter(Boolean);
+  return value
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
 };
 
+/**
+ * Determines whether is record.
+ * @param value - Value.
+ * @returns The is record result.
+ */
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
 
+/**
+ * Parses skill entries.
+ * @param value - Value.
+ * @returns The parse skill entries result.
+ */
 const parseSkillEntries = (
   value: unknown,
-): Record<string, { enabled?: boolean; config?: Record<string, unknown>; env?: Record<string, string>; apiKey?: string; installPermission?: 'auto' | 'ask' | 'deny' }> | undefined => {
+):
+  | Record<
+      string,
+      {
+        enabled?: boolean;
+        config?: Record<string, unknown>;
+        env?: Record<string, string>;
+        apiKey?: string;
+        installPermission?: 'auto' | 'ask' | 'deny';
+      }
+    >
+  | undefined => {
   if (!isRecord(value)) return undefined;
 
-  const entries: Record<string, { enabled?: boolean; config?: Record<string, unknown>; env?: Record<string, string>; apiKey?: string; installPermission?: 'auto' | 'ask' | 'deny' }> = {};
+  const entries: Record<
+    string,
+    {
+      enabled?: boolean;
+      config?: Record<string, unknown>;
+      env?: Record<string, string>;
+      apiKey?: string;
+      installPermission?: 'auto' | 'ask' | 'deny';
+    }
+  > = {};
   for (const [id, rawEntry] of Object.entries(value)) {
     if (!id.trim()) continue;
 
@@ -61,6 +110,11 @@ const parseSkillEntries = (
   return entries;
 };
 
+/**
+ * Loads config.
+ * @param projectRoot - Project root.
+ * @returns The load config result.
+ */
 export function loadConfig(projectRoot?: string): AdytumConfig {
   if (cachedConfig) return cachedConfig;
 
@@ -96,7 +150,9 @@ export function loadConfig(projectRoot?: string): AdytumConfig {
     userRole: fileConfig.userRole || process.env.ADYTUM_USER_ROLE,
     userPreferences: fileConfig.userPreferences || process.env.ADYTUM_USER_PREFS,
     workspacePath: resolve(
-      (fileConfig.workspacePath as string) || process.env.ADYTUM_WORKSPACE || join(root, 'workspace'),
+      (fileConfig.workspacePath as string) ||
+        process.env.ADYTUM_WORKSPACE ||
+        join(root, 'workspace'),
     ),
     dataPath: resolve(
       (fileConfig.dataPath as string) || process.env.ADYTUM_DATA_DIR || DEFAULT_DATA_DIR,
@@ -119,13 +175,9 @@ export function loadConfig(projectRoot?: string): AdytumConfig {
     dreamerIntervalMinutes: Number(fileConfig.dreamerIntervalMinutes || 30),
     monologueIntervalMinutes: Number(fileConfig.monologueIntervalMinutes || 15),
     execution: {
-      shell:
-        (fileExecution.shell as 'auto' | 'ask' | 'deny') ||
-        ('ask' as 'auto' | 'ask' | 'deny'),
+      shell: (fileExecution.shell as 'auto' | 'ask' | 'deny') || ('ask' as 'auto' | 'ask' | 'deny'),
       defaultChannel:
-        typeof fileExecution.defaultChannel === 'string'
-          ? fileExecution.defaultChannel
-          : undefined,
+        typeof fileExecution.defaultChannel === 'string' ? fileExecution.defaultChannel : undefined,
       defaultUser:
         typeof (fileExecution as any).defaultUser === 'string'
           ? (fileExecution as any).defaultUser
@@ -181,6 +233,11 @@ export function loadConfig(projectRoot?: string): AdytumConfig {
   return cachedConfig;
 }
 
+/**
+ * Persists config.
+ * @param updates - Updates.
+ * @param projectRoot - Project root.
+ */
 export function saveConfig(updates: Partial<AdytumConfig>, projectRoot?: string): void {
   const root = projectRoot || process.cwd();
   const configPath = join(root, 'adytum.config.yaml');
@@ -202,6 +259,9 @@ export function saveConfig(updates: Partial<AdytumConfig>, projectRoot?: string)
   cachedConfig = null; // Invalidate cache
 }
 
+/**
+ * Resets config cache.
+ */
 export function resetConfigCache(): void {
   cachedConfig = null;
 }

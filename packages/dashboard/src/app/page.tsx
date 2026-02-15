@@ -1,6 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+/**
+ * @file packages/dashboard/src/app/page.tsx
+ * @description Defines route-level UI composition and page behavior.
+ */
+
+import { useMemo, useState } from 'react';
 import { usePolling } from '@/hooks/use-polling';
 import { useGatewaySocket } from '@/hooks/use-gateway-socket';
 import { Badge, Spinner, Button, Card } from '@/components/ui';
@@ -10,6 +15,7 @@ import {
   Brain,
   MessageSquare,
   Zap,
+  Coins,
   Cpu,
   GitBranch,
   ShieldAlert,
@@ -42,6 +48,20 @@ interface ActivityResponse {
   hasMore: boolean;
 }
 
+interface TokenOverview {
+  total: { tokens: number; cost: number; calls: number };
+  byProvider: Array<{ provider: string; tokens: number; cost: number; calls: number }>;
+  byModel: Array<{
+    provider: string;
+    model: string;
+    modelId: string;
+    tokens: number;
+    cost: number;
+    calls: number;
+  }>;
+  recent: Array<{ sessionId: string }>;
+}
+
 /* ── Configuration ── */
 
 const ACTION_CONFIG: Record<string, { icon: any; label: string; color: string }> = {
@@ -64,13 +84,17 @@ function StatCard({ label, value, trend, icon: Icon, trendUp }: any) {
     <div className="group relative overflow-hidden rounded-xl border border-border-primary bg-bg-secondary p-5 transition-all hover:border-accent-primary/30 hover:bg-bg-hover">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-[11px] font-medium uppercase tracking-wider text-text-tertiary">{label}</p>
+          <p className="text-[11px] font-medium uppercase tracking-wider text-text-tertiary">
+            {label}
+          </p>
           <div className="mt-2 flex items-baseline gap-2">
             <h3 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-white to-white/70">
               {value}
             </h3>
             {trend && (
-              <span className={clsx("text-xs font-medium", trendUp ? "text-success" : "text-error")}>
+              <span
+                className={clsx('text-xs font-medium', trendUp ? 'text-success' : 'text-error')}
+              >
                 {trend}
               </span>
             )}
@@ -100,49 +124,58 @@ function ActivityItem({ activity }: { activity: LogEntry }) {
       <div className="absolute left-[27px] top-14 bottom-0 w-px bg-border-primary/50 group-last:hidden" />
 
       {/* Icon */}
-      <div className={clsx(
-        "relative flex h-10 w-10 flex-none items-center justify-center rounded-xl border border-white/5 bg-bg-tertiary shadow-lg transition-transform group-hover:scale-105",
-        config.color
-      )}>
+      <div
+        className={clsx(
+          'relative flex h-10 w-10 flex-none items-center justify-center rounded-xl border border-white/5 bg-bg-tertiary shadow-lg transition-transform group-hover:scale-105',
+          config.color,
+        )}
+      >
         <Icon size={18} />
       </div>
 
       {/* Content */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center justify-between gap-4 cursor-pointer" onClick={() => setExpanded(!expanded)}>
+        <div
+          className="flex items-center justify-between gap-4 cursor-pointer"
+          onClick={() => setExpanded(!expanded)}
+        >
           <div className="flex items-center gap-2">
-            <span className={clsx("text-[13px] font-semibold", config.color)}>
-              {config.label}
-            </span>
+            <span className={clsx('text-[13px] font-semibold', config.color)}>{config.label}</span>
             <span className="h-1 w-1 rounded-full bg-border-secondary" />
             <span className="text-xs text-text-tertiary font-mono">
               {formatDistanceToNow(activity.timestamp, { addSuffix: true })}
             </span>
           </div>
           <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-             <Button size="sm" variant="ghost" className="h-6 w-6 p-0 rounded-full">
-               <MoreHorizontal size={14} />
-             </Button>
+            <Button size="sm" variant="ghost" className="h-6 w-6 p-0 rounded-full">
+              <MoreHorizontal size={14} />
+            </Button>
           </div>
         </div>
 
         <div className="mt-2 text-sm text-text-secondary leading-relaxed break-words font-mono bg-bg-tertiary/30 rounded-lg p-3 border border-border-primary/30">
-          {expanded 
-            ? <pre className="whitespace-pre-wrap overflow-x-auto">{JSON.stringify(activity.payload, null, 2)}</pre>
-            : <span>{JSON.stringify(activity.payload).slice(0, 180)}{JSON.stringify(activity.payload).length > 180 && '...'}</span>
-          }
+          {expanded ? (
+            <pre className="whitespace-pre-wrap overflow-x-auto">
+              {JSON.stringify(activity.payload, null, 2)}
+            </pre>
+          ) : (
+            <span>
+              {JSON.stringify(activity.payload).slice(0, 180)}
+              {JSON.stringify(activity.payload).length > 180 && '...'}
+            </span>
+          )}
         </div>
 
         {/* Feedback Actions */}
         <div className="mt-3 flex items-center gap-3">
-           <FeedbackButtons traceId={activity.id} />
-           {activity.status && (
-             <span className="uppercase tracking-widest text-[9px] py-0.5">
-               <Badge variant={activity.status === 'success' ? 'success' : 'error'} size="sm">
-                 {activity.status}
-               </Badge>
-             </span>
-           )}
+          <FeedbackButtons traceId={activity.id} />
+          {activity.status && (
+            <span className="uppercase tracking-widest text-[9px] py-0.5">
+              <Badge variant={activity.status === 'success' ? 'success' : 'error'} size="sm">
+                {activity.status}
+              </Badge>
+            </span>
+          )}
         </div>
       </div>
     </div>
@@ -153,26 +186,62 @@ function ActivityItem({ activity }: { activity: LogEntry }) {
 
 export default function ActivityPage() {
   const { data, loading } = usePolling<ActivityResponse>('/api/activity?limit=50', 3000);
+  const { data: tokenData } = usePolling<TokenOverview>('/api/tokens?limit=80', 5000);
   const { connected } = useGatewaySocket();
 
   const activities = data?.activities || [];
-  
-  // Stats calculation
-  const stats = [
-    { label: 'Active Context', value: '1,024', icon: Brain, trend: '+12%', trendUp: true },
-    { label: 'Latency (avg)', value: '89ms', icon: Zap, trend: '-5%', trendUp: true },
-    { label: 'Tool Usage', value: '452', icon: Wrench, trend: '+8%', trendUp: true },
-    { label: 'Events', value: '2.4k', icon: Activity, trend: '+24%', trendUp: true },
-  ];
+  const stats = useMemo(() => {
+    const toolCalls = activities.filter((activity) => activity.actionType === 'tool_call').length;
+    const modelCalls = tokenData?.total.calls || 0;
+    const totalTokens = tokenData?.total.tokens || 0;
+    const totalCost = tokenData?.total.cost || 0;
+    const activeSessions = new Set(
+      (tokenData?.recent || []).map((row) => row.sessionId).filter(Boolean),
+    ).size;
+    const modelCount = tokenData?.byModel.length || 0;
+
+    return [
+      {
+        label: 'Total Tokens',
+        value: totalTokens.toLocaleString(),
+        icon: Coins,
+        trend: `$${totalCost.toFixed(4)}`,
+        trendUp: totalCost >= 0,
+      },
+      {
+        label: 'Model Calls',
+        value: modelCalls.toLocaleString(),
+        icon: Cpu,
+        trend: `${modelCount} models`,
+        trendUp: modelCount > 0,
+      },
+      {
+        label: 'Tool Usage',
+        value: toolCalls.toLocaleString(),
+        icon: Wrench,
+        trend: `${activities.length} events`,
+        trendUp: toolCalls > 0,
+      },
+      {
+        label: 'Active Sessions',
+        value: activeSessions.toLocaleString(),
+        icon: MessageCircle,
+        trend: connected ? 'live' : 'offline',
+        trendUp: connected,
+      },
+    ];
+  }, [activities, connected, tokenData]);
 
   if (loading && !data) {
     return (
       <div className="flex h-full w-full flex-col items-center justify-center gap-4">
         <div className="relative h-12 w-12">
-           <div className="absolute inset-0 animate-ping rounded-full bg-accent-primary/30"></div>
-           <Spinner size="lg" className="text-accent-primary" />
+          <div className="absolute inset-0 animate-ping rounded-full bg-accent-primary/30"></div>
+          <Spinner size="lg" className="text-accent-primary" />
         </div>
-        <p className="text-sm font-medium text-text-tertiary animate-pulse">Initializing Neural Link...</p>
+        <p className="text-sm font-medium text-text-tertiary animate-pulse">
+          Initializing Neural Link...
+        </p>
       </div>
     );
   }
@@ -182,18 +251,24 @@ export default function ActivityPage() {
       {/* Header */}
       <div className="flex items-end justify-between">
         <div>
-           <div className="flex items-center gap-2 mb-1">
-             <div className="h-2 w-2 rounded-full bg-accent-primary shadow-[0_0_8px] shadow-accent-primary"></div>
-             <h4 className="text-xs font-bold uppercase tracking-widest text-accent-primary">System Overview</h4>
-           </div>
-           <h1 className="text-3xl font-bold text-text-primary tracking-tight">Agent Activity</h1>
+          <div className="flex items-center gap-2 mb-1">
+            <div className="h-2 w-2 rounded-full bg-accent-primary shadow-[0_0_8px] shadow-accent-primary"></div>
+            <h4 className="text-xs font-bold uppercase tracking-widest text-accent-primary">
+              System Overview
+            </h4>
+          </div>
+          <h1 className="text-3xl font-bold text-text-primary tracking-tight">Agent Activity</h1>
         </div>
         <div className="flex gap-3">
           <Button variant="default" size="sm" className="gap-2">
             <Filter size={14} />
             Filter
           </Button>
-          <Button variant="primary" size="sm" className="gap-2 bg-accent-primary/10 text-accent-primary border-accent-primary/20 hover:bg-accent-primary/20 hover:border-accent-primary/30">
+          <Button
+            variant="primary"
+            size="sm"
+            className="gap-2 bg-accent-primary/10 text-accent-primary border-accent-primary/20 hover:bg-accent-primary/20 hover:border-accent-primary/30"
+          >
             <Activity size={14} />
             Live Feed
           </Button>
@@ -210,17 +285,20 @@ export default function ActivityPage() {
       {/* Main Feed */}
       <div className="rounded-2xl border border-border-primary bg-bg-secondary/30 backdrop-blur-sm p-1">
         <div className="flex items-center justify-between px-4 py-3 border-b border-border-primary/50">
-           <h3 className="text-sm font-semibold text-text-primary">Recent Events</h3>
-           <div className="relative">
-             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-tertiary" size={14} />
-             <input 
-               type="text" 
-               placeholder="Search logs..." 
-               className="h-8 w-64 rounded-lg border border-border-primary bg-bg-tertiary pl-9 pr-3 text-xs text-text-primary placeholder:text-text-muted focus:border-accent-primary/50 focus:outline-none focus:ring-1 focus:ring-accent-primary/20"
-             />
-           </div>
+          <h3 className="text-sm font-semibold text-text-primary">Recent Events</h3>
+          <div className="relative">
+            <Search
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-tertiary"
+              size={14}
+            />
+            <input
+              type="text"
+              placeholder="Search logs..."
+              className="h-8 w-64 rounded-lg border border-border-primary bg-bg-tertiary pl-9 pr-3 text-xs text-text-primary placeholder:text-text-muted focus:border-accent-primary/50 focus:outline-none focus:ring-1 focus:ring-accent-primary/20"
+            />
+          </div>
         </div>
-        
+
         <div className="p-4 space-y-2">
           {activities.length === 0 ? (
             <div className="py-20 text-center">
@@ -231,9 +309,7 @@ export default function ActivityPage() {
               <p className="text-text-tertiary text-sm mt-1">Waiting for agent events...</p>
             </div>
           ) : (
-            activities.map((activity) => (
-              <ActivityItem key={activity.id} activity={activity} />
-            ))
+            activities.map((activity) => <ActivityItem key={activity.id} activity={activity} />)
           )}
         </div>
       </div>

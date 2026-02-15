@@ -2,8 +2,32 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.2.0] - 2026-02-10
+## [0.3.0] - 2026-02-15
+
 ### Added
+
+- **Email + Calendar Skill**: Added Google Gmail/Calendar skill with inbox triage, event management, daily briefing, and email-to-meeting workflows.
+- **Google OAuth Connect Flow**: Added dashboard-driven Google sign-in flow for skill account connection.
+- **Multi-Account Email Operations**: Added multi-account account-label support and cross-account read behavior for email/calendar checks.
+- **Quota-Aware Model Visibility**: Added UI support to surface rate-limited models in model selection.
+- **Architecture and Skill Docs**: Added dedicated architecture, API, storage, security, skill-system, and skill-development documentation.
+
+### Changed
+
+- **Skill Dashboard UX**: Simplified email-calendar configuration inputs and improved connected-account management.
+- **Heartbeat Logging**: Replaced low-value heartbeat output with structured status summaries.
+- **Background Session Isolation**: Isolated heartbeat/cron runs from user chat context to prevent system outputs leaking into normal conversations.
+- **Codebase Documentation**: Expanded in-code documentation across gateway and shared logic.
+
+### Fixed
+
+- **Plugin Config Validation**: Removed unsupported legacy email-calendar config keys and added migration cleanup for old entries.
+- **Chat Reliability**: Fixed prompt/context contamination that caused repeated `STATUS`/`SUMMARY` style responses in normal chat.
+
+## [0.2.0] - 2026-02-10
+
+### Added
+
 - **Dashboard**: Next.js 15 + Tailwind CSS v4 dashboard with dark glassmorphism theme.
 - **Activity Feed** (`/`): Real-time social feed of agent actions with type filters, expandable payloads, and inline feedback.
 - **Live Console** (`/console`): WebSocket-powered stream of reasoning, tool calls, and model responses with pause/resume.
@@ -19,11 +43,14 @@ All notable changes to this project will be documented in this file.
 - **CORS Support**: `@fastify/cors` configured for dashboard-to-gateway communication.
 
 ### Changed
+
 - Removed unused `ink` and `react@18` dependencies from gateway to resolve React version conflict with dashboard's React 19.
 - Added `dev:dashboard` script to root `package.json`.
 
 ## [0.1.0] - 2026-02-10
+
 ### Added
+
 - **Birth Protocol**: Cinematic CLI initialization sequence with ASCII animations.
 - **Monorepo Scaffold**: Established `packages/shared` and `packages/gateway`.
 - **Agent Runtime**: ReAct reasoning loop with tool registry and streaming support.

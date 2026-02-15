@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @file packages/dashboard/src/app/console/page.tsx
+ * @description Defines route-level UI composition and page behavior.
+ */
+
 import { useEffect, useRef, useState } from 'react';
 import { useGatewaySocket, type StreamEvent } from '@/hooks/use-gateway-socket';
 import { Badge, Button } from '@/components/ui';
@@ -55,8 +60,12 @@ export default function ConsolePage() {
       <div className="px-8 pt-8 pb-4">
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted font-medium">Live Stream</p>
-            <h1 className="text-2xl font-semibold text-text-primary tracking-tight mt-1">Console</h1>
+            <p className="text-[11px] uppercase tracking-[0.2em] text-text-muted font-medium">
+              Live Stream
+            </p>
+            <h1 className="text-2xl font-semibold text-text-primary tracking-tight mt-1">
+              Console
+            </h1>
           </div>
           <div className="flex items-center gap-2">
             <Badge variant={connected ? 'success' : 'error'}>
@@ -81,7 +90,11 @@ export default function ConsolePage() {
           </div>
         ) : (
           displayEvents.map((event, i) => (
-            <ConsoleEntry key={i} event={event} onApprove={(id, approved) => sendFrame({ type: 'approval_response', id, approved })} />
+            <ConsoleEntry
+              key={i}
+              event={event}
+              onApprove={(id, approved) => sendFrame({ type: 'approval_response', id, approved })}
+            />
           ))
         )}
       </div>
@@ -95,7 +108,13 @@ export default function ConsolePage() {
   );
 }
 
-function ConsoleEntry({ event, onApprove }: { event: StreamEvent; onApprove: (id: string, approved: boolean) => void }) {
+function ConsoleEntry({
+  event,
+  onApprove,
+}: {
+  event: StreamEvent;
+  onApprove: (id: string, approved: boolean) => void;
+}) {
   const type = event.streamType || event.type || 'unknown';
   let color = TYPE_COLORS[type] || 'text-text-secondary';
   let prefix = TYPE_PREFIXES[type] || type.toUpperCase();
@@ -140,19 +159,11 @@ function ConsoleEntry({ event, onApprove }: { event: StreamEvent; onApprove: (id
         <span className="text-text-secondary break-all">{content}</span>
         {isApproval && (
           <div className="mt-2 flex gap-2">
-            <Button
-              size="sm"
-              variant="primary"
-              onClick={() => onApprove(event.id as string, true)}
-            >
+            <Button size="sm" variant="primary" onClick={() => onApprove(event.id as string, true)}>
               <Check className="h-3 w-3" />
               Approve
             </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => onApprove(event.id as string, false)}
-            >
+            <Button size="sm" variant="ghost" onClick={() => onApprove(event.id as string, false)}>
               <X className="h-3 w-3" />
               Deny
             </Button>

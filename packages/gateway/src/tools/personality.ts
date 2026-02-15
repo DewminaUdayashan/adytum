@@ -1,7 +1,17 @@
+/**
+ * @file packages/gateway/src/tools/personality.ts
+ * @description Defines tool handlers exposed to the runtime.
+ */
+
 import { z } from 'zod';
 import type { ToolDefinition } from '@adytum/shared';
-import type { MemoryDB } from '../agent/memory-db.js';
+import type { MemoryDB } from '../infrastructure/repositories/memory-db.js';
 
+/**
+ * Creates personality tools.
+ * @param memoryDb - Memory db.
+ * @returns The resulting collection of values.
+ */
 export function createPersonalityTools(memoryDb: MemoryDB): ToolDefinition[] {
   return [
     {

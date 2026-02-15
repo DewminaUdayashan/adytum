@@ -1,6 +1,15 @@
+/**
+ * @file packages/gateway/src/tools/web-fetch.ts
+ * @description Defines tool handlers exposed to the runtime.
+ */
+
 import { z } from 'zod';
 import type { ToolDefinition } from '@adytum/shared';
 
+/**
+ * Creates web fetch tool.
+ * @returns The create web fetch tool result.
+ */
 export function createWebFetchTool(): ToolDefinition {
   return {
     name: 'web_fetch',

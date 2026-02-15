@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/storage/provision.ts
+ * @description Implements storage setup and persistence helpers.
+ */
+
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { existsSync, mkdirSync } from 'node:fs';
@@ -49,6 +54,10 @@ export async function autoProvisionStorage(config: AdytumConfig): Promise<Storag
   return { type: 'sqlite', sqlitePath };
 }
 
+/**
+ * Determines whether is docker available.
+ * @returns True when is docker available.
+ */
 async function isDockerAvailable(): Promise<boolean> {
   try {
     await execAsync('docker info', { timeout: 5000 });
@@ -58,6 +67,11 @@ async function isDockerAvailable(): Promise<boolean> {
   }
 }
 
+/**
+ * Ensures docker postgres.
+ * @param dataPath - Data path.
+ * @returns The resulting string value.
+ */
 async function ensureDockerPostgres(dataPath: string): Promise<string> {
   // Check if container already exists and is running
   try {
@@ -84,7 +98,8 @@ async function ensureDockerPostgres(dataPath: string): Promise<string> {
   mkdirSync(pgDataDir, { recursive: true });
 
   // Pull and start PostgreSQL with pgvector
-  await execAsync(`docker run -d \
+  await execAsync(
+    `docker run -d \
     --name ${DOCKER_CONTAINER_NAME} \
     -e POSTGRES_USER=${PG_USER} \
     -e POSTGRES_PASSWORD=${PG_PASSWORD} \
@@ -107,13 +122,16 @@ async function ensureDockerPostgres(dataPath: string): Promise<string> {
   return `postgresql://${PG_USER}:${PG_PASSWORD}@localhost:${PG_PORT}/${PG_DB}`;
 }
 
+/**
+ * Waits for for postgres.
+ * @param maxRetries - Max retries.
+ */
 async function waitForPostgres(maxRetries: number = 30): Promise<void> {
   for (let i = 0; i < maxRetries; i++) {
     try {
-      await execAsync(
-        `docker exec ${DOCKER_CONTAINER_NAME} pg_isready -U ${PG_USER}`,
-        { timeout: 3000 },
-      );
+      await execAsync(`docker exec ${DOCKER_CONTAINER_NAME} pg_isready -U ${PG_USER}`, {
+        timeout: 3000,
+      });
       return;
     } catch {
       await new Promise((r) => setTimeout(r, 1000));

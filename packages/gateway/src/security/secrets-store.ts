@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/security/secrets-store.ts
+ * @description Provides security utilities and policy enforcement logic.
+ */
+
 import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -20,6 +25,9 @@ export class SecretsStore {
     this.load();
   }
 
+  /**
+   * Executes load.
+   */
   private load() {
     if (!existsSync(this.filePath)) return;
     try {
@@ -33,6 +41,9 @@ export class SecretsStore {
     }
   }
 
+  /**
+   * Executes save.
+   */
   private save() {
     writeFileSync(this.filePath, JSON.stringify(this.cache, null, 2), 'utf-8');
     try {
@@ -42,24 +53,49 @@ export class SecretsStore {
     }
   }
 
+  /**
+   * Executes list skill keys.
+   * @param skillId - Skill id.
+   * @returns The resulting collection of values.
+   */
   listSkillKeys(skillId: string): string[] {
     return Object.keys(this.cache.skills[skillId] || {});
   }
 
+  /**
+   * Retrieves skill env.
+   * @param skillId - Skill id.
+   * @returns The get skill env result.
+   */
   getSkillEnv(skillId: string): Record<string, string> {
     return { ...(this.cache.skills[skillId] || {}) };
   }
 
+  /**
+   * Retrieves all.
+   * @returns The get all result.
+   */
   getAll(): Record<string, Record<string, string>> {
     return JSON.parse(JSON.stringify(this.cache.skills));
   }
 
+  /**
+   * Sets skill secret.
+   * @param skillId - Skill id.
+   * @param key - Key.
+   * @param value - Value.
+   */
   setSkillSecret(skillId: string, key: string, value: string): void {
     if (!this.cache.skills[skillId]) this.cache.skills[skillId] = {};
     this.cache.skills[skillId][key] = value;
     this.save();
   }
 
+  /**
+   * Executes delete skill secret.
+   * @param skillId - Skill id.
+   * @param key - Key.
+   */
   deleteSkillSecret(skillId: string, key: string): void {
     if (!this.cache.skills[skillId]) return;
     delete this.cache.skills[skillId][key];

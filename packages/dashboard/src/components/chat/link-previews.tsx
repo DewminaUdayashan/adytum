@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @file packages/dashboard/src/components/chat/link-previews.tsx
+ * @description Defines reusable UI components for the dashboard.
+ */
+
 import { gatewayFetch } from '@/lib/api';
 import { clsx } from 'clsx';
 import { ExternalLink, Globe } from 'lucide-react';
@@ -18,13 +23,7 @@ interface LinkPreviewData {
 const previewCache = new Map<string, LinkPreviewData>();
 const pendingCache = new Map<string, Promise<LinkPreviewData>>();
 
-export function LinkPreviewList({
-  content,
-  max = 3,
-}: {
-  content: string;
-  max?: number;
-}) {
+export function LinkPreviewList({ content, max = 3 }: { content: string; max?: number }) {
   const links = useMemo(() => extractLinksFromMarkdown(content, max), [content, max]);
   const [previews, setPreviews] = useState<LinkPreviewData[]>([]);
 
@@ -37,7 +36,7 @@ export function LinkPreviewList({
       };
     }
 
-    (async () => {
+    void (async () => {
       const loaded = await Promise.all(links.map((url) => loadPreview(url)));
       if (!active) return;
       setPreviews(loaded);

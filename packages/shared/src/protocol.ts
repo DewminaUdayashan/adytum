@@ -1,3 +1,8 @@
+/**
+ * @file packages/shared/src/protocol.ts
+ * @description Defines module behavior for the Adytum workspace.
+ */
+
 import { z } from 'zod';
 
 // ─── WebSocket Frame Types ────────────────────────────────────
@@ -36,11 +41,15 @@ export const MessageFrameSchema = z.object({
   content: z.string(),
   modelRole: z.string().optional(),
   modelId: z.string().optional(),
-  attachments: z.array(z.object({
-    type: z.enum(['image', 'file', 'audio', 'video']),
-    data: z.string(),
-    name: z.string().optional(),
-  })).optional(),
+  attachments: z
+    .array(
+      z.object({
+        type: z.enum(['image', 'file', 'audio', 'video']),
+        data: z.string(),
+        name: z.string().optional(),
+      }),
+    )
+    .optional(),
 });
 export type MessageFrame = z.infer<typeof MessageFrameSchema>;
 
@@ -52,11 +61,11 @@ export const StreamFrameSchema = z.object({
   traceId: z.string().uuid(),
   delta: z.string(),
   streamType: z.enum([
-    'thinking',      // Agent's internal reasoning
-    'response',      // Final response text
-    'tool_call',     // Tool being invoked
-    'tool_result',   // Tool execution result
-    'status',        // Status update
+    'thinking', // Agent's internal reasoning
+    'response', // Final response text
+    'tool_call', // Tool being invoked
+    'tool_result', // Tool execution result
+    'status', // Status update
   ]),
   metadata: z.record(z.unknown()).optional(),
 });
@@ -142,11 +151,21 @@ export type WebSocketFrame = z.infer<typeof WebSocketFrameSchema>;
 
 // ─── Frame Helpers ────────────────────────────────────────────
 
+/**
+ * Parses frame.
+ * @param raw - Raw.
+ * @returns The parse frame result.
+ */
 export function parseFrame(raw: string): WebSocketFrame {
   const parsed = JSON.parse(raw);
   return WebSocketFrameSchema.parse(parsed);
 }
 
+/**
+ * Executes serialize frame.
+ * @param frame - Frame.
+ * @returns The resulting string value.
+ */
 export function serializeFrame(frame: WebSocketFrame): string {
   return JSON.stringify(frame);
 }

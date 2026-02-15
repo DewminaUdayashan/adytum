@@ -1,3 +1,8 @@
+/**
+ * @file packages/gateway/src/index.ts
+ * @description Defines module behavior for the Adytum workspace.
+ */
+
 import { v4 as uuid } from 'uuid';
 import chalk from 'chalk';
 import { createInterface } from 'node:readline';
@@ -5,13 +10,15 @@ import { fileURLToPath } from 'node:url';
 import { watch, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { loadConfig } from './config.js';
+import { logger } from './logger.js';
 import { GatewayServer } from './server.js';
-import { AgentRuntime } from './agent/runtime.js';
-import { ModelRouter } from './agent/model-router.js';
-import { ModelCatalog } from './agent/model-catalog.js';
+import { AgentRuntime } from './domain/logic/agent-runtime.js';
+import { ModelRouter } from './infrastructure/llm/model-router.js';
+import { ModelCatalog } from './infrastructure/llm/model-catalog.js';
 
-import { SoulEngine } from './agent/soul-engine.js';
-import { SkillLoader } from './agent/skill-loader.js';
+import { setupContainer, container } from './container.js';
+import { SoulEngine } from './domain/logic/soul-engine.js';
+import { SkillLoader } from './application/services/skill-loader.js';
 import { ToolRegistry } from './tools/registry.js';
 import { createShellTool, createShellToolWithApproval } from './tools/shell.js';
 import { createFileSystemTools } from './tools/filesystem.js';
@@ -20,16 +27,19 @@ import { createMemoryTools } from './tools/memory.js';
 import { createPersonalityTools } from './tools/personality.js';
 import { PermissionManager } from './security/permission-manager.js';
 import { SecretsStore } from './security/secrets-store.js';
-import { tokenTracker } from './agent/token-tracker.js';
+import { tokenTracker } from './domain/logic/token-tracker.js';
 import { autoProvisionStorage } from './storage/provision.js';
-import { MemoryStore } from './agent/memory-store.js';
-import { MemoryDB } from './agent/memory-db.js';
-import { Dreamer } from './agent/dreamer.js';
-import { InnerMonologue } from './agent/inner-monologue.js';
-import { HeartbeatManager } from './agent/heartbeat-manager.js';
-import { CronManager } from './agent/cron-manager.js';
+import { MemoryStore } from './infrastructure/repositories/memory-store.js';
+import { MemoryDB } from './infrastructure/repositories/memory-db.js';
+import { Dreamer } from './application/services/dreamer.js';
+import { InnerMonologue } from './application/services/inner-monologue.js';
+import { HeartbeatManager } from './application/services/heartbeat-manager.js';
+import { CronManager } from './application/services/cron-manager.js';
 import { createCronTools } from './tools/cron.js';
 import cron from 'node-cron';
+import { AgentService } from './application/services/agent-service.js';
+import { SkillService } from './application/services/skill-service.js';
+import { ApprovalService } from './domain/logic/approval-service.js';
 
 // ─── Direct Execution Detection ─────────────────────────────
 // If this file is run directly (e.g. `node dist/index.js start`),
@@ -40,8 +50,15 @@ const entryFile = process.argv[1] ? resolve(process.argv[1]) : '';
 if (entryFile === __filename) {
   // Dynamically import the CLI which parses process.argv via Commander
   import('./cli/index.js').catch((err) => {
-    console.error(chalk.red('\n  ❌ Fatal error:'), err.message || err);
-    if (process.env.DEBUG) console.error(err);
+    // We can't import logger here easily since it might not be built/available if things are broken,
+    // but assuming it is:
+    import('./logger.js')
+      .then(({ logger }) => {
+        logger.fatal(err, 'Fatal error starting gateway');
+      })
+      .catch(() => {
+        console.error(chalk.red('\n  ❌ Fatal error:'), err.message || err);
+      });
     process.exit(1);
   });
 }
@@ -49,6 +66,9 @@ if (entryFile === __filename) {
 /** Start the full Adytum gateway with terminal CLI. */
 export async function startGateway(projectRoot: string): Promise<void> {
   const config = loadConfig(projectRoot);
+
+  // Initialize DI Container
+  setupContainer();
 
   console.log(chalk.dim(`\n  Starting ${config.agentName}...\n`));
 
@@ -88,7 +108,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
   }
 
   // ─── Agent Runtime ─────────────────────────────────────────
-  const modelCatalog = new ModelCatalog(config);
+  const modelCatalog = container.resolve(ModelCatalog);
 
   const modelRouter = new ModelRouter({
     litellmBaseUrl: `http://localhost:${config.litellmPort}/v1`,
@@ -98,7 +118,6 @@ export async function startGateway(projectRoot: string): Promise<void> {
     modelCatalog,
     routing: config.routing,
   });
-
 
   // Detect LiteLLM vs direct API mode
   const llmStatus = await modelRouter.initialize();
@@ -129,10 +148,19 @@ export async function startGateway(projectRoot: string): Promise<void> {
   });
 
   // Seed context with recent persisted messages to restore short-term memory
-  const recentMessages = memoryDb.getRecentMessages(40);
+  const recentMessages = memoryDb
+    .getRecentMessages(120)
+    .filter((m) => {
+      const session = (m.sessionId || '').toLowerCase();
+      return !session.startsWith('system-') && !session.startsWith('cron-');
+    })
+    .slice(-40);
   agent.seedContext(recentMessages.map((m) => ({ role: m.role as any, content: m.content })));
   await skillLoader.start(agent);
 
+  /**
+   * Executes reload skills.
+   */
   const reloadSkills = async (): Promise<void> => {
     const latestConfig = loadConfig(projectRoot);
     skillLoader.updateConfig(latestConfig, projectRoot);
@@ -143,17 +171,23 @@ export async function startGateway(projectRoot: string): Promise<void> {
 
   // Auto-reload skills when files change under workspace/skills
   const skillsPath = resolve(config.workspacePath, 'skills');
+  /**
+   * Starts skills watcher.
+   */
   const startSkillsWatcher = () => {
     if (!existsSync(skillsPath)) return;
     let timer: NodeJS.Timeout | null = null;
+    /**
+     * Executes debounce reload.
+     */
     const debounceReload = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(async () => {
         try {
-          console.log(chalk.dim('  [Skills] Change detected → reloading skills...'));
+          logger.info('Skills change detected, reloading...');
           await reloadSkills();
         } catch (err: any) {
-          console.error(chalk.red(`  [Skills] Reload failed: ${err?.message || err}`));
+          logger.error({ err }, 'Skills reload failed');
         }
       }, 400);
     };
@@ -166,14 +200,16 @@ export async function startGateway(projectRoot: string): Promise<void> {
   startSkillsWatcher();
 
   // One-time migration: move known skill env vars into secrets store, then reload if changed.
+  /**
+   * Executes migrate skill envs.
+   */
   const migrateSkillEnvs = async () => {
     let changed = false;
     for (const skill of skillLoader.getAll()) {
       const meta = skill.manifest?.metadata;
-      const required = [
-        ...(meta?.requires?.env || []),
-        meta?.primaryEnv,
-      ].filter((v): v is string => Boolean(v));
+      const required = [...(meta?.requires?.env || []), meta?.primaryEnv].filter((v): v is string =>
+        Boolean(v),
+      );
       for (const envName of required) {
         if (process.env[envName] && !secretsStore.getAll()[skill.id]?.[envName]) {
           secretsStore.setSkillSecret(skill.id, envName, process.env[envName] as string);
@@ -189,7 +225,14 @@ export async function startGateway(projectRoot: string): Promise<void> {
   await migrateSkillEnvs();
 
   // ── Dreamer & Inner Monologue (Phase 3/4) ─────────────────
-  const dreamer = new Dreamer(modelRouter, memoryDb, memoryStore, soulEngine, config.dataPath, config.workspacePath);
+  const dreamer = new Dreamer(
+    modelRouter,
+    memoryDb,
+    memoryStore,
+    soulEngine,
+    config.dataPath,
+    config.workspacePath,
+  );
   const monologue = new InnerMonologue(modelRouter, memoryDb, memoryStore);
   const heartbeatManager = new HeartbeatManager(agent, config.workspacePath);
 
@@ -197,23 +240,39 @@ export async function startGateway(projectRoot: string): Promise<void> {
   let dreamerTask: cron.ScheduledTask | null = null;
   let monologueTask: cron.ScheduledTask | null = null;
 
+  /**
+   * Executes schedule dreamer.
+   * @param minutes - Minutes.
+   */
   function scheduleDreamer(minutes: number) {
     dreamerTask?.stop();
     const safe = Math.max(1, Math.floor(minutes));
     const expr = safe < 60 ? `*/${safe} * * * *` : `0 */${Math.floor(safe / 60)} * * *`;
-    console.log(chalk.dim(`  [Dreamer] Scheduling every ${safe}m → ${expr}`));
+    logger.info({ interval: safe, expression: expr }, 'Dreamer scheduled');
     dreamerTask = cron.schedule(expr, async () => {
-      try { await dreamer.run(); } catch (err) { if (process.env.DEBUG) console.error(err); }
+      try {
+        await dreamer.run();
+      } catch (err) {
+        logger.error({ err }, 'Dreamer task failed');
+      }
     });
   }
 
+  /**
+   * Executes schedule monologue.
+   * @param minutes - Minutes.
+   */
   function scheduleMonologue(minutes: number) {
     monologueTask?.stop();
     const safe = Math.max(1, Math.floor(minutes));
     const expr = safe < 60 ? `*/${safe} * * * *` : `0 */${Math.floor(safe / 60)} * * *`;
-    console.log(chalk.dim(`  [Monologue] Scheduling every ${safe}m → ${expr}`));
+    logger.info({ interval: safe, expression: expr }, 'Monologue scheduled');
     monologueTask = cron.schedule(expr, async () => {
-      try { await monologue.run(); } catch (err) { if (process.env.DEBUG) console.error(err); }
+      try {
+        await monologue.run();
+      } catch (err) {
+        logger.error({ err }, 'Monologue task failed');
+      }
     });
   }
 
@@ -226,13 +285,34 @@ export async function startGateway(projectRoot: string): Promise<void> {
   for (const tool of createCronTools(cronManager)) {
     toolRegistry.register(tool);
   }
-  console.log(chalk.green('  ✓ ') + chalk.white(`Tools: ${toolRegistry.getAll().length} registered`));
+  console.log(
+    chalk.green('  ✓ ') + chalk.white(`Tools: ${toolRegistry.getAll().length} registered`),
+  );
   agent.refreshSystemPrompt();
-  
+
   // Start Heartbeat Scheduler
   heartbeatManager.start(config.heartbeatIntervalMinutes);
 
   console.log(chalk.green('  ✓ ') + chalk.white(`Agent: ${config.agentName} loaded`));
+
+  // ── Dependency Injection Wiring ───────────────────────────
+  // Register the live instances we just created into the container
+  // so that Controllers can resolve them.
+
+  container.register(AgentRuntime, { useValue: agent });
+  container.register(SkillLoader, { useValue: skillLoader });
+  container.register(CronManager, { useValue: cronManager });
+  container.register(ModelCatalog, { useValue: modelCatalog });
+  container.register(SoulEngine, { useValue: soulEngine });
+  container.register(ToolRegistry, { useValue: toolRegistry });
+  container.register('MemoryDB', { useValue: memoryDb });
+  container.register('MemoryRepository', { useValue: memoryDb });
+  container.register(PermissionManager, { useValue: permissionManager });
+  container.register(SecretsStore, { useValue: secretsStore });
+
+  // Wire up SkillService reload callback
+  const skillService = container.resolve(SkillService);
+  skillService.setReloadCallback(reloadSkills);
 
   // ── Gateway Server ────────────────────────────────────────
   const server = new GatewayServer({
@@ -245,7 +325,6 @@ export async function startGateway(projectRoot: string): Promise<void> {
     skillLoader,
     toolRegistry,
     memoryDb,
-    secrets: secretsStore.getAll(),
     secretsStore,
     onScheduleUpdate: (type, intervalMinutes) => {
       if (type === 'dreamer') scheduleDreamer(intervalMinutes);
@@ -259,8 +338,8 @@ export async function startGateway(projectRoot: string): Promise<void> {
       modelRouter.updateRouting(routing);
     },
     modelCatalog,
+    modelRouter,
   });
-
 
   // Route WebSocket messages to agent
   server.on('frame', async ({ sessionId, frame }) => {
@@ -279,7 +358,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
 
   // Stream agent events to WebSocket clients
   agent.on('stream', (event) => {
-    server.broadcastToAll({
+    server.broadcast({
       type: 'stream',
       ...event,
     });
@@ -303,6 +382,9 @@ export async function startGateway(projectRoot: string): Promise<void> {
   });
 
   // Graceful shutdown on Ctrl+C
+  /**
+   * Executes shutdown.
+   */
   const shutdown = async () => {
     console.log(chalk.dim(`\n  ${config.agentName} is resting. Goodbye.\n`));
     rl.close();
@@ -317,6 +399,11 @@ export async function startGateway(projectRoot: string): Promise<void> {
 
   // Shared approval prompt that pauses/resumes the main REPL
   // to prevent double character echo
+  /**
+   * Executes prompt approval.
+   * @param promptText - Prompt text.
+   * @returns Whether the operation succeeded.
+   */
   const promptApproval = async (promptText: string): Promise<boolean> => {
     rl.pause();
     // Remove the main readline from stdin so it doesn't intercept keys
@@ -360,7 +447,13 @@ export async function startGateway(projectRoot: string): Promise<void> {
     });
 
     if (approved !== undefined) {
-      return { approved, mode, reason: approved ? undefined : 'user_denied', defaultChannel, defaultCommSkillId };
+      return {
+        approved,
+        mode,
+        reason: approved ? undefined : 'user_denied',
+        defaultChannel,
+        defaultCommSkillId,
+      };
     }
 
     if (process.stdin.isTTY) {
@@ -369,7 +462,13 @@ export async function startGateway(projectRoot: string): Promise<void> {
           `\n  ⚠  Tool "shell_execute" wants to execute: ${chalk.bold(JSON.stringify({ command }))}\n  Approve? [y/N]: `,
         ),
       );
-      return { approved: ttyApproved, mode, reason: ttyApproved ? undefined : 'user_denied', defaultChannel, defaultCommSkillId };
+      return {
+        approved: ttyApproved,
+        mode,
+        reason: ttyApproved ? undefined : 'user_denied',
+        defaultChannel,
+        defaultCommSkillId,
+      };
     }
 
     return {
@@ -389,9 +488,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
       description,
     });
     if (approved !== undefined) return approved;
-    return promptApproval(
-      chalk.yellow(`\n  ⚠  ${description}\n  Approve? [y/N]: `),
-    );
+    return promptApproval(chalk.yellow(`\n  ⚠  ${description}\n  Approve? [y/N]: `));
   });
 
   rl.prompt();
@@ -421,7 +518,11 @@ export async function startGateway(projectRoot: string): Promise<void> {
 
     if (input === '/status') {
       const usage = tokenTracker.getTotalUsage();
-      console.log(chalk.dim(`  Tokens: ${usage.tokens} | Cost: $${usage.cost.toFixed(4)} | Connections: ${server.getConnectionCount()}`));
+      console.log(
+        chalk.dim(
+          `  Tokens: ${usage.tokens} | Cost: $${usage.cost.toFixed(4)} | Connections: ${server.getConnectionCount()}`,
+        ),
+      );
       rl.prompt();
       return;
     }
@@ -453,7 +554,11 @@ export async function startGateway(projectRoot: string): Promise<void> {
       console.log();
 
       if (result.toolCalls.length > 0) {
-        console.log(chalk.dim(`  [${result.toolCalls.length} tool calls | trace: ${result.trace.id.slice(0, 8)}]`));
+        console.log(
+          chalk.dim(
+            `  [${result.toolCalls.length} tool calls | trace: ${result.trace.id.slice(0, 8)}]`,
+          ),
+        );
       }
 
       const usage = tokenTracker.getSessionUsage(sessionId);

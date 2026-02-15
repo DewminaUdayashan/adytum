@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 
+/**
+ * @file packages/gateway/src/cli/index.ts
+ * @description Provides command-line entrypoints and CLI workflows.
+ */
+
+import 'reflect-metadata';
 import { Command } from 'commander';
 import chalk from 'chalk';
 import { ADYTUM_VERSION } from '@adytum/shared';
@@ -7,11 +13,10 @@ import { runBirthProtocol } from './birth-protocol.js';
 import { existsSync, rmSync, readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { confirm } from '@inquirer/prompts';
-import { ModelCatalog } from '../agent/model-catalog.js';
+import { ModelCatalog } from '../infrastructure/llm/model-catalog.js';
 import { spawn, execSync } from 'node:child_process';
 import open from 'open';
 import { fileURLToPath } from 'node:url';
-
 
 const program = new Command();
 
@@ -30,7 +35,8 @@ program
     // Check if already initialized
     if (existsSync(join(projectRoot, 'adytum.config.yaml'))) {
       const reset = await confirm({
-        message: 'Adytum is already initialized in this directory. Do you want to reset all settings and start over?',
+        message:
+          'Adytum is already initialized in this directory. Do you want to reset all settings and start over?',
         default: false,
       });
 
@@ -39,7 +45,9 @@ program
         return;
       }
 
-      console.log(chalk.yellow('\n⚠  Starting over... Existing configuration will be overwritten.\n'));
+      console.log(
+        chalk.yellow('\n⚠  Starting over... Existing configuration will be overwritten.\n'),
+      );
 
       // Cleanup persist data
       try {
@@ -85,13 +93,13 @@ program
 
     // Check if built
     if (!existsSync(join(projectRoot, 'packages/gateway/dist/index.js'))) {
-        console.log(chalk.yellow('⚠  Project not built. Running build first...'));
-        try {
-            execSync('npm run build', { stdio: 'inherit', cwd: projectRoot });
-        } catch (e) {
-            console.error(chalk.red('❌ Build failed. Please run `npm run build` manually.'));
-            process.exit(1);
-        }
+      console.log(chalk.yellow('⚠  Project not built. Running build first...'));
+      try {
+        execSync('npm run build', { stdio: 'inherit', cwd: projectRoot });
+      } catch (e) {
+        console.error(chalk.red('❌ Build failed. Please run `npm run build` manually.'));
+        process.exit(1);
+      }
     }
 
     console.log(chalk.cyan('\n🚀 Launching Adytum Ecosystem...'));
@@ -99,24 +107,24 @@ program
     // 1. Start Gateway in this process
     try {
       const { startGateway } = await import('../index.js');
-      
+
       // Start Dashboard in background
       const dashboardProcess = spawn('npm', ['run', 'start', '--workspace=packages/dashboard'], {
-          cwd: projectRoot,
-          stdio: 'inherit',
-          shell: true
+        cwd: projectRoot,
+        stdio: 'inherit',
+        shell: true,
       });
 
       dashboardProcess.on('error', (err) => {
-          console.error(chalk.red(`\n  ❌ Dashboard failed to start: ${err.message}`));
+        console.error(chalk.red(`\n  ❌ Dashboard failed to start: ${err.message}`));
       });
 
       // Open browser after a short delay to let things boot
       if (options.browser !== false) {
-          setTimeout(async () => {
-              console.log(chalk.dim('\n   Opening dashboard at http://localhost:3002...'));
-              await open('http://localhost:3002');
-          }, 3000);
+        setTimeout(async () => {
+          console.log(chalk.dim('\n   Opening dashboard at http://localhost:3002...'));
+          await open('http://localhost:3002');
+        }, 3000);
       }
 
       await startGateway(projectRoot);
@@ -132,25 +140,25 @@ program
   .command('update')
   .description('Update Adytum to the latest version')
   .action(async () => {
-      const projectRoot = process.cwd();
-      console.log(chalk.cyan('\n🔄 Checking for updates...'));
+    const projectRoot = process.cwd();
+    console.log(chalk.cyan('\n🔄 Checking for updates...'));
 
-      try {
-          console.log(chalk.dim('   Pulling latest changes...'));
-          execSync('git pull', { stdio: 'inherit', cwd: projectRoot });
+    try {
+      console.log(chalk.dim('   Pulling latest changes...'));
+      execSync('git pull', { stdio: 'inherit', cwd: projectRoot });
 
-          console.log(chalk.dim('   Installing dependencies...'));
-          execSync('npm install', { stdio: 'inherit', cwd: projectRoot });
+      console.log(chalk.dim('   Installing dependencies...'));
+      execSync('npm install', { stdio: 'inherit', cwd: projectRoot });
 
-          console.log(chalk.dim('   Rebuilding project...'));
-          execSync('npm run build', { stdio: 'inherit', cwd: projectRoot });
+      console.log(chalk.dim('   Rebuilding project...'));
+      execSync('npm run build', { stdio: 'inherit', cwd: projectRoot });
 
-          console.log(chalk.green('\n✓  Adytum updated successfully!'));
-          console.log(chalk.dim('   Run `adytum start` to launch the new version.\n'));
-      } catch (err: any) {
-          console.error(chalk.red(`\n  ❌ Update failed: ${err.message}`));
-          process.exit(1);
-      }
+      console.log(chalk.green('\n✓  Adytum updated successfully!'));
+      console.log(chalk.dim('   Run `adytum start` to launch the new version.\n'));
+    } catch (err: any) {
+      console.error(chalk.red(`\n  ❌ Update failed: ${err.message}`));
+      process.exit(1);
+    }
   });
 
 // ─── adytum status ────────────────────────────────────────────
@@ -160,7 +168,7 @@ program
   .action(async () => {
     try {
       const response = await fetch('http://localhost:3001/api/health');
-      const data = await response.json() as any;
+      const data = (await response.json()) as any;
       console.log(chalk.green('●') + chalk.white(' Gateway is alive'));
       console.log(chalk.dim(`  Uptime: ${Math.floor(data.uptime)}s`));
       console.log(chalk.dim(`  Connections: ${data.connections}`));
@@ -178,39 +186,41 @@ program
   .description('Reset all configurations and data (Danger!)')
   .action(async () => {
     const projectRoot = process.cwd();
-    
+
     const sure = await confirm({
-       message: chalk.red('Are you absolutely sure you want to reset Adytum? This will delete all configuration and memory.'),
-       default: false
+      message: chalk.red(
+        'Are you absolutely sure you want to reset Adytum? This will delete all configuration and memory.',
+      ),
+      default: false,
     });
 
     if (!sure) {
-        console.log(chalk.dim('  Reset cancelled.'));
-        return;
+      console.log(chalk.dim('  Reset cancelled.'));
+      return;
     }
 
     console.log(chalk.yellow('\n⚠  Resetting Adytum...'));
 
     try {
-        const pathsToCleanup = [
-            join(projectRoot, 'adytum.config.yaml'),
-            join(projectRoot, '.env'),
-            join(projectRoot, 'data'),
-            join(projectRoot, 'models.json'),
-            join(projectRoot, 'litellm_config.yaml')
-        ];
+      const pathsToCleanup = [
+        join(projectRoot, 'adytum.config.yaml'),
+        join(projectRoot, '.env'),
+        join(projectRoot, 'data'),
+        join(projectRoot, 'models.json'),
+        join(projectRoot, 'litellm_config.yaml'),
+      ];
 
-        for (const p of pathsToCleanup) {
-            if (existsSync(p)) {
-                rmSync(p, { recursive: true, force: true });
-                console.log(chalk.dim(`   ✓ Removed ${p.split('/').pop()}`));
-            }
+      for (const p of pathsToCleanup) {
+        if (existsSync(p)) {
+          rmSync(p, { recursive: true, force: true });
+          console.log(chalk.dim(`   ✓ Removed ${p.split('/').pop()}`));
         }
+      }
 
-        console.log(chalk.green('\n✓  Adytum has been reset to its initial state.'));
-        console.log(chalk.dim('   Run `adytum init` to start fresh.\n'));
+      console.log(chalk.green('\n✓  Adytum has been reset to its initial state.'));
+      console.log(chalk.dim('   Run `adytum init` to start fresh.\n'));
     } catch (err: any) {
-        console.error(chalk.red(`\n  ❌ Reset failed: ${err.message}`));
+      console.error(chalk.red(`\n  ❌ Reset failed: ${err.message}`));
     }
   });
 
@@ -222,7 +232,7 @@ program
   .description('Manage agent skills')
   .action(async (action: string, url?: string) => {
     if (action === 'list') {
-      const { SkillLoader } = await import('../agent/skill-loader.js');
+      const { SkillLoader } = await import('../application/services/skill-loader.js');
       const { loadConfig } = await import('../config.js');
       const config = loadConfig(process.cwd());
       const loader = new SkillLoader(config.workspacePath, {
@@ -236,7 +246,11 @@ program
 
       if (skills.length === 0) {
         console.log(chalk.dim('No skills installed.'));
-        console.log(chalk.dim('  Add a plugin under workspace/skills/<id>/ with adytum.plugin.json + index.ts'));
+        console.log(
+          chalk.dim(
+            '  Add a plugin under workspace/skills/<id>/ with adytum.plugin.json + index.ts',
+          ),
+        );
         return;
       }
 
@@ -275,19 +289,19 @@ program
   .argument('[action]', 'list | add | remove | scan', 'list')
   .argument('[model_id]', 'Model ID (e.g. ollama/llama3, anthropic/claude-3-opus)')
   .action(async (action: string, modelId?: string) => {
-    const { loadConfig } = await import('../config.js');
-    const config = loadConfig(process.cwd());
-    const catalog = new ModelCatalog(config);
+    const { setupContainer, container } = await import('../container.js');
+    setupContainer();
+    const catalog = container.resolve(ModelCatalog);
 
     if (action === 'list') {
-      const models = catalog.getAll();
+      const models = await catalog.getAll();
       const discovered = await catalog.scanLocalModels(); // Get local models
-      
+
       // Merge discovered models that aren't already in the catalog
       for (const d of discovered) {
-          if (!catalog.get(d.id)) {
-              models.push(d);
-          }
+        if (!(await catalog.get(d.id))) {
+          models.push(d);
+        }
       }
 
       if (models.length === 0) {
@@ -298,79 +312,83 @@ program
       }
 
       console.log(chalk.bold('\nAvailable Models:\n'));
-      
+
       // Group by provider
       const byProvider: Record<string, typeof models> = {};
       for (const m of models) {
-          byProvider[m.provider] = byProvider[m.provider] || [];
-          byProvider[m.provider].push(m);
+        byProvider[m.provider] = byProvider[m.provider] || [];
+        byProvider[m.provider].push(m);
       }
 
       for (const [provider, list] of Object.entries(byProvider)) {
-          console.log(chalk.cyan(`  ${provider}`));
-          for (const m of list) {
-             const status = m.source === 'discovered' ? chalk.green('● (local)') : 
-                            m.source === 'user' ? chalk.blue('● (configured)') : 
-                            chalk.dim('● (system)');
-             console.log(`    ${status} ${chalk.white(m.id)} ${chalk.dim(m.model)}`);
-          }
-          console.log();
+        console.log(chalk.cyan(`  ${provider}`));
+        for (const m of list) {
+          const status =
+            m.source === 'discovered'
+              ? chalk.green('● (local)')
+              : m.source === 'user'
+                ? chalk.blue('● (configured)')
+                : chalk.dim('● (system)');
+          console.log(`    ${status} ${chalk.white(m.id)} ${chalk.dim(m.model)}`);
+        }
+        console.log();
+      }
+    } else if (action === 'scan') {
+      console.log(chalk.dim('Scanning for local models...'));
+      const discovered = await catalog.scanLocalModels();
+      if (discovered.length === 0) {
+        console.log(chalk.yellow('No local models found. Make sure Ollama/LM Studio is running.'));
+      } else {
+        console.log(chalk.green(`Found ${discovered.length} models:`));
+        for (const d of discovered) {
+          console.log(`  - ${d.id}`);
+          // Auto-add? No, let user verify.
+          // But ModelCatalog.scanLocalModels doesn't save.
+          // We should probably offer to save them.
+        }
+        // For now, just listing them is fine. They appear in `list` anyway.
+        console.log(chalk.dim('\nThese models are now available to use.'));
+      }
+    } else if (action === 'add') {
+      if (!modelId) {
+        console.error(
+          chalk.red('Error: Model ID required. Usage: adytum models add <provider>/<model>'),
+        );
+        process.exit(1);
       }
 
-    } else if (action === 'scan') {
-        console.log(chalk.dim('Scanning for local models...'));
-        const discovered = await catalog.scanLocalModels();
-        if (discovered.length === 0) {
-            console.log(chalk.yellow('No local models found. Make sure Ollama/LM Studio is running.'));
-        } else {
-            console.log(chalk.green(`Found ${discovered.length} models:`));
-            for (const d of discovered) {
-                console.log(`  - ${d.id}`);
-                // Auto-add? No, let user verify.
-                // But ModelCatalog.scanLocalModels doesn't save. 
-                // We should probably offer to save them.
-            }
-            // For now, just listing them is fine. They appear in `list` anyway.
-            console.log(chalk.dim('\nThese models are now available to use.'));
-        }
+      if (!modelId.includes('/')) {
+        console.error(
+          chalk.red(
+            'Error: Model ID must be in format "provider/model" (e.g. anthropic/claude-3-opus)',
+          ),
+        );
+        process.exit(1);
+      }
 
-    } else if (action === 'add') {
-        if (!modelId) {
-            console.error(chalk.red('Error: Model ID required. Usage: adytum models add <provider>/<model>'));
-            process.exit(1);
-        }
-        
-        if (!modelId.includes('/')) {
-             console.error(chalk.red('Error: Model ID must be in format "provider/model" (e.g. anthropic/claude-3-opus)'));
-             process.exit(1);
-        }
+      const [provider, modelName] = modelId.split('/');
 
-        const [provider, modelName] = modelId.split('/');
-        
-        catalog.add({
-            id: modelId,
-            name: modelId,
-            provider,
-            model: modelName,
-            source: 'user',
-            // We don't ask for API key here, user sets it in .env usually.
-            // Or we could prompt? simpler to rely on .env for now.
-        });
-        console.log(chalk.green(`✓ Added model ${modelId}`));
-
+      await catalog.add({
+        id: modelId,
+        name: modelId,
+        provider,
+        model: modelName,
+        source: 'user',
+        // We don't ask for API key here, user sets it in .env usually.
+        // Or we could prompt? simpler to rely on .env for now.
+      });
+      console.log(chalk.green(`✓ Added model ${modelId}`));
     } else if (action === 'remove') {
-        if (!modelId) {
-            console.error(chalk.red('Error: Model ID required.'));
-            process.exit(1);
-        }
-        catalog.remove(modelId);
-        console.log(chalk.green(`✓ Removed model ${modelId}`));
+      if (!modelId) {
+        console.error(chalk.red('Error: Model ID required.'));
+        process.exit(1);
+      }
+      await catalog.remove(modelId);
+      console.log(chalk.green(`✓ Removed model ${modelId}`));
     } else {
-        console.log(chalk.red(`Unknown action: ${action}`));
+      console.log(chalk.red(`Unknown action: ${action}`));
     }
   });
-
-
 
 program.parse();
 

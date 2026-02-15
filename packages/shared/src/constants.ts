@@ -1,3 +1,8 @@
+/**
+ * @file packages/shared/src/constants.ts
+ * @description Defines module behavior for the Adytum workspace.
+ */
+
 // ─── Adytum Constants ─────────────────────────────────────────
 
 export const ADYTUM_VERSION = '0.1.0';
@@ -30,14 +35,7 @@ export const PROVIDER_MODELS: Record<string, string[]> = {
     'claude-3-5-sonnet-20241022',
     'claude-3-5-haiku-20241022',
   ],
-  openai: [
-    'gpt-4o',
-    'gpt-4o-mini',
-    'gpt-4-turbo',
-    'o1',
-    'o1-mini',
-    'o3-mini',
-  ],
+  openai: ['gpt-4o', 'gpt-4o-mini', 'gpt-4-turbo', 'o1', 'o1-mini', 'o3-mini'],
   ollama: [
     'llama3.3',
     'llama3.1',
@@ -55,21 +53,14 @@ export const PROVIDER_MODELS: Record<string, string[]> = {
     'meta-llama/llama-3.3-70b',
     'mistralai/mistral-large',
   ],
-  google: [
-    'gemini-2.5-pro',
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
-  ],
+  google: ['gemini-2.5-pro', 'gemini-2.5-flash', 'gemini-2.0-flash'],
   mistral: [
     'mistral-large-latest',
     'mistral-medium-latest',
     'mistral-small-latest',
     'codestral-latest',
   ],
-  deepseek: [
-    'deepseek-chat',
-    'deepseek-reasoner',
-  ],
+  deepseek: ['deepseek-chat', 'deepseek-reasoner'],
   lmstudio: ['lmstudio-community/default'],
   vllm: ['default'],
   custom: ['custom-model'],
@@ -84,10 +75,20 @@ export const MODEL_ROLE_DESCRIPTIONS: Record<string, string> = {
 };
 
 export const DANGEROUS_COMMANDS = [
-  'rm -rf', 'rm -r /', 'mkfs', 'dd if=',
-  'sudo rm', ':(){:|:&};:', 'chmod -R 777 /',
-  'wget | sh', 'curl | sh', 'shutdown', 'reboot',
-  'kill -9 1', 'format', 'del /f /s',
+  'rm -rf',
+  'rm -r /',
+  'mkfs',
+  'dd if=',
+  'sudo rm',
+  ':(){:|:&};:',
+  'chmod -R 777 /',
+  'wget | sh',
+  'curl | sh',
+  'shutdown',
+  'reboot',
+  'kill -9 1',
+  'format',
+  'del /f /s',
 ];
 
 export const FEEDBACK_REASONS = [

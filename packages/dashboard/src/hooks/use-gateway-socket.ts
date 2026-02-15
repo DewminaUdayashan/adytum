@@ -1,5 +1,10 @@
 'use client';
 
+/**
+ * @file packages/dashboard/src/hooks/use-gateway-socket.ts
+ * @description Provides reusable React hooks for dashboard behavior.
+ */
+
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { getWebSocketUrl } from '@/lib/api';
 
@@ -53,11 +58,13 @@ export function useGatewaySocket() {
     ws.onopen = () => {
       setConnected(true);
       // Send connect frame
-      ws.send(JSON.stringify({
-        type: 'connect',
-        channel: 'dashboard',
-        sessionId: sessionIdRef.current,
-      }));
+      ws.send(
+        JSON.stringify({
+          type: 'connect',
+          channel: 'dashboard',
+          sessionId: sessionIdRef.current,
+        }),
+      );
     };
 
     ws.onmessage = (e) => {
@@ -84,16 +91,21 @@ export function useGatewaySocket() {
     };
   }, []);
 
-  const sendMessage = useCallback((content: string, sessionId: string, options?: { modelRole?: string; modelId?: string }) => {
-    if (socketRef.current?.readyState === WebSocket.OPEN) {
-      socketRef.current.send(JSON.stringify({
-        type: 'message',
-        sessionId,
-        content,
-        ...options,
-      }));
-    }
-  }, []);
+  const sendMessage = useCallback(
+    (content: string, sessionId: string, options?: { modelRole?: string; modelId?: string }) => {
+      if (socketRef.current?.readyState === WebSocket.OPEN) {
+        socketRef.current.send(
+          JSON.stringify({
+            type: 'message',
+            sessionId,
+            content,
+            ...options,
+          }),
+        );
+      }
+    },
+    [],
+  );
 
   const sendFrame = useCallback((frame: Record<string, unknown>) => {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
@@ -111,5 +123,12 @@ export function useGatewaySocket() {
     };
   }, [connect]);
 
-  return { connected, events, sendMessage, sendFrame, clearEvents, sessionId: wsSessionId || sessionIdRef.current };
+  return {
+    connected,
+    events,
+    sendMessage,
+    sendFrame,
+    clearEvents,
+    sessionId: wsSessionId || sessionIdRef.current,
+  };
 }

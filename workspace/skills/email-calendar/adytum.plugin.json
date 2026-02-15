@@ -1,0 +1,45 @@
+{
+  "id": "email-calendar",
+  "name": "Email + Calendar",
+  "description": "Unified Gmail + Google Calendar skill for inbox triage, event management, and cross-domain planning.",
+  "metadata": {
+    "communication": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": { "type": "boolean", "default": true },
+      "clientId": { "type": "string" },
+      "clientSecret": { "type": "string" },
+      "defaultCalendarId": { "type": "string", "default": "primary" },
+      "defaultTimezone": { "type": "string", "default": "UTC" },
+      "defaultUnreadQuery": { "type": "string", "default": "in:inbox is:unread newer_than:7d" },
+      "allowWriteActions": { "type": "boolean", "default": false },
+      "provider": { "type": "string", "enum": ["google"], "default": "google" }
+    }
+  },
+  "uiHints": {
+    "enabled": { "label": "Enable Skill" },
+    "clientId": {
+      "label": "Google OAuth Client ID",
+      "help": "Required once. Used to open Google sign-in flow."
+    },
+    "clientSecret": {
+      "label": "Google OAuth Client Secret",
+      "help": "Required for standard Google web-app OAuth setup.",
+      "sensitive": true
+    },
+    "defaultCalendarId": { "label": "Default Calendar ID" },
+    "defaultTimezone": { "label": "Default Timezone" },
+    "defaultUnreadQuery": {
+      "label": "Default Gmail Query",
+      "help": "Used when list/briefing tools are called without a query."
+    },
+    "allowWriteActions": {
+      "label": "Allow Write Actions",
+      "help": "Keep off until account connection is verified."
+    },
+    "provider": { "advanced": true }
+  }
+}

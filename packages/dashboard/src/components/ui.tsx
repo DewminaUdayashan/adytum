@@ -1,3 +1,8 @@
+/**
+ * @file packages/dashboard/src/components/ui.tsx
+ * @description Defines reusable UI components for the dashboard.
+ */
+
 import { clsx } from 'clsx';
 import React from 'react';
 
@@ -16,9 +21,13 @@ export function PageHeader({
     <div className="px-8 pt-6 pb-6 border-b border-border-primary/20">
       <div className="flex flex-col sm:flex-row sm:items-end sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-text-primary to-text-secondary w-fit tracking-tight">{title}</h1>
+          <h1 className="text-2xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-text-primary to-text-secondary w-fit tracking-tight">
+            {title}
+          </h1>
           {subtitle && (
-            <p className="mt-1 text-sm text-text-muted font-medium tracking-normal leading-relaxed max-w-xl">{subtitle}</p>
+            <p className="mt-1 text-sm text-text-muted font-medium tracking-normal leading-relaxed max-w-xl">
+              {subtitle}
+            </p>
           )}
         </div>
         {children && <div className="flex items-center flex-wrap gap-3">{children}</div>}
@@ -68,12 +77,7 @@ interface BadgeProps {
   className?: string;
 }
 
-export function Badge({
-  children,
-  variant = 'default',
-  size = 'md',
-  className,
-}: BadgeProps) {
+export function Badge({ children, variant = 'default', size = 'md', className }: BadgeProps) {
   const colors = {
     default: 'bg-bg-tertiary text-text-secondary border-border-primary',
     success: 'bg-success/10 text-success border-success/20',
@@ -81,7 +85,7 @@ export function Badge({
     error: 'bg-error/10 text-error border-error/20',
     info: 'bg-info/10 text-info border-info/20',
   };
-  
+
   const sizes = {
     sm: 'px-1.5 py-0.5 text-[10px]',
     md: 'px-2.5 py-1 text-[11px]',
@@ -93,7 +97,7 @@ export function Badge({
         'inline-flex items-center rounded-md font-semibold uppercase tracking-wider border',
         colors[variant],
         sizes[size],
-        className
+        className,
       )}
     >
       {children}
@@ -103,14 +107,20 @@ export function Badge({
 
 /* ─────────────────────────── Spinner ─────────────────────────── */
 
-export function Spinner({ size = 'md', className }: { size?: 'sm' | 'md' | 'lg', className?: string }) {
+export function Spinner({
+  size = 'md',
+  className,
+}: {
+  size?: 'sm' | 'md' | 'lg';
+  className?: string;
+}) {
   const sizes = { sm: 'h-4 w-4 border-2', md: 'h-5 w-5 border-2', lg: 'h-8 w-8 border-3' };
   return (
     <div
       className={clsx(
         'animate-spin rounded-full border-border-secondary border-t-accent-primary',
         sizes[size],
-        className
+        className,
       )}
     />
   );
@@ -162,10 +172,8 @@ export function Button({
       'bg-accent-primary text-white font-semibold hover:bg-accent-primary/90 shadow-lg shadow-accent-primary/25 border border-transparent',
     outline:
       'bg-transparent border-2 border-border-primary text-text-primary hover:border-text-secondary hover:text-text-primary',
-    ghost:
-      'bg-transparent text-text-secondary hover:text-text-primary hover:bg-bg-tertiary',
-    danger:
-      'bg-error/10 text-error border border-error/20 hover:bg-error/20',
+    ghost: 'bg-transparent text-text-secondary hover:text-text-primary hover:bg-bg-tertiary',
+    danger: 'bg-error/10 text-error border border-error/20 hover:bg-error/20',
   };
 
   const sizes = {

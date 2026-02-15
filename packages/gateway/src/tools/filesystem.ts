@@ -1,9 +1,19 @@
+/**
+ * @file packages/gateway/src/tools/filesystem.ts
+ * @description Defines tool handlers exposed to the runtime.
+ */
+
 import { z } from 'zod';
 import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync } from 'node:fs';
 import { join, basename } from 'node:path';
 import type { ToolDefinition } from '@adytum/shared';
 import type { PermissionManager } from '../security/permission-manager.js';
 
+/**
+ * Creates file system tools.
+ * @param permissionManager - Permission manager.
+ * @returns The resulting collection of values.
+ */
 export function createFileSystemTools(permissionManager: PermissionManager): ToolDefinition[] {
   return [
     {
@@ -28,7 +38,8 @@ export function createFileSystemTools(permissionManager: PermissionManager): Too
     },
     {
       name: 'file_write',
-      description: 'Write content to a file. Creates parent directories if needed. Paths are relative to the workspace root.',
+      description:
+        'Write content to a file. Creates parent directories if needed. Paths are relative to the workspace root.',
       parameters: z.object({
         path: z.string().describe('File path relative to the workspace root'),
 
@@ -54,9 +65,12 @@ export function createFileSystemTools(permissionManager: PermissionManager): Too
     },
     {
       name: 'file_list',
-      description: 'List files and directories in a given path. Paths are relative to the workspace root. Use "." for the workspace root.',
+      description:
+        'List files and directories in a given path. Paths are relative to the workspace root. Use "." for the workspace root.',
       parameters: z.object({
-        path: z.string().describe('Directory path relative to the workspace root, or "." for workspace root'),
+        path: z
+          .string()
+          .describe('Directory path relative to the workspace root, or "." for workspace root'),
 
         recursive: z.boolean().default(false).describe('List recursively'),
         maxDepth: z.number().default(3).describe('Max depth for recursive listing'),
@@ -69,22 +83,30 @@ export function createFileSystemTools(permissionManager: PermissionManager): Too
         };
         const resolved = permissionManager.validatePath(path, 'read');
 
+        /**
+         * Executes list dir.
+         * @param dir - Dir.
+         * @param depth - Depth.
+         * @returns The resulting collection of values.
+         */
         const listDir = (dir: string, depth: number): any[] => {
           if (depth > maxDepth) return [];
           const entries = readdirSync(dir, { withFileTypes: true });
-          return entries.map((entry) => {
-            const fullPath = join(dir, entry.name);
-            const stat = statSync(fullPath);
-            const item: Record<string, unknown> = {
-              name: entry.name,
-              type: entry.isDirectory() ? 'directory' : 'file',
-              size: stat.size,
-            };
-            if (recursive && entry.isDirectory()) {
-              item.children = listDir(fullPath, depth + 1);
-            }
-            return item;
-          }).slice(0, 100); // Cap at 100 entries per level
+          return entries
+            .map((entry) => {
+              const fullPath = join(dir, entry.name);
+              const stat = statSync(fullPath);
+              const item: Record<string, unknown> = {
+                name: entry.name,
+                type: entry.isDirectory() ? 'directory' : 'file',
+                size: stat.size,
+              };
+              if (recursive && entry.isDirectory()) {
+                item.children = listDir(fullPath, depth + 1);
+              }
+              return item;
+            })
+            .slice(0, 100); // Cap at 100 entries per level
         };
 
         return { path: resolved, entries: listDir(resolved, 0) };
@@ -92,7 +114,8 @@ export function createFileSystemTools(permissionManager: PermissionManager): Too
     },
     {
       name: 'file_search',
-      description: 'Search for text within files in a directory. Paths are relative to the workspace root.',
+      description:
+        'Search for text within files in a directory. Paths are relative to the workspace root.',
       parameters: z.object({
         path: z.string().describe('Directory to search in, relative to the workspace root'),
 
@@ -111,13 +134,21 @@ export function createFileSystemTools(permissionManager: PermissionManager): Too
         const results: Array<{ file: string; line: number; content: string }> = [];
         const regex = new RegExp(query, 'gi');
 
+        /**
+         * Executes search dir.
+         * @param dir - Dir.
+         */
         const searchDir = (dir: string): void => {
           if (results.length >= maxResults) return;
           const entries = readdirSync(dir, { withFileTypes: true });
           for (const entry of entries) {
             if (results.length >= maxResults) return;
             const fullPath = join(dir, entry.name);
-            if (entry.isDirectory() && !entry.name.startsWith('.') && entry.name !== 'node_modules') {
+            if (
+              entry.isDirectory() &&
+              !entry.name.startsWith('.') &&
+              entry.name !== 'node_modules'
+            ) {
               searchDir(fullPath);
             } else if (entry.isFile()) {
               if (extensions && !extensions.some((ext) => entry.name.endsWith(ext))) continue;
@@ -131,7 +162,9 @@ export function createFileSystemTools(permissionManager: PermissionManager): Too
                   }
                   regex.lastIndex = 0;
                 }
-              } catch { /* skip binary files */ }
+              } catch {
+                /* skip binary files */
+              }
             }
           }
         };
