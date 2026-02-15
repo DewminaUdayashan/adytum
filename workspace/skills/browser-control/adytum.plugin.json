@@ -1,0 +1,81 @@
+{
+  "id": "browser-control",
+  "name": "Browser Control",
+  "description": "Cross-platform browser automation with Playwright sessions (open pages, click/type, execute JavaScript, extract structured data).",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": { "type": "boolean", "default": true },
+      "defaultBrowser": {
+        "type": "string",
+        "enum": ["chromium", "chrome", "msedge", "firefox", "webkit", "safari"],
+        "default": "chrome"
+      },
+      "headless": { "type": "boolean", "default": false },
+      "openInNewTab": { "type": "boolean", "default": false },
+      "launchTimeoutMs": { "type": "integer", "default": 20000 },
+      "actionTimeoutMs": { "type": "integer", "default": 10000 },
+      "navigationTimeoutMs": { "type": "integer", "default": 30000 },
+      "defaultWaitMs": { "type": "integer", "default": 500 },
+      "slowMoMs": { "type": "integer", "default": 0 },
+      "allowMutations": { "type": "boolean", "default": true },
+      "allowArbitraryEval": { "type": "boolean", "default": true },
+      "maxEvalChars": { "type": "integer", "default": 12000 },
+      "maxExtractChars": { "type": "integer", "default": 12000 },
+      "maxExtractItems": { "type": "integer", "default": 80 }
+    }
+  },
+  "uiHints": {
+    "defaultBrowser": {
+      "label": "Default Browser",
+      "help": "Target engine/channel used when a tool call omits browser."
+    },
+    "headless": {
+      "label": "Headless Mode",
+      "help": "Default is false so browser windows are visible. Turn on for server/CI environments."
+    },
+    "openInNewTab": {
+      "label": "Open In New Tab",
+      "help": "Default open behavior for browser_open."
+    },
+    "launchTimeoutMs": {
+      "label": "Launch Timeout (ms)"
+    },
+    "actionTimeoutMs": {
+      "label": "Action Timeout (ms)"
+    },
+    "navigationTimeoutMs": {
+      "label": "Navigation Timeout (ms)"
+    },
+    "defaultWaitMs": {
+      "label": "Default Wait (ms)",
+      "help": "Wait after browser_open before taking a snapshot."
+    },
+    "slowMoMs": {
+      "label": "Slow Motion (ms)",
+      "help": "Delay each Playwright action for visible debugging."
+    },
+    "allowMutations": {
+      "label": "Allow Click/Type",
+      "help": "Disable to prevent page mutations (browser_click/browser_type)."
+    },
+    "allowArbitraryEval": {
+      "label": "Allow browser_eval",
+      "help": "Disable to block arbitrary page JavaScript execution."
+    },
+    "maxEvalChars": {
+      "label": "Max Eval Script Length"
+    },
+    "maxExtractChars": {
+      "label": "Max Extract Characters"
+    },
+    "maxExtractItems": {
+      "label": "Max Extract Items"
+    }
+  },
+  "metadata": {
+    "communication": false
+  }
+}
