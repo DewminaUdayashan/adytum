@@ -8,5 +8,6 @@
     "properties": {
       "extractionDir": { "type": "string", "default": ".adytum_extracted" }
     }
-  }
+  },
+  "always": true
 }

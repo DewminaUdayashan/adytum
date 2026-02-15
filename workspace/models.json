@@ -6,7 +6,10 @@
     "model": "gemini-1.5-flash",
     "contextWindow": 1000000,
     "reasoning": false,
-    "input": ["text", "image"],
+    "input": [
+      "text",
+      "image"
+    ],
     "source": "user",
     "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
     "apiKey": "AIzaSyAvrnHyjgNhB9EyMjSD9du8n4BvIta0Ktg"
@@ -18,7 +21,10 @@
     "model": "gemini-2.0-flash",
     "contextWindow": 1048576,
     "reasoning": false,
-    "input": ["text", "image"],
+    "input": [
+      "text",
+      "image"
+    ],
     "source": "user",
     "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
     "apiKey": "AIzaSyDmC7yVTrZwVXK1O-_FlnRGp-KPXPR-oLU"
@@ -30,7 +36,10 @@
     "model": "gemini-2.0-flash-lite",
     "contextWindow": 1048576,
     "reasoning": false,
-    "input": ["text", "image"],
+    "input": [
+      "text",
+      "image"
+    ],
     "source": "user",
     "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
     "apiKey": "AIzaSyAa7UsoXW4509sxm7ouLtK5B4xwrArkzr4"
@@ -42,10 +51,70 @@
     "model": "gemini-2.5-flash-lite",
     "contextWindow": 1048576,
     "reasoning": true,
-    "input": ["text", "image"],
+    "input": [
+      "text",
+      "image"
+    ],
     "source": "user",
     "baseUrl": "https://generativelanguage.googleapis.com/v1beta",
-    "apiKey": "AIzaSyDmC7yVTrZwVXK1O-_FlnRGp-KPXPR-oLU"
+    "apiKey": "AIzaSyD6oVxRI5H-A0Bv1Gaiapjk0XTkoatzNCU"
+  },
+  {
+    "id": "opencode/glm-4.7-free",
+    "name": "GLM-4.7 Free",
+    "provider": "opencode",
+    "model": "glm-4.7-free",
+    "contextWindow": 204800,
+    "reasoning": true,
+    "input": [
+      "text"
+    ],
+    "source": "user",
+    "baseUrl": "https://opencode.ai/zen/v1",
+    "apiKey": "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"
+  },
+  {
+    "id": "opencode/kimi-k2.5-free",
+    "name": "Kimi K2.5 Free",
+    "provider": "opencode",
+    "model": "kimi-k2.5-free",
+    "contextWindow": 262144,
+    "reasoning": true,
+    "input": [
+      "text",
+      "image"
+    ],
+    "source": "user",
+    "baseUrl": "https://opencode.ai/zen/v1",
+    "apiKey": "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"
+  },
+  {
+    "id": "opencode/minimax-m2.1-free",
+    "name": "MiniMax M2.1 Free",
+    "provider": "opencode",
+    "model": "minimax-m2.1-free",
+    "contextWindow": 204800,
+    "reasoning": true,
+    "input": [
+      "text"
+    ],
+    "source": "user",
+    "baseUrl": "https://opencode.ai/zen",
+    "apiKey": "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"
+  },
+  {
+    "id": "opencode/trinity-large-preview-free",
+    "name": "Trinity Large Preview",
+    "provider": "opencode",
+    "model": "trinity-large-preview-free",
+    "contextWindow": 131072,
+    "reasoning": false,
+    "input": [
+      "text"
+    ],
+    "source": "user",
+    "baseUrl": "https://opencode.ai/zen/v1",
+    "apiKey": "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"
   },
   {
     "id": "openrouter/arcee-ai/trinity-large-preview:free",
@@ -54,7 +123,9 @@
     "model": "arcee-ai/trinity-large-preview:free",
     "contextWindow": 131000,
     "reasoning": false,
-    "input": ["text"],
+    "input": [
+      "text"
+    ],
     "source": "user",
     "baseUrl": "https://openrouter.ai/api/v1",
     "apiKey": "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"
@@ -66,7 +137,9 @@
     "model": "arcee-ai/trinity-mini:free",
     "contextWindow": 131072,
     "reasoning": true,
-    "input": ["text"],
+    "input": [
+      "text"
+    ],
     "source": "user",
     "baseUrl": "https://openrouter.ai/api/v1",
     "apiKey": "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"
@@ -78,7 +151,10 @@
     "model": "google/gemma-3-27b-it:free",
     "contextWindow": 131072,
     "reasoning": false,
-    "input": ["text", "image"],
+    "input": [
+      "text",
+      "image"
+    ],
     "source": "user",
     "baseUrl": "https://openrouter.ai/api/v1",
     "apiKey": "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"
@@ -90,7 +166,9 @@
     "model": "meta-llama/llama-3.3-70b-instruct:free",
     "contextWindow": 128000,
     "reasoning": false,
-    "input": ["text"],
+    "input": [
+      "text"
+    ],
     "source": "user",
     "baseUrl": "https://openrouter.ai/api/v1",
     "apiKey": "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"
@@ -102,7 +180,10 @@
     "model": "mistralai/mistral-small-3.1-24b-instruct:free",
     "contextWindow": 128000,
     "reasoning": false,
-    "input": ["text", "image"],
+    "input": [
+      "text",
+      "image"
+    ],
     "source": "user",
     "baseUrl": "https://openrouter.ai/api/v1",
     "apiKey": "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"
@@ -114,7 +195,9 @@
     "model": "nvidia/nemotron-3-nano-30b-a3b:free",
     "contextWindow": 256000,
     "reasoning": true,
-    "input": ["text"],
+    "input": [
+      "text"
+    ],
     "source": "user",
     "baseUrl": "https://openrouter.ai/api/v1",
     "apiKey": "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"
@@ -126,7 +209,10 @@
     "model": "nvidia/nemotron-nano-12b-v2-vl:free",
     "contextWindow": 128000,
     "reasoning": true,
-    "input": ["text", "image"],
+    "input": [
+      "text",
+      "image"
+    ],
     "source": "user",
     "baseUrl": "https://openrouter.ai/api/v1",
     "apiKey": "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"
@@ -138,7 +224,9 @@
     "model": "nvidia/nemotron-nano-9b-v2:free",
     "contextWindow": 128000,
     "reasoning": true,
-    "input": ["text"],
+    "input": [
+      "text"
+    ],
     "source": "user",
     "baseUrl": "https://openrouter.ai/api/v1",
     "apiKey": "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"
@@ -150,7 +238,10 @@
     "model": "openrouter/free",
     "contextWindow": 200000,
     "reasoning": true,
-    "input": ["text", "image"],
+    "input": [
+      "text",
+      "image"
+    ],
     "source": "user",
     "baseUrl": "https://openrouter.ai/api/v1",
     "apiKey": "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"
@@ -162,7 +253,9 @@
     "model": "qwen/qwen3-4b:free",
     "contextWindow": 40960,
     "reasoning": true,
-    "input": ["text"],
+    "input": [
+      "text"
+    ],
     "source": "user",
     "baseUrl": "https://openrouter.ai/api/v1",
     "apiKey": "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"
@@ -174,7 +267,9 @@
     "model": "qwen/qwen3-next-80b-a3b-instruct:free",
     "contextWindow": 262144,
     "reasoning": false,
-    "input": ["text"],
+    "input": [
+      "text"
+    ],
     "source": "user",
     "baseUrl": "https://openrouter.ai/api/v1",
     "apiKey": "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"
@@ -186,7 +281,9 @@
     "model": "tngtech/tng-r1t-chimera:free",
     "contextWindow": 163840,
     "reasoning": true,
-    "input": ["text"],
+    "input": [
+      "text"
+    ],
     "source": "user",
     "baseUrl": "https://openrouter.ai/api/v1",
     "apiKey": "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"
@@ -198,7 +295,9 @@
     "model": "z-ai/glm-4.5-air:free",
     "contextWindow": 131072,
     "reasoning": true,
-    "input": ["text"],
+    "input": [
+      "text"
+    ],
     "source": "user",
     "baseUrl": "https://openrouter.ai/api/v1",
     "apiKey": "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"

@@ -12,6 +12,8 @@ import { Logger } from '../../logger.js';
 import { auditLogger } from '../../security/audit-logger.js';
 import { AppError } from '../../domain/errors/app-error.js';
 import { MemoryDB } from '../../infrastructure/repositories/memory-db.js';
+import { ConfigService } from '../../infrastructure/config/config-service.js';
+import { createReadStream, existsSync } from 'node:fs';
 
 /**
  * Encapsulates system controller behavior.
@@ -21,6 +23,7 @@ export class SystemController {
   constructor(
     @inject(Logger) private logger: Logger,
     @inject('MemoryDB') private memoryDb: MemoryDB,
+    @inject(ConfigService) private configService: ConfigService,
   ) {}
 
   /**
@@ -129,6 +132,59 @@ export class SystemController {
     }
 
     return { url: target.toString(), title: target.hostname };
+  }
+
+  /**
+   * Serves a file from the workspace.
+   */
+  public async serveFile(request: FastifyRequest, reply: FastifyReply) {
+    const rawPath = (request.params as any)['*'];
+    if (!rawPath) {
+      throw new AppError('File path is required', 400);
+    }
+
+    const config = this.configService.getFullConfig();
+    const workspacePath = path.resolve(config.workspacePath);
+    const targetPath = path.normalize(path.join(workspacePath, rawPath));
+
+    // Security check: ensure the path is within the workspace
+    if (!targetPath.startsWith(workspacePath)) {
+      this.logger.warn(`Security alert: Attempted unauthorized file access: ${targetPath}`);
+      throw new AppError('Access denied', 403);
+    }
+
+    if (!existsSync(targetPath)) {
+      throw new AppError('File not found', 404);
+    }
+
+    const stats = await fs.stat(targetPath);
+    if (!stats.isFile()) {
+      throw new AppError('Requested path is not a file', 400);
+    }
+
+    // Determine content type (basic)
+    const ext = path.extname(targetPath).toLowerCase();
+    const contentTypes: Record<string, string> = {
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.pdf': 'application/pdf',
+      '.txt': 'text/plain',
+      '.md': 'text/markdown',
+    };
+
+    const contentType = contentTypes[ext] || 'application/octet-stream';
+    reply.header('Content-Type', contentType);
+    reply.header('Content-Length', stats.size);
+    
+    // Cache for 1 hour for images
+    if (contentType.startsWith('image/')) {
+        reply.header('Cache-Control', 'public, max-age=3600');
+    }
+
+    return reply.send(createReadStream(targetPath));
   }
 
   /**

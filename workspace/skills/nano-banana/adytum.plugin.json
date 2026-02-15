@@ -8,5 +8,6 @@
     "properties": {
       "model": { "type": "string", "default": "gemini-2.0-flash-image" }
     }
-  }
+  },
+  "always": true
 }

@@ -4,11 +4,11 @@
  */
 
 import { z } from 'zod';
-import { container } from 'tsyringe';
-import { GraphContext } from '../../packages/gateway/src/domain/knowledge/graph-context.js';
-import { GraphIndexer } from '../../packages/gateway/src/domain/knowledge/graph-indexer.js';
-import { PermissionManager } from '../../packages/gateway/src/security/permission-manager.js';
-import { GatewayServer } from '../../packages/gateway/src/server.js';
+import { container } from '../../../packages/gateway/src/container.js';
+import { GraphContext } from '../../../packages/gateway/src/domain/knowledge/graph-context.js';
+import { GraphIndexer } from '../../../packages/gateway/src/domain/knowledge/graph-indexer.js';
+import { PermissionManager } from '../../../packages/gateway/src/security/permission-manager.js';
+import { GatewayServer } from '../../../packages/gateway/src/server.js';
 
 export default {
   tools: [

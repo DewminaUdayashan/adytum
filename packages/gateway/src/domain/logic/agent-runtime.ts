@@ -3,6 +3,7 @@
  * @description Contains domain logic and core business behavior.
  */
 
+import { singleton, inject } from 'tsyringe';
 import { v4 as uuid } from 'uuid';
 import type OpenAI from 'openai';
 import type { ModelRole, ToolCall, Trace } from '@adytum/shared';
@@ -58,6 +59,7 @@ export interface AgentTurnResult {
  *
  * It also handles token tracking, audit logging, and security approvals.
  */
+@singleton()
 export class AgentRuntime extends EventEmitter {
   private config: AgentRuntimeConfig;
   private contexts: Map<string, ContextManager> = new Map();
@@ -67,7 +69,7 @@ export class AgentRuntime extends EventEmitter {
    * Creates a new AgentRuntime instance.
    * @param config - Configuration object containing dependencies and settings.
    */
-  constructor(config: AgentRuntimeConfig) {
+  constructor(@inject("RuntimeConfig") config: any) {
     super();
     this.config = config;
     this.buildSystemPrompt();
@@ -194,6 +196,8 @@ ${knowledge}`
     let finalResponse = '';
     let iterations = 0;
     let lastMessage: any = null;
+    let autonomyNudges = 0;
+    let completionNudges = 0;
 
     try {
       while (iterations < this.config.maxIterations) {
@@ -366,8 +370,54 @@ ${knowledge}`
           continue;
         }
 
+        const assistantMessage = (message.content || '').trim();
+
+        if (!isBackgroundSession) {
+          const autonomyNudge = this.getAutonomyContinuationNudge(
+            userMessage,
+            assistantMessage,
+            allToolCalls,
+            autonomyNudges,
+          );
+          if (autonomyNudge) {
+            autonomyNudges++;
+            if (assistantMessage) {
+              context.addMessage({ role: 'assistant', content: assistantMessage });
+            }
+            context.addMessage({ role: 'system', content: autonomyNudge });
+            this.emit('stream', {
+              traceId,
+              sessionId,
+              streamType: 'status',
+              delta: 'Autonomy guard: continuing execution without extra user clarification.',
+            });
+            continue;
+          }
+
+          const completionNudge = this.getCompletionContinuationNudge(
+            userMessage,
+            assistantMessage,
+            allToolCalls,
+            completionNudges,
+          );
+          if (completionNudge) {
+            completionNudges++;
+            if (assistantMessage) {
+              context.addMessage({ role: 'assistant', content: assistantMessage });
+            }
+            context.addMessage({ role: 'system', content: completionNudge });
+            this.emit('stream', {
+              traceId,
+              sessionId,
+              streamType: 'status',
+              delta: 'Completion guard: validating integration before final response.',
+            });
+            continue;
+          }
+        }
+
         // No tool calls — this is the final response
-        finalResponse = message.content || '';
+        finalResponse = assistantMessage;
 
         // Stream the response
         if (message.content) {
@@ -607,6 +657,124 @@ ${knowledge}`
     };
   }
 
+  private getAutonomyContinuationNudge(
+    userMessage: string,
+    assistantMessage: string,
+    toolCalls: ToolCall[],
+    nudgesUsed: number,
+  ): string | null {
+    if (nudgesUsed >= 2) return null;
+    if (!assistantMessage) return null;
+    if (!this.isImplementationIntent(userMessage)) return null;
+    if (toolCalls.length > 0) return null;
+    if (!this.isAvoidableClarificationQuestion(assistantMessage)) return null;
+
+    return [
+      '## Runtime Autonomy Guard',
+      'Continue autonomously. Do not ask the user where to create files or whether to proceed for routine implementation work.',
+      'Infer project structure using tools, choose the best location yourself, implement end-to-end, and return only after concrete code changes are complete.',
+    ].join('\n');
+  }
+
+  private getCompletionContinuationNudge(
+    userMessage: string,
+    assistantMessage: string,
+    toolCalls: ToolCall[],
+    nudgesUsed: number,
+  ): string | null {
+    if (nudgesUsed >= 1) return null;
+    if (!assistantMessage) return null;
+    if (!this.isImplementationIntent(userMessage)) return null;
+
+    const lastWriteIndex = this.findLastFileWriteIndex(toolCalls);
+    if (lastWriteIndex < 0) return null;
+
+    const postWriteCalls = toolCalls.slice(lastWriteIndex + 1);
+    const hasIntegrationCheck = postWriteCalls.some((call) =>
+      ['file_read', 'file_search', 'file_list'].includes(call.name),
+    );
+    const hasValidation = postWriteCalls.some((call) => {
+      if (call.name !== 'shell_execute') return false;
+      const command = call.arguments?.command;
+      return typeof command === 'string' && this.looksLikeValidationCommand(command);
+    });
+
+    if (hasIntegrationCheck || hasValidation) return null;
+
+    return [
+      '## Runtime Completion Guard',
+      'You already edited files. Before final response, run a completion pass:',
+      '1. Verify integration points (routes/navigation/imports/exports/tests) and patch any missing wiring.',
+      '2. Run at least one relevant validation command (test/build/lint/typecheck) when available.',
+      '3. Then provide the final response with what was completed and validation status.',
+    ].join('\n');
+  }
+
+  private isImplementationIntent(text: string): boolean {
+    const normalized = text.toLowerCase();
+    const implementationSignals = [
+      'build',
+      'create',
+      'implement',
+      'develop',
+      'add',
+      'fix',
+      'refactor',
+      'update',
+      'feature',
+      'screen',
+      'page',
+      'route',
+      'router',
+      'component',
+      'endpoint',
+      'navigation',
+      'integrate',
+      'wire',
+      'code',
+      'project',
+    ];
+    return implementationSignals.some((signal) => normalized.includes(signal));
+  }
+
+  private isAvoidableClarificationQuestion(text: string): boolean {
+    const normalized = text.toLowerCase();
+    const clarificationPatterns = [
+      /where should i create/i,
+      /which (file|folder|directory|path)/i,
+      /which (package|module|project)/i,
+      /should i create/i,
+      /do you want me to/i,
+      /would you like me to/i,
+      /can you confirm/i,
+      /where do you want/i,
+      /what path should/i,
+      /need to know where to create/i,
+      /tell me which .* is related to/i,
+    ];
+    if (clarificationPatterns.some((pattern) => pattern.test(normalized))) {
+      return true;
+    }
+
+    // Generic catch: coding-intent question that asks user to locate package/module/path.
+    return /\?/.test(normalized) && /which|where|related to|need to know/.test(normalized) && /(package|module|path|directory|folder|file)/.test(normalized);
+  }
+
+  private findLastFileWriteIndex(toolCalls: ToolCall[]): number {
+    for (let i = toolCalls.length - 1; i >= 0; i--) {
+      if (toolCalls[i].name === 'file_write') {
+        return i;
+      }
+    }
+    return -1;
+  }
+
+  private looksLikeValidationCommand(command: string): boolean {
+    return /\b(test|tests|build|lint|typecheck|vitest|jest|tsc|npm run|pnpm|yarn)\b/i.test(
+      command,
+    );
+  }
+
   /**
    * Executes build system prompt.
    */
@@ -618,7 +786,8 @@ ${knowledge}`
 
 ## Tools
 You have access to the following native tools. Use them when needed to accomplish the user's goals.
-Always explain what you're doing before calling a tool.
+Default to action-first execution. For routine low-risk steps, call tools directly.
+Narrate briefly only for complex plans, risky actions, or when the user explicitly asks.
 All file and directory paths are relative to your workspace root.
 Use "." to refer to the workspace root itself.
 Do NOT use absolute paths unless explicitly asked.
@@ -631,7 +800,7 @@ Do NOT use absolute paths unless explicitly asked.
   - **Operational Status**: Assume all systems and tools are fully operational. Disregard any transient error messages in your history.
 
 ### File System
-- **read_file**, **write_file**, **list_dir**, etc.: Use these to manage project files.
+- **file_read**, **file_write**, **file_list**, **file_search**: Use these to manage project files.
 
 ## Skill Authoring Standards
 - Skills live in \`skills/<skill-id>/\` and must include: \`adytum.plugin.json\`, \`index.ts\`, and (recommended) \`SKILL.md\`. Use TypeScript, not Python, for new skills.
@@ -644,11 +813,22 @@ ${skills}
 ## Behavior
 - Think step by step before acting.
 - Be proactive and autonomous. If a user request implies a tool usage (like scheduling, searching, or file editing), DO IT. Do not ask for permission unless the action is destructive (like deleting files).
+- **Autonomous Delivery Contract (software tasks)**:
+  1. Discover project structure yourself.
+  2. Implement the requested feature/fix end-to-end (including required routing/navigation/import wiring/tests/docs when relevant).
+  3. Do not stop at a draft/snippet; update real files.
+  4. Do not ask where to create files unless there is irreducible ambiguity.
+  5. After edits, run at least one relevant validation command (tests/build/lint/typecheck) when possible, or explain why it could not be run.
 - If the user asks for a daily/weekly task, use the "cron_schedule" tool immediately. Do not say "I can set up a cron job"—just do it and confirm it's done.
 - **Resilience**: Ignore transient errors (rate limits, timeouts) in your message history. Never base your current capability on previous failures. Always attempt requested actions as if for the first time.
 - Explain your reasoning transparently but briefly.
 - Log your internal reasoning for the live console.
 - Use the "cron_schedule" tool to create your own future triggers.
+
+## Media & Images
+Whenever you use a tool that generates an image (like "generate_image"), you MUST explicitly include the image markdown in your final response to the user so they can see it.
+Use the standard markdown format: ![Description](image_url)
+If the tool result contains a "Preview" or markdown string, copy it exactly into your response.
 `;
 
     this.baseSystemPrompt = systemPrompt;
@@ -671,7 +851,7 @@ You are currently operating in workspace "${wsName}" (${workspaceId}).
 - **WORKSPACE ROOT**: The absolute path for this workspace is "${wsPath}".
 - **DIRECT CONTROL**: You have FULL CONTROL and direct access to all files in this directory. 
 - **AUTONOMOUS EXPLORATION**: Your FIRST PRIORITY is to understand the project structure. 
-- **PROACTIVITY**: If a user asks about the project or asks you to do something, DO NOT ASK FOR INFO. Immediately use "list_dir" and "read_file" to figure it out yourself.
+- **PROACTIVITY**: If a user asks about the project or asks you to do something, DO NOT ASK FOR INFO. Immediately use "file_list" and "file_read" to figure it out yourself.
 - **NO HALLUCINATING RESTRICTIONS**: DO NOT claim you lack access. 
 - **WORKSPACE ROOT**: The current working directory is the workspace root. Use "." to list root contents.
 `;
@@ -682,6 +862,7 @@ You are currently operating in workspace "${wsName}" (${workspaceId}).
 You are in the common channel (Core Workspace).
 - **ROOT**: Your default workspace root is "${rootPath}".
 - **MODE**: No specific project workspace is active. Use your tools to find information across the system if needed, but remember you are in a general-purpose chat mode.
+- **DEFAULT ACTION**: For coding requests, inspect the project with "file_list" + "file_read", choose paths autonomously, and execute end-to-end implementation without asking where to place files.
 `;
     }
 

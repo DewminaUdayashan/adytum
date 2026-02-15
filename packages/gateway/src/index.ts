@@ -319,6 +319,9 @@ export async function startGateway(projectRoot: string): Promise<void> {
   // so that Controllers can resolve them.
 
   container.register(AgentRuntime, { useValue: agent });
+  container.register(ModelRouter, { useValue: modelRouter });
+  container.register("RuntimeConfig", { useValue: config });
+  container.register("RouterConfig", { useValue: config });
   container.register(SkillLoader, { useValue: skillLoader });
   container.register(CronManager, { useValue: cronManager });
   container.register(ModelCatalog, { useValue: modelCatalog });

@@ -173,10 +173,23 @@ export class LLMClient {
         }
 
         if (m.role === 'tool') {
+          // Attempt to find the tool name from previous assistant messages
+          let toolName = 'unknown';
+          for (let i = options.messages.indexOf(m) - 1; i >= 0; i--) {
+            const prev = options.messages[i];
+            if (prev.role === 'assistant' && prev.tool_calls) {
+              const call = prev.tool_calls.find(tc => tc.id === m.tool_call_id);
+              if (call) {
+                toolName = call.function.name;
+                break;
+              }
+            }
+          }
+
           return {
             role: 'toolResult',
             toolCallId: m.tool_call_id,
-            toolName: 'unknown', // OpenAI doesn't store tool name in tool result
+            toolName,
             content: [{ type: 'text', text: m.content as string }],
             isError: false,
             timestamp,

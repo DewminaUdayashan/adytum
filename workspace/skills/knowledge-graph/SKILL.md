@@ -2,6 +2,7 @@
 name: knowledge-graph
 description: provides tools to query and update the project's knowledge graph (brain).
 version: 1.0.0
+always: true
 ---
 
 # Knowledge Graph Skill

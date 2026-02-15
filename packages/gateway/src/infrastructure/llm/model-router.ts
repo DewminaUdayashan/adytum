@@ -3,6 +3,7 @@
  * @description Implements infrastructure adapters and external integrations.
  */
 
+import { singleton, inject } from 'tsyringe';
 import OpenAI from 'openai';
 import type { ModelRole, TokenUsage, AdytumConfig, ModelConfig } from '@adytum/shared';
 import { LLMClient, isLiteLLMAvailable } from './llm-client.js';
@@ -36,6 +37,7 @@ export type ModelRuntimeStatus = {
  *      b. Otherwise → call providers directly.
  *   3. If all models in the chain fail, throw an error.
  */
+@singleton()
 export class ModelRouter {
   private openaiClient: OpenAI;
   private llmClient: LLMClient;
@@ -52,7 +54,7 @@ export class ModelRouter {
   private modelRuntimeStatus = new Map<string, ModelRuntimeStatus>();
   private routing: AdytumConfig['routing'];
 
-  constructor(config: ModelRouterConfig) {
+  constructor(@inject("RouterConfig") config: any) {
     this.litellmBaseUrl = config.litellmBaseUrl;
     this.modelChains = config.modelChains || { thinking: [], fast: [], local: [] };
     this.taskOverrides = config.taskOverrides || {};

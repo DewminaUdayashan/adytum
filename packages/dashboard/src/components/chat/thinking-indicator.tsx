@@ -172,7 +172,13 @@ export function ThinkingIndicator({
                     })}
                   </span>
                   <Icon className={clsx('mt-0.5 h-3 w-3 shrink-0', style.color)} />
-                  <span className="break-words text-text-secondary">{activity.text}</span>
+                  <div className="break-words text-text-secondary min-w-0 flex-1">
+                    {activity.text.includes('![') || activity.text.includes('](') ? (
+                      <MarkdownRenderer content={activity.text} variant="assistant" className="text-[11px]" />
+                    ) : (
+                      <span>{activity.text}</span>
+                    )}
+                  </div>
                 </div>
               );
             })
@@ -182,6 +188,8 @@ export function ThinkingIndicator({
     </div>
   );
 }
+
+import { MarkdownRenderer } from './markdown-renderer';
 
 function formatElapsed(seconds: number): string {
   const mins = Math.floor(seconds / 60);

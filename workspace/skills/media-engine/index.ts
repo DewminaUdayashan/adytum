@@ -4,12 +4,12 @@
  */
 
 import { z } from 'zod';
-import { container } from 'tsyringe';
+import { container } from '../../../packages/gateway/src/container.js';
 import AdmZip from 'adm-zip';
 import { join, basename, extname } from 'node:path';
 import { mkdirSync, existsSync } from 'node:fs';
-import { ConfigService } from '../../packages/gateway/src/infrastructure/config/config-service.js';
-import { logger } from '../../packages/gateway/src/logger.js';
+import { ConfigService } from '../../../packages/gateway/src/infrastructure/config/config-service.js';
+import { logger } from '../../../packages/gateway/src/logger.js';
 
 export default {
   tools: [
