@@ -178,7 +178,7 @@ export class LLMClient {
           for (let i = options.messages.indexOf(m) - 1; i >= 0; i--) {
             const prev = options.messages[i];
             if (prev.role === 'assistant' && prev.tool_calls) {
-              const call = prev.tool_calls.find(tc => tc.id === m.tool_call_id);
+              const call = prev.tool_calls.find((tc) => tc.id === m.tool_call_id);
               if (call) {
                 toolName = call.function.name;
                 break;
@@ -193,6 +193,10 @@ export class LLMClient {
             content: [{ type: 'text', text: m.content as string }],
             isError: false,
             timestamp,
+            // Harmonize metadata to prevent pi-ai from flagging mismatch
+            api: piModel.api,
+            provider: piModel.provider,
+            model: piModel.id,
           };
         }
 
@@ -223,7 +227,8 @@ export class LLMClient {
       // Map result to LLMChatResult (OpenAI style)
       const choice: OpenAI.ChatCompletionMessage = {
         role: 'assistant',
-        content: typeof result.content === 'string' ? result.content : '', // pi-ai might returns block array
+        content:
+          typeof result.content === 'string' ? sanitizeHistoricalContext(result.content) : '',
         refusal: null,
       };
 
@@ -235,7 +240,7 @@ export class LLMClient {
           .filter((c: any) => c.type === 'text')
           .map((c: any) => c.text)
           .join('');
-        choice.content = text;
+        choice.content = sanitizeHistoricalContext(text);
 
         const toolCalls = result.content
           .filter((c: any) => c.type === 'toolCall')
@@ -271,6 +276,15 @@ export class LLMClient {
   }
 
   // Helper methods removed (chatAnthropic, chatOpenAICompatible, etc)
+}
+
+/**
+ * Strips [Historical context: ...] warnings injected by pi-ai during model transitions.
+ */
+function sanitizeHistoricalContext(content: string): string {
+  if (!content) return content;
+  // Match one or more occurrences of the historical context block
+  return content.replace(/\[Historical context:.*?\]/gs, '').trim();
 }
 
 // ─── Proxy Detection ──────────────────────────────────────────

@@ -54,7 +54,7 @@ export class ModelRouter {
   private modelRuntimeStatus = new Map<string, ModelRuntimeStatus>();
   private routing: AdytumConfig['routing'];
 
-  constructor(@inject("RouterConfig") config: any) {
+  constructor(@inject('RouterConfig') config: any) {
     this.litellmBaseUrl = config.litellmBaseUrl;
     this.modelChains = config.modelChains || { thinking: [], fast: [], local: [] };
     this.taskOverrides = config.taskOverrides || {};
@@ -492,7 +492,8 @@ export class ModelRouter {
       msg.includes('temporary') ||
       msg.includes('unavailable') ||
       msg.includes('fetch failed') ||
-      msg.includes('network')
+      msg.includes('network') ||
+      msg.includes('empty response')
     );
   }
 
@@ -656,6 +657,13 @@ export class ModelRouter {
     const message = completion.choices[0]?.message;
     if (!message) throw new Error('No response from model');
 
+    // Validation: Empty response (no content, no tools) is treated as a retriable failure
+    const hasContent = (message.content || '').trim().length > 0;
+    const hasTools = (message.tool_calls || []).length > 0;
+    if (!hasContent && !hasTools) {
+      throw new Error(`[${modelConfig.model}] Empty response from model (no content, no tools)`);
+    }
+
     const usage: TokenUsage = {
       model: `${modelConfig.provider}/${modelConfig.model}`,
       role,
@@ -689,6 +697,13 @@ export class ModelRouter {
       temperature: options.temperature ?? 0.7,
       maxTokens: options.maxTokens,
     });
+
+    // Validation: Empty response (no content, no tools) is treated as a retriable failure
+    const hasContent = (result.message.content || '').trim().length > 0;
+    const hasTools = (result.message.tool_calls || []).length > 0;
+    if (!hasContent && !hasTools) {
+      throw new Error(`[${modelConfig.model}] Empty response from model (no content, no tools)`);
+    }
 
     const usage: TokenUsage = {
       model: `${modelConfig.provider}/${modelConfig.model}`,

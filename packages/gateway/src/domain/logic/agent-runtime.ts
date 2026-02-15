@@ -69,7 +69,7 @@ export class AgentRuntime extends EventEmitter {
    * Creates a new AgentRuntime instance.
    * @param config - Configuration object containing dependencies and settings.
    */
-  constructor(@inject("RuntimeConfig") config: any) {
+  constructor(@inject('RuntimeConfig') config: any) {
     super();
     this.config = config;
     this.buildSystemPrompt();
@@ -91,22 +91,22 @@ export class AgentRuntime extends EventEmitter {
     const key = `${sessionId}:${workspaceId || 'global'}`;
     if (!this.contexts.has(key)) {
       const context = new ContextManager(this.config.contextSoftLimit);
-      
+
       // Construct dynamic system prompt for this workspace
       const systemPrompt = this.buildWorkspaceSystemPrompt(workspaceId);
       context.setSystemPrompt(systemPrompt);
 
       // On-demand seeding from persistent history
       if (this.config.memoryDb) {
-        const history = this.config.memoryDb.getRecentMessages(40, { 
-            sessionId, 
-            workspaceId: workspaceId || undefined // undefined means all, null means exactly null
+        const history = this.config.memoryDb.getRecentMessages(40, {
+          sessionId,
+          workspaceId: workspaceId || undefined, // undefined means all, null means exactly null
         });
         for (const m of history) {
           context.addMessage({ role: m.role as any, content: m.content });
         }
       }
-      
+
       this.contexts.set(key, context);
     }
     return this.contexts.get(key)!;
@@ -143,8 +143,8 @@ export class AgentRuntime extends EventEmitter {
     overrides?: { modelRole?: string; modelId?: string; workspaceId?: string },
   ): Promise<AgentTurnResult> {
     const isBackgroundSession = this.isBackgroundSession(sessionId);
-    const context = isBackgroundSession 
-      ? this.createIsolatedContext() 
+    const context = isBackgroundSession
+      ? this.createIsolatedContext()
       : this.getOrCreateContext(sessionId, overrides?.workspaceId);
 
     // Refresh system prompt if it's a workspace session to ensure latest graph knowledge
@@ -154,16 +154,19 @@ export class AgentRuntime extends EventEmitter {
 
     // Inject workspace-specific graph context if available
     if (overrides?.workspaceId && this.config.graphContext) {
-        const knowledge = this.config.graphContext.getRelatedContext(userMessage, overrides.workspaceId);
-        if (knowledge) {
-            context.addMessage({ 
-              role: 'system', 
-              content: `## Workspace Neural Network Map
+      const knowledge = this.config.graphContext.getRelatedContext(
+        userMessage,
+        overrides.workspaceId,
+      );
+      if (knowledge) {
+        context.addMessage({
+          role: 'system',
+          content: `## Workspace Neural Network Map
 The following nodes/edges from the workspace are currently active in your attention:
 
-${knowledge}` 
-            });
-        }
+${knowledge}`,
+        });
+      }
     }
 
     const traceId = uuid();
@@ -186,7 +189,14 @@ ${knowledge}`
     // Auto-extract simple user memory facts (e.g., nickname) and store persistently
     const extracted = this.extractUserMemory(userMessage);
     if (extracted && this.config.memoryStore) {
-      this.config.memoryStore.add(extracted, 'user', ['auto'], undefined, 'user_fact', overrides?.workspaceId);
+      this.config.memoryStore.add(
+        extracted,
+        'user',
+        ['auto'],
+        undefined,
+        'user_fact',
+        overrides?.workspaceId,
+      );
     }
 
     // Prepare memory context for this turn
@@ -421,19 +431,27 @@ ${knowledge}`
 
         // Stream the response
         if (message.content) {
-          auditLogger.logThinking(traceId, message.content);
+          const sanitizedThought = message.content
+            .replace(/\[Historical context:.*?\]/gs, '')
+            .trim();
+          auditLogger.logThinking(traceId, sanitizedThought);
           this.emit('stream', {
             traceId,
             sessionId,
             streamType: 'response',
-            delta: message.content,
+            delta: sanitizedThought,
           });
         }
 
         // Add assistant response to context
         context.addMessage({ role: 'assistant', content: finalResponse });
         if (this.config.memoryDb && !isBackgroundSession) {
-          this.config.memoryDb.addMessage(sessionId, 'assistant', finalResponse, overrides?.workspaceId);
+          this.config.memoryDb.addMessage(
+            sessionId,
+            'assistant',
+            finalResponse,
+            overrides?.workspaceId,
+          );
           this.config.memoryDb.addActionLog(
             traceId,
             'message_sent',
@@ -671,8 +689,8 @@ ${knowledge}`
 
     return [
       '## Runtime Autonomy Guard',
-      'Continue autonomously. Do not ask the user where to create files or whether to proceed for routine implementation work.',
-      'Infer project structure using tools, choose the best location yourself, implement end-to-end, and return only after concrete code changes are complete.',
+      'Continue autonomously. Do not ask for confirmation or "where to look" for routine work.',
+      'Ambiguity is an opportunity for discovery. Use your tools to find the answer (search code, browse docs, explore filesystem) and complete the task end-to-end.',
     ].join('\n');
   }
 
@@ -748,6 +766,10 @@ ${knowledge}`
       /would you like me to/i,
       /can you confirm/i,
       /where do you want/i,
+      /how (should|would) you (like|want) me/i,
+      /is it (okay|fine) if I/i,
+      /i'm not sure where/i,
+      /can you tell me/i,
       /what path should/i,
       /need to know where to create/i,
       /tell me which .* is related to/i,
@@ -757,7 +779,11 @@ ${knowledge}`
     }
 
     // Generic catch: coding-intent question that asks user to locate package/module/path.
-    return /\?/.test(normalized) && /which|where|related to|need to know/.test(normalized) && /(package|module|path|directory|folder|file)/.test(normalized);
+    return (
+      /\?/.test(normalized) &&
+      /which|where|related to|need to know/.test(normalized) &&
+      /(package|module|path|directory|folder|file)/.test(normalized)
+    );
   }
 
   private findLastFileWriteIndex(toolCalls: ToolCall[]): number {
@@ -770,9 +796,7 @@ ${knowledge}`
   }
 
   private looksLikeValidationCommand(command: string): boolean {
-    return /\b(test|tests|build|lint|typecheck|vitest|jest|tsc|npm run|pnpm|yarn)\b/i.test(
-      command,
-    );
+    return /\b(test|tests|build|lint|typecheck|vitest|jest|tsc|npm run|pnpm|yarn)\b/i.test(command);
   }
 
   /**
@@ -816,9 +840,10 @@ ${skills}
 - **Autonomous Delivery Contract (software tasks)**:
   1. Discover project structure yourself.
   2. Implement the requested feature/fix end-to-end (including required routing/navigation/import wiring/tests/docs when relevant).
-  3. Do not stop at a draft/snippet; update real files.
-  4. Do not ask where to create files unless there is irreducible ambiguity.
-  5. After edits, run at least one relevant validation command (tests/build/lint/typecheck) when possible, or explain why it could not be run.
+  3. **Ambiguity is Opportunity**: Do not say "I don't know where X is" or "Tell me where to add Y". Use your tools (file_search, browser_open, shell_execute) to DISCOVER the context yourself.
+  4. Do not stop at a draft/snippet; update real files.
+  5. Do not ask where to create files unless there is irreducible ambiguity.
+  6. After edits, run at least one relevant validation command (tests/build/lint/typecheck) when possible, or explain why it could not be run.
 - If the user asks for a daily/weekly task, use the "cron_schedule" tool immediately. Do not say "I can set up a cron job"—just do it and confirm it's done.
 - **Resilience**: Ignore transient errors (rate limits, timeouts) in your message history. Never base your current capability on previous failures. Always attempt requested actions as if for the first time.
 - Explain your reasoning transparently but briefly.
@@ -839,13 +864,13 @@ If the tool result contains a "Preview" or markdown string, copy it exactly into
    */
   private buildWorkspaceSystemPrompt(workspaceId?: string): string {
     let prompt = this.baseSystemPrompt;
-    
-    if (workspaceId && this.config.graphStore) {
-        const ws = this.config.graphStore.getWorkspace(workspaceId);
-        const wsName = ws?.name || workspaceId;
-        const wsPath = ws?.path || 'unknown';
 
-        prompt += `
+    if (workspaceId && this.config.graphStore) {
+      const ws = this.config.graphStore.getWorkspace(workspaceId);
+      const wsName = ws?.name || workspaceId;
+      const wsPath = ws?.path || 'unknown';
+
+      prompt += `
 ## Workspace Dominance Instructions
 You are currently operating in workspace "${wsName}" (${workspaceId}).
 - **WORKSPACE ROOT**: The absolute path for this workspace is "${wsPath}".
@@ -856,8 +881,8 @@ You are currently operating in workspace "${wsName}" (${workspaceId}).
 - **WORKSPACE ROOT**: The current working directory is the workspace root. Use "." to list root contents.
 `;
     } else {
-        const rootPath = this.config.workspacePath || 'unknown';
-        prompt += `
+      const rootPath = this.config.workspacePath || 'unknown';
+      prompt += `
 ## General Awareness Mode
 You are in the common channel (Core Workspace).
 - **ROOT**: Your default workspace root is "${rootPath}".
@@ -886,22 +911,22 @@ You are in the common channel (Core Workspace).
     this.buildSystemPrompt();
     // Update all existing contexts with the new prompt
     for (const context of this.contexts.values()) {
-        context.setSystemPrompt(this.baseSystemPrompt);
+      context.setSystemPrompt(this.baseSystemPrompt);
     }
   }
 
   /** Clear conversation history for a specific session. */
   resetContext(sessionId?: string): void {
     if (sessionId) {
-        // Clear all contexts matching this sessionId (across different workspaces)
-        for (const [key, context] of this.contexts.entries()) {
-            if (key.startsWith(`${sessionId}:`)) {
-                context.clear();
-                this.contexts.delete(key);
-            }
+      // Clear all contexts matching this sessionId (across different workspaces)
+      for (const [key, context] of this.contexts.entries()) {
+        if (key.startsWith(`${sessionId}:`)) {
+          context.clear();
+          this.contexts.delete(key);
         }
+      }
     } else {
-        this.contexts.clear();
+      this.contexts.clear();
     }
     this.buildSystemPrompt();
   }

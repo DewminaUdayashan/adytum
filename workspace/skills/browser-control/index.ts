@@ -111,7 +111,7 @@ const PluginConfigSchema = z.object({
   launchTimeoutMs: z.number().int().min(1000).max(120000).default(20000),
   actionTimeoutMs: z.number().int().min(500).max(60000).default(10000),
   navigationTimeoutMs: z.number().int().min(1000).max(180000).default(30000),
-  defaultWaitMs: z.number().int().min(0).max(15000).default(500),
+  defaultWaitMs: z.number().int().min(0).max(15000).default(1200),
   slowMoMs: z.number().int().min(0).max(2000).default(0),
   allowMutations: z.boolean().default(true),
   allowArbitraryEval: z.boolean().default(true),
@@ -125,10 +125,7 @@ const BrowserOpenSchema = z.object({
   browser: z.enum(SUPPORTED_BROWSERS).optional(),
   newTab: z.boolean().optional().describe('Open in a new tab within the same browser session.'),
   waitMs: z.number().int().min(0).max(15000).optional().describe('Wait after navigation.'),
-  waitUntil: z
-    .enum(LOAD_STATES)
-    .default('domcontentloaded')
-    .describe('Navigation readiness target.'),
+  waitUntil: z.enum(LOAD_STATES).default('networkidle').describe('Navigation readiness target.'),
   timeoutMs: z.number().int().min(1000).max(180000).optional().describe('Navigation timeout.'),
 });
 
@@ -168,6 +165,12 @@ const BrowserExtractSchema = z.object({
 const BrowserCloseSchema = z.object({
   browser: z.enum(SUPPORTED_BROWSERS).optional(),
   all: z.boolean().default(false).describe('Close all browser sessions for this skill.'),
+});
+
+const BrowserScrollSchema = z.object({
+  direction: z.enum(['up', 'down', 'top', 'bottom']).default('down'),
+  amount: z.number().int().min(100).max(5000).optional().describe('Pixels to scroll.'),
+  browser: z.enum(SUPPORTED_BROWSERS).optional(),
 });
 
 const sessions = new Map<string, BrowserSession>();
@@ -492,6 +495,44 @@ const browserControlPlugin = {
     });
 
     api.registerTool({
+      name: 'browser_scroll',
+      description: 'Scroll the active page up, down, or to top/bottom.',
+      parameters: BrowserScrollSchema,
+      execute: async (rawArgs: unknown) => {
+        const parsedArgs = parseToolArgs(BrowserScrollSchema, rawArgs);
+        if (!parsedArgs.success) return parsedArgs.response;
+
+        const args = parsedArgs.data;
+        const session = getActionSession(args.browser, config.defaultBrowser);
+        if (!session) return noActiveSessionResponse();
+
+        try {
+          const result = await runStructuredPageScript(
+            session.page,
+            [
+              `const direction = ${JSON.stringify(args.direction)};`,
+              `const amount = ${args.amount ?? 600};`,
+              'if (direction === "top") { window.scrollTo(0, 0); }',
+              'else if (direction === "bottom") { window.scrollTo(0, document.body.scrollHeight); }',
+              'else if (direction === "up") { window.scrollBy(0, -amount); }',
+              'else { window.scrollBy(0, amount); }',
+              'return { scrolled: true, direction, amount: (direction === "top" || direction === "bottom") ? "max" : amount };',
+            ].join('\n'),
+          );
+          await sleep(400); // Small settle for visual effects
+          activeSessionKey = session.target.key;
+          return {
+            ok: true,
+            browser: session.target.requested,
+            ...asRecord(result),
+          };
+        } catch (err: unknown) {
+          return normalizeBrowserError(err, session.target, 'scroll');
+        }
+      },
+    });
+
+    api.registerTool({
       name: 'browser_close',
       description: 'Close one browser session or all sessions owned by browser-control skill.',
       parameters: BrowserCloseSchema,
@@ -694,7 +735,7 @@ async function readPageSnapshot(page: PageInstance): Promise<{
     };
   }, undefined);
 
-  const structured = isRecord(snapshot) ? snapshot : {};
+  const structured: any = isRecord(snapshot) ? snapshot : {};
   return {
     title: await page.title(),
     url: page.url(),
@@ -793,7 +834,7 @@ function isBrowserType(value: unknown): value is BrowserType {
 function normalizeBrowserError(
   err: unknown,
   target: BrowserTarget,
-  action: 'open' | 'click' | 'type' | 'eval' | 'extract',
+  action: 'open' | 'click' | 'type' | 'eval' | 'extract' | 'scroll',
 ) {
   const message = errorMessage(err);
   if (looksLikeMissingPlaywright(message)) {
