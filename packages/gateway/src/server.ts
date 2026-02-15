@@ -22,6 +22,7 @@ import { healthRoutes } from './api/routes/health.routes.js';
 import { agentRoutes } from './api/routes/agent.routes.js';
 import { systemRoutes } from './api/routes/system.routes.js';
 import { taskRoutes } from './api/routes/task.routes.js';
+import { knowledgeRoutes } from './api/routes/knowledge.routes.js';
 
 import { tokenTracker } from './domain/logic/token-tracker.js';
 import { auditLogger } from './security/audit-logger.js';
@@ -103,6 +104,7 @@ export class GatewayServer extends EventEmitter {
     await this.app.register(agentRoutes);
     await this.app.register(systemRoutes);
     await this.app.register(taskRoutes);
+    await this.app.register(knowledgeRoutes);
 
     this.app.get('/api/models/runtime-status', async () => {
       return {
@@ -156,6 +158,8 @@ export class GatewayServer extends EventEmitter {
     kind: string;
     description: string;
     meta?: Record<string, unknown>;
+    sessionId?: string;
+    workspaceId?: string;
   }): Promise<boolean> {
     const id = crypto.randomUUID();
     const promise = this.approvals.requestManual(id, payload);
@@ -166,6 +170,8 @@ export class GatewayServer extends EventEmitter {
       kind: payload.kind,
       description: payload.description,
       meta: payload.meta || {},
+      sessionId: payload.sessionId,
+      workspaceId: payload.workspaceId,
       expiresAt: Date.now() + 60_000,
     } as any);
 

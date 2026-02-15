@@ -1,0 +1,12 @@
+{
+  "id": "nano-banana",
+  "name": "Nano Banana",
+  "description": "AI-driven image generation power by Google Gemini.",
+  "version": "1.0.0",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "model": { "type": "string", "default": "gemini-2.0-flash-image" }
+    }
+  }
+}

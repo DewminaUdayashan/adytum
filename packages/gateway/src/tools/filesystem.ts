@@ -21,12 +21,16 @@ export function createFileSystemTools(permissionManager: PermissionManager): Too
       description: 'Read the contents of a file. Paths are relative to the workspace root.',
       parameters: z.object({
         path: z.string().describe('File path relative to the workspace root'),
-
         encoding: z.string().default('utf-8').describe('File encoding'),
+        workspaceId: z.string().optional().describe('Internal workspace ID'),
       }),
       execute: async (args: any) => {
-        const { path, encoding } = args as { path: string; encoding: string };
-        const resolved = permissionManager.validatePath(path, 'read');
+        const { path, encoding, workspaceId } = args as {
+          path: string;
+          encoding: string;
+          workspaceId?: string;
+        };
+        const resolved = permissionManager.validatePath(path, 'read', workspaceId);
         const content = readFileSync(resolved, encoding as BufferEncoding);
         return {
           path: resolved,
@@ -42,17 +46,18 @@ export function createFileSystemTools(permissionManager: PermissionManager): Too
         'Write content to a file. Creates parent directories if needed. Paths are relative to the workspace root.',
       parameters: z.object({
         path: z.string().describe('File path relative to the workspace root'),
-
         content: z.string().describe('Content to write'),
         createDirs: z.boolean().default(true).describe('Create parent directories if missing'),
+        workspaceId: z.string().optional().describe('Internal workspace ID'),
       }),
       execute: async (args: any) => {
-        const { path, content, createDirs } = args as {
+        const { path, content, createDirs, workspaceId } = args as {
           path: string;
           content: string;
           createDirs: boolean;
+          workspaceId?: string;
         };
-        const resolved = permissionManager.validatePath(path, 'write');
+        const resolved = permissionManager.validatePath(path, 'write', workspaceId);
 
         if (createDirs) {
           const { dirname } = await import('node:path');
@@ -71,17 +76,18 @@ export function createFileSystemTools(permissionManager: PermissionManager): Too
         path: z
           .string()
           .describe('Directory path relative to the workspace root, or "." for workspace root'),
-
         recursive: z.boolean().default(false).describe('List recursively'),
         maxDepth: z.number().default(3).describe('Max depth for recursive listing'),
+        workspaceId: z.string().optional().describe('Internal workspace ID'),
       }),
       execute: async (args: any) => {
-        const { path, recursive, maxDepth } = args as {
+        const { path, recursive, maxDepth, workspaceId } = args as {
           path: string;
           recursive: boolean;
           maxDepth: number;
+          workspaceId?: string;
         };
-        const resolved = permissionManager.validatePath(path, 'read');
+        const resolved = permissionManager.validatePath(path, 'read', workspaceId);
 
         /**
          * Executes list dir.
@@ -118,19 +124,20 @@ export function createFileSystemTools(permissionManager: PermissionManager): Too
         'Search for text within files in a directory. Paths are relative to the workspace root.',
       parameters: z.object({
         path: z.string().describe('Directory to search in, relative to the workspace root'),
-
         query: z.string().describe('Text or regex pattern to search for'),
         extensions: z.array(z.string()).optional().describe('File extensions to include'),
         maxResults: z.number().default(20).describe('Maximum number of results'),
+        workspaceId: z.string().optional().describe('Internal workspace ID'),
       }),
       execute: async (args: any) => {
-        const { path, query, extensions, maxResults } = args as {
+        const { path, query, extensions, maxResults, workspaceId } = args as {
           path: string;
           query: string;
           extensions?: string[];
           maxResults: number;
+          workspaceId?: string;
         };
-        const resolved = permissionManager.validatePath(path, 'read');
+        const resolved = permissionManager.validatePath(path, 'read', workspaceId);
         const results: Array<{ file: string; line: number; content: string }> = [];
         const regex = new RegExp(query, 'gi');
 

@@ -14,6 +14,7 @@ import {
   MessageCircle,
   Coins,
   Shield,
+  Layers,
   Brain,
   Clock,
   Puzzle,
@@ -24,6 +25,7 @@ import {
 const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: Brain, group: 'main' },
   { href: '/chat', label: 'Chat Interface', icon: MessageCircle, group: 'main' },
+  { href: '/workspaces', label: 'Workspaces', icon: Layers, group: 'main' },
   { href: '/tasks', label: 'Scheduled Tasks', icon: Clock, group: 'main' },
   { href: '/console', label: 'Console Stream', icon: Terminal, group: 'tools' },
   { href: '/memories', label: 'Logs & Memories', icon: History, group: 'tools' },

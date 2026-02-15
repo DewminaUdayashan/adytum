@@ -21,6 +21,7 @@
     "@fastify/websocket": "^11.0.0",
     "@inquirer/prompts": "^7.0.0",
     "@mariozechner/pi-ai": "^0.52.9",
+    "adm-zip": "^0.5.16",
     "better-sqlite3": "^11.7.0",
     "chalk": "^5.4.0",
     "commander": "^13.0.0",
@@ -45,6 +46,7 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "@types/adm-zip": "^0.5.7",
     "@types/better-sqlite3": "^7.6.0",
     "@types/figlet": "^1.7.0",
     "@types/gradient-string": "^1.1.0",

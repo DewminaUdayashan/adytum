@@ -17,11 +17,15 @@ import { EventEmitter } from 'node:events';
 import type { MemoryStore } from '../../infrastructure/repositories/memory-store.js';
 import type { MemoryDB } from '../../infrastructure/repositories/memory-db.js';
 
+import { GraphContext } from '../knowledge/graph-context.js';
+import { GraphStore } from '../knowledge/graph-store.js';
+
 export interface AgentRuntimeConfig {
   modelRouter: ModelRouter;
   toolRegistry: ToolRegistry;
   soulEngine: SoulEngine;
   skillLoader: SkillLoader;
+  graphContext?: GraphContext;
   contextSoftLimit: number;
   maxIterations: number;
   defaultModelRole: ModelRole;
@@ -30,7 +34,11 @@ export interface AgentRuntimeConfig {
   memoryStore?: MemoryStore;
   memoryTopK?: number;
   memoryDb?: MemoryDB;
-  onApprovalRequired?: (description: string) => Promise<boolean>;
+  graphStore?: GraphStore;
+  onApprovalRequired?: (
+    description: string,
+    context: { sessionId: string; workspaceId?: string },
+  ) => Promise<boolean>;
 }
 
 export interface AgentTurnResult {
@@ -52,8 +60,8 @@ export interface AgentTurnResult {
  */
 export class AgentRuntime extends EventEmitter {
   private config: AgentRuntimeConfig;
-  private context: ContextManager;
-  private systemPromptText: string = '';
+  private contexts: Map<string, ContextManager> = new Map();
+  private baseSystemPrompt: string = '';
 
   /**
    * Creates a new AgentRuntime instance.
@@ -62,7 +70,6 @@ export class AgentRuntime extends EventEmitter {
   constructor(config: AgentRuntimeConfig) {
     super();
     this.config = config;
-    this.context = new ContextManager(config.contextSoftLimit);
     this.buildSystemPrompt();
   }
 
@@ -75,15 +82,44 @@ export class AgentRuntime extends EventEmitter {
   }
 
   /**
-   * Seeds the agent's context with a history of messages.
-   * Useful for restoring state after a restart.
-   * @param messages - Array of role/content pairs to add to history.
+   * Retrieves or creates an isolated context for a given session and workspace.
+   * Scoped by sessionId and workspaceId to ensure strict privacy boundaries.
+   */
+  private getOrCreateContext(sessionId: string, workspaceId?: string): ContextManager {
+    const key = `${sessionId}:${workspaceId || 'global'}`;
+    if (!this.contexts.has(key)) {
+      const context = new ContextManager(this.config.contextSoftLimit);
+      
+      // Construct dynamic system prompt for this workspace
+      const systemPrompt = this.buildWorkspaceSystemPrompt(workspaceId);
+      context.setSystemPrompt(systemPrompt);
+
+      // On-demand seeding from persistent history
+      if (this.config.memoryDb) {
+        const history = this.config.memoryDb.getRecentMessages(40, { 
+            sessionId, 
+            workspaceId: workspaceId || undefined // undefined means all, null means exactly null
+        });
+        for (const m of history) {
+          context.addMessage({ role: m.role as any, content: m.content });
+        }
+      }
+      
+      this.contexts.set(key, context);
+    }
+    return this.contexts.get(key)!;
+  }
+
+  /**
+   * Seeds the agent's context (legacy support).
    */
   seedContext(
     messages: Array<{ role: OpenAI.ChatCompletionMessageParam['role']; content: string }>,
   ): void {
+    // Legacy seeding now targets a 'bootstrap' session or is ignored if session-first logic is used.
+    const context = this.getOrCreateContext('bootstrap');
     for (const m of messages) {
-      this.context.addMessage({
+      context.addMessage({
         role: m.role,
         content: m.content,
       } as OpenAI.ChatCompletionMessageParam);
@@ -102,20 +138,31 @@ export class AgentRuntime extends EventEmitter {
   async run(
     userMessage: string,
     sessionId: string,
-    overrides?: { modelRole?: string; modelId?: string },
+    overrides?: { modelRole?: string; modelId?: string; workspaceId?: string },
   ): Promise<AgentTurnResult> {
     const isBackgroundSession = this.isBackgroundSession(sessionId);
-    if (!isBackgroundSession && this.hasHeartbeatPromptLeakage()) {
-      this.context.clear();
-      this.context.setSystemPrompt(this.systemPromptText);
-      this.emit('stream', {
-        traceId: uuid(),
-        sessionId,
-        streamType: 'status',
-        delta: 'Recovered from background-task prompt leakage by resetting volatile context.',
-      });
+    const context = isBackgroundSession 
+      ? this.createIsolatedContext() 
+      : this.getOrCreateContext(sessionId, overrides?.workspaceId);
+
+    // Refresh system prompt if it's a workspace session to ensure latest graph knowledge
+    if (overrides?.workspaceId) {
+      context.setSystemPrompt(this.buildWorkspaceSystemPrompt(overrides.workspaceId));
     }
-    const context = isBackgroundSession ? this.createIsolatedContext() : this.context;
+
+    // Inject workspace-specific graph context if available
+    if (overrides?.workspaceId && this.config.graphContext) {
+        const knowledge = this.config.graphContext.getRelatedContext(userMessage, overrides.workspaceId);
+        if (knowledge) {
+            context.addMessage({ 
+              role: 'system', 
+              content: `## Workspace Neural Network Map
+The following nodes/edges from the workspace are currently active in your attention:
+
+${knowledge}` 
+            });
+        }
+    }
 
     const traceId = uuid();
     const trace: Trace = {
@@ -131,13 +178,13 @@ export class AgentRuntime extends EventEmitter {
     // Add user message to context
     context.addMessage({ role: 'user', content: userMessage });
     if (this.config.memoryDb && !isBackgroundSession) {
-      this.config.memoryDb.addMessage(sessionId, 'user', userMessage);
+      this.config.memoryDb.addMessage(sessionId, 'user', userMessage, overrides?.workspaceId);
     }
 
     // Auto-extract simple user memory facts (e.g., nickname) and store persistently
     const extracted = this.extractUserMemory(userMessage);
     if (extracted && this.config.memoryStore) {
-      this.config.memoryStore.add(extracted, 'user', ['auto'], undefined, 'user_fact');
+      this.config.memoryStore.add(extracted, 'user', ['auto'], undefined, 'user_fact', overrides?.workspaceId);
     }
 
     // Prepare memory context for this turn
@@ -160,7 +207,7 @@ export class AgentRuntime extends EventEmitter {
         const roleToUse = overrides?.modelRole || this.config.defaultModelRole;
 
         // Call the model
-        auditLogger.logModelCall(traceId, roleToUse, this.context.getMessageCount());
+        auditLogger.logModelCall(traceId, roleToUse, context.getMessageCount());
         if (this.config.memoryDb) {
           this.config.memoryDb.addActionLog(
             traceId,
@@ -233,7 +280,11 @@ export class AgentRuntime extends EventEmitter {
             const toolCall: ToolCall = {
               id: tc.id,
               name: tc.function.name,
-              arguments: JSON.parse(tc.function.arguments),
+              arguments: {
+                ...JSON.parse(tc.function.arguments),
+                sessionId,
+                workspaceId: overrides?.workspaceId,
+              },
             };
 
             allToolCalls.push(toolCall);
@@ -265,6 +316,7 @@ export class AgentRuntime extends EventEmitter {
             if (toolDef?.requiresApproval && this.config.onApprovalRequired) {
               const approved = await this.config.onApprovalRequired(
                 `Tool "${toolCall.name}" wants to execute: ${JSON.stringify(toolCall.arguments)}`,
+                { sessionId, workspaceId: overrides?.workspaceId },
               );
               if (!approved) {
                 context.addMessage({
@@ -331,7 +383,7 @@ export class AgentRuntime extends EventEmitter {
         // Add assistant response to context
         context.addMessage({ role: 'assistant', content: finalResponse });
         if (this.config.memoryDb && !isBackgroundSession) {
-          this.config.memoryDb.addMessage(sessionId, 'assistant', finalResponse);
+          this.config.memoryDb.addMessage(sessionId, 'assistant', finalResponse, overrides?.workspaceId);
           this.config.memoryDb.addActionLog(
             traceId,
             'message_sent',
@@ -567,7 +619,7 @@ export class AgentRuntime extends EventEmitter {
 ## Tools
 You have access to the following native tools. Use them when needed to accomplish the user's goals.
 Always explain what you're doing before calling a tool.
-All file and directory paths are relative to your workspace root${this.config.workspacePath ? ` (${this.config.workspacePath})` : ''}.
+All file and directory paths are relative to your workspace root.
 Use "." to refer to the workspace root itself.
 Do NOT use absolute paths unless explicitly asked.
 
@@ -599,8 +651,41 @@ ${skills}
 - Use the "cron_schedule" tool to create your own future triggers.
 `;
 
-    this.systemPromptText = systemPrompt;
-    this.context.setSystemPrompt(systemPrompt);
+    this.baseSystemPrompt = systemPrompt;
+  }
+
+  /**
+   * Builds a workspace-specific system prompt by overlaying workspace-dominance instructions.
+   */
+  private buildWorkspaceSystemPrompt(workspaceId?: string): string {
+    let prompt = this.baseSystemPrompt;
+    
+    if (workspaceId && this.config.graphStore) {
+        const ws = this.config.graphStore.getWorkspace(workspaceId);
+        const wsName = ws?.name || workspaceId;
+        const wsPath = ws?.path || 'unknown';
+
+        prompt += `
+## Workspace Dominance Instructions
+You are currently operating in workspace "${wsName}" (${workspaceId}).
+- **WORKSPACE ROOT**: The absolute path for this workspace is "${wsPath}".
+- **DIRECT CONTROL**: You have FULL CONTROL and direct access to all files in this directory. 
+- **AUTONOMOUS EXPLORATION**: Your FIRST PRIORITY is to understand the project structure. 
+- **PROACTIVITY**: If a user asks about the project or asks you to do something, DO NOT ASK FOR INFO. Immediately use "list_dir" and "read_file" to figure it out yourself.
+- **NO HALLUCINATING RESTRICTIONS**: DO NOT claim you lack access. 
+- **WORKSPACE ROOT**: The current working directory is the workspace root. Use "." to list root contents.
+`;
+    } else {
+        const rootPath = this.config.workspacePath || 'unknown';
+        prompt += `
+## General Awareness Mode
+You are in the common channel (Core Workspace).
+- **ROOT**: Your default workspace root is "${rootPath}".
+- **MODE**: No specific project workspace is active. Use your tools to find information across the system if needed, but remember you are in a general-purpose chat mode.
+`;
+    }
+
+    return prompt;
   }
 
   private isBackgroundSession(sessionId: string): boolean {
@@ -610,31 +695,33 @@ ${skills}
 
   private createIsolatedContext(): ContextManager {
     const isolated = new ContextManager(this.config.contextSoftLimit);
-    isolated.setSystemPrompt(this.systemPromptText);
+    isolated.setSystemPrompt(this.baseSystemPrompt);
     return isolated;
-  }
-
-  private hasHeartbeatPromptLeakage(): boolean {
-    const tail = this.context.getMessages().slice(-12);
-    return tail.some((message) => {
-      const text = typeof message.content === 'string' ? message.content : '';
-      if (!text) return false;
-      if (text.includes('You are the Heartbeat Manager.')) return true;
-      if (/^\s*STATUS:\s*(idle|updated|error)\s*$/im.test(text)) return true;
-      if (/^\s*SUMMARY:\s+/im.test(text)) return true;
-      return false;
-    });
   }
 
   /** Rebuild the system prompt (e.g., after SOUL.md changes). */
   refreshSystemPrompt(): void {
     this.config.soulEngine.reload();
     this.buildSystemPrompt();
+    // Update all existing contexts with the new prompt
+    for (const context of this.contexts.values()) {
+        context.setSystemPrompt(this.baseSystemPrompt);
+    }
   }
 
-  /** Clear conversation history. */
-  resetContext(): void {
-    this.context.clear();
+  /** Clear conversation history for a specific session. */
+  resetContext(sessionId?: string): void {
+    if (sessionId) {
+        // Clear all contexts matching this sessionId (across different workspaces)
+        for (const [key, context] of this.contexts.entries()) {
+            if (key.startsWith(`${sessionId}:`)) {
+                context.clear();
+                this.contexts.delete(key);
+            }
+        }
+    } else {
+        this.contexts.clear();
+    }
     this.buildSystemPrompt();
   }
 }

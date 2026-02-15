@@ -319,7 +319,7 @@ export class SkillLoader {
         models: [],
         litellmPort: 4000,
         gatewayPort: 3001,
-        dashboardPort: 3000,
+        dashboardPort: 3002,
         contextSoftLimit: 40000,
         heartbeatIntervalMinutes: 30,
         dreamerIntervalMinutes: 30,

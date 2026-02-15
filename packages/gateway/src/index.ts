@@ -18,6 +18,7 @@ import { ModelCatalog } from './infrastructure/llm/model-catalog.js';
 
 import { setupContainer, container } from './container.js';
 import { SoulEngine } from './domain/logic/soul-engine.js';
+import { SemanticProcessor } from './domain/knowledge/semantic-processor.js';
 import { SkillLoader } from './application/services/skill-loader.js';
 import { ToolRegistry } from './tools/registry.js';
 import { createShellTool, createShellToolWithApproval } from './tools/shell.js';
@@ -40,6 +41,9 @@ import cron from 'node-cron';
 import { AgentService } from './application/services/agent-service.js';
 import { SkillService } from './application/services/skill-service.js';
 import { ApprovalService } from './domain/logic/approval-service.js';
+import { GraphStore } from './domain/knowledge/graph-store.js';
+import { GraphIndexer } from './domain/knowledge/graph-indexer.js';
+import { GraphContext } from './domain/knowledge/graph-context.js';
 
 // ─── Direct Execution Detection ─────────────────────────────
 // If this file is run directly (e.g. `node dist/index.js start`),
@@ -76,32 +80,41 @@ export async function startGateway(projectRoot: string): Promise<void> {
   const dbResult = await autoProvisionStorage(config);
   console.log(chalk.green('  ✓ ') + chalk.white(`Storage: ${dbResult.type}`));
 
-  // ── Security Layer ────────────────────────────────────────
-  const permissionManager = new PermissionManager(config.workspacePath, config.dataPath);
-  permissionManager.startWatching();
   const secretsStore = new SecretsStore(config.dataPath);
+  const memoryDb = new MemoryDB(config.dataPath);
+  const memoryStore = new MemoryStore(memoryDb);
+  const graphStore = new GraphStore(config.dataPath);
+
+  // ── Security Layer ────────────────────────────────────────
+  const permissionManager = new PermissionManager(config.workspacePath, config.dataPath, graphStore);
+  permissionManager.startWatching();
 
   // ── Tool Registry ─────────────────────────────────────────
   const toolRegistry = new ToolRegistry();
 
-  const shellTool = createShellTool(async (_command) => {
-    // Placeholder — will be re-wired after REPL is created
-    return { approved: false, reason: 'bootstrap', mode: 'ask' };
-  });
-  toolRegistry.register(shellTool);
-
+  // ─── Native Tools ──────────────────────────────────────────
   for (const fsTool of createFileSystemTools(permissionManager)) {
     toolRegistry.register(fsTool);
   }
 
-  toolRegistry.register(createWebFetchTool());
+  // Shell tool with approval logic (re-wired later if needed, but set up here)
+  const shellTool = createShellTool(async (command, context) => {
+    // Note: 'server' will be defined later, so we use a wrapper that references it
+    return await (global as any).adytumServer.requestApproval({
+      kind: 'shell_execute',
+      description: `Execute: ${command}`,
+      meta: { command },
+      sessionId: context?.sessionId,
+      workspaceId: context?.workspaceId,
+    });
+  }, permissionManager.resolveWorkspacePath.bind(permissionManager));
+  toolRegistry.register(shellTool);
 
-  // ── Memory Store & Tools ───────────────────────────────────
-  const memoryDb = new MemoryDB(config.dataPath);
-  const memoryStore = new MemoryStore(memoryDb);
-  for (const memTool of createMemoryTools(memoryStore)) {
-    toolRegistry.register(memTool);
+  for (const mTool of createMemoryTools(memoryStore)) {
+    toolRegistry.register(mTool);
   }
+
+  toolRegistry.register(createWebFetchTool());
 
   for (const pTool of createPersonalityTools(memoryDb)) {
     toolRegistry.register(pTool);
@@ -132,11 +145,16 @@ export async function startGateway(projectRoot: string): Promise<void> {
   skillLoader.setSecrets(secretsStore.getAll());
   await skillLoader.init(toolRegistry);
 
+  const semanticProcessor = new SemanticProcessor(modelRouter);
+  const graphIndexer = new GraphIndexer(config.workspacePath, graphStore, semanticProcessor);
+  const graphContext = new GraphContext(graphStore);
+
   const agent = new AgentRuntime({
     modelRouter,
     toolRegistry,
     soulEngine,
     skillLoader,
+    graphContext,
     contextSoftLimit: config.contextSoftLimit,
     maxIterations: 20,
     defaultModelRole: 'thinking',
@@ -145,6 +163,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
     memoryStore,
     memoryTopK: 3,
     memoryDb,
+    graphStore,
   });
 
   // Seed context with recent persisted messages to restore short-term memory
@@ -309,6 +328,9 @@ export async function startGateway(projectRoot: string): Promise<void> {
   container.register('MemoryRepository', { useValue: memoryDb });
   container.register(PermissionManager, { useValue: permissionManager });
   container.register(SecretsStore, { useValue: secretsStore });
+  container.register(GraphStore, { useValue: graphStore });
+  container.register(GraphIndexer, { useValue: graphIndexer });
+  container.register(GraphContext, { useValue: graphContext });
 
   // Wire up SkillService reload callback
   const skillService = container.resolve(SkillService);
@@ -347,6 +369,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
       const result = await agent.run(frame.content, sessionId, {
         modelRole: frame.modelRole,
         modelId: frame.modelId,
+        workspaceId: frame.workspaceId,
       });
       server.sendToSession(sessionId, {
         type: 'message',
@@ -424,37 +447,40 @@ export async function startGateway(projectRoot: string): Promise<void> {
   };
 
   // Re-wire the shell tool's approval callback to respect execution permissions and dashboard approvals
-  toolRegistry.get('shell_execute')!.execute = createShellToolWithApproval(async (command) => {
-    const latestConfig = loadConfig(projectRoot);
-    const mode = latestConfig.execution?.shell || 'ask';
-    const defaultChannel = latestConfig.execution?.defaultChannel;
-    const defaultCommSkillId = latestConfig.execution?.defaultCommSkillId;
+  toolRegistry.get('shell_execute')!.execute = createShellToolWithApproval(
+    async (command, context) => {
+      const latestConfig = loadConfig(projectRoot);
+      const mode = latestConfig.execution?.shell || 'ask';
+      const defaultChannel = latestConfig.execution?.defaultChannel;
+      const defaultCommSkillId = latestConfig.execution?.defaultCommSkillId;
 
-    if (mode === 'deny') {
-      return { approved: false, mode, reason: 'policy_denied', defaultChannel, defaultCommSkillId };
-    }
+      if (mode === 'deny') {
+        return { approved: false, mode, reason: 'policy_denied', defaultChannel, defaultCommSkillId };
+      }
 
-    if (mode === 'auto') {
-      return { approved: true, mode, defaultChannel, defaultCommSkillId };
-    }
+      if (mode === 'auto') {
+        return { approved: true, mode, defaultChannel, defaultCommSkillId };
+      }
 
-    // mode === 'ask'
-    console.log(chalk.yellow(`  ⚠ shell approval required: ${command}`));
-    const approved = await server.requestApproval({
-      kind: 'shell',
-      description: `shell_execute wants to run: ${command}`,
-      meta: { command, defaultChannel, defaultCommSkillId },
-    });
+      // mode === 'ask'
+      console.log(chalk.yellow(`  ⚠ shell approval required: ${command}`));
+      const approved = await server.requestApproval({
+        kind: 'shell',
+        description: `shell_execute wants to run: ${command}`,
+        meta: { command, defaultChannel, defaultCommSkillId },
+        sessionId: context?.sessionId,
+        workspaceId: context?.workspaceId,
+      });
 
-    if (approved !== undefined) {
-      return {
-        approved,
-        mode,
-        reason: approved ? undefined : 'user_denied',
-        defaultChannel,
-        defaultCommSkillId,
-      };
-    }
+      if (approved !== undefined) {
+        return {
+          approved,
+          mode,
+          reason: approved ? undefined : 'user_denied',
+          defaultChannel,
+          defaultCommSkillId,
+        };
+      }
 
     if (process.stdin.isTTY) {
       const ttyApproved = await promptApproval(

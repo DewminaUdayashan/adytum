@@ -6,6 +6,7 @@
 import { z } from 'zod';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
+import { join } from 'node:path';
 import { DANGEROUS_COMMANDS } from '@adytum/shared';
 import type { ToolDefinition } from '@adytum/shared';
 
@@ -20,7 +21,10 @@ export type ShellApprovalResult = {
   message?: string;
 };
 
-export type ShellApprovalFn = (command: string) => Promise<ShellApprovalResult>;
+export type ShellApprovalFn = (
+  command: string,
+  context?: { sessionId: string; workspaceId?: string },
+) => Promise<ShellApprovalResult>;
 
 /**
  * Creates the shell_execute function body given an approval callback.
@@ -28,13 +32,27 @@ export type ShellApprovalFn = (command: string) => Promise<ShellApprovalResult>;
  */
 export function createShellToolWithApproval(
   onApprovalRequired: ShellApprovalFn,
+  resolveWorkspacePath?: (workspaceId: string) => string,
 ): ToolDefinition['execute'] {
   return async (args: any) => {
-    const { command, cwd, timeout } = args as {
+    const { command, cwd, timeout, sessionId, workspaceId } = args as {
       command: string;
       cwd?: string;
       timeout: number;
+      sessionId: string;
+      workspaceId?: string;
     };
+
+    // Resolve base CWD if workspaceId is present and no explicit absolute CWD is provided
+    let effectiveCwd = cwd;
+    if (workspaceId && resolveWorkspacePath) {
+      const wsPath = resolveWorkspacePath(workspaceId);
+      if (wsPath) {
+        if (!effectiveCwd || !effectiveCwd.startsWith('/')) {
+          effectiveCwd = effectiveCwd ? join(wsPath, effectiveCwd) : wsPath;
+        }
+      }
+    }
 
     // Always consult approval policy (policy decides auto/ask/deny)
     // Heuristic: Check for critical files in command
@@ -58,7 +76,7 @@ export function createShellToolWithApproval(
       };
     }
 
-    const approval = await wrappedApprovalFn(command);
+    const approval = await wrappedApprovalFn(command, { sessionId, workspaceId });
     if (!approval.approved) {
       return {
         exitCode: -1,
@@ -76,7 +94,7 @@ export function createShellToolWithApproval(
 
     try {
       const { stdout, stderr } = await execAsync(command, {
-        cwd,
+        cwd: effectiveCwd,
         timeout,
         maxBuffer: 1024 * 1024, // 1MB
         env: { ...process.env, PAGER: 'cat' },
@@ -104,7 +122,10 @@ export function createShellToolWithApproval(
  * @param onApprovalRequired - On approval required.
  * @returns The create shell tool result.
  */
-export function createShellTool(onApprovalRequired: ShellApprovalFn): ToolDefinition {
+export function createShellTool(
+  onApprovalRequired: ShellApprovalFn,
+  resolveWorkspacePath?: (workspaceId: string) => string,
+): ToolDefinition {
   return {
     name: 'shell_execute',
     description:
@@ -114,7 +135,9 @@ export function createShellTool(onApprovalRequired: ShellApprovalFn): ToolDefini
       command: z.string().describe('The shell command to execute'),
       cwd: z.string().optional().describe('Working directory for the command'),
       timeout: z.number().default(30000).describe('Timeout in milliseconds'),
+      sessionId: z.string().describe('Internal session ID for approval routing'),
+      workspaceId: z.string().optional().describe('Internal workspace ID for approval routing'),
     }),
-    execute: createShellToolWithApproval(onApprovalRequired),
+    execute: createShellToolWithApproval(onApprovalRequired, resolveWorkspacePath),
   };
 }

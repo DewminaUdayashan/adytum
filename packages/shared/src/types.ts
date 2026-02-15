@@ -301,7 +301,7 @@ export const AdytumConfigSchema = z.object({
     .default({ autoUpdate: true }),
   litellmPort: z.number().default(4000),
   gatewayPort: z.number().default(3001),
-  dashboardPort: z.number().default(3000),
+  dashboardPort: z.number().default(3002),
   contextSoftLimit: z.number().default(40000),
   heartbeatIntervalMinutes: z.number().default(30),
   dreamerIntervalMinutes: z.number().default(30),
@@ -318,6 +318,81 @@ export const AdytumConfigSchema = z.object({
 export type AdytumConfig = z.infer<typeof AdytumConfigSchema>;
 
 // ─── Skill & Tool Definitions ────────────────────────────────
+
+// ─── Knowledge Graph ──────────────────────────────────────────
+export const GraphNodeTypeSchema = z.enum([
+  'file',
+  'directory',
+  'class',
+  'interface',
+  'type',
+  'function',
+  'method',
+  'variable',
+  'constant',
+  'memory',
+  'email',
+  'doc',
+  'image',
+  'archive',
+]);
+export type GraphNodeType = z.infer<typeof GraphNodeTypeSchema>;
+
+export const GraphEdgeTypeSchema = z.enum([
+  'imports',
+  'calls',
+  'references',
+  'extends',
+  'implements',
+  'contains',
+  'relates_to',
+]);
+export type GraphEdgeType = z.infer<typeof GraphEdgeTypeSchema>;
+
+export const GraphNodeSchema = z.object({
+  id: z.string(),
+  type: GraphNodeTypeSchema,
+  label: z.string(),
+  path: z.string().optional(),
+  line: z.number().optional(),
+  description: z.string().optional(),
+  metadata: z.record(z.unknown()).optional(),
+});
+export type GraphNode = z.infer<typeof GraphNodeSchema>;
+
+export const GraphEdgeSchema = z.object({
+  id: z.string(),
+  source: z.string(),
+  target: z.string(),
+  type: GraphEdgeTypeSchema,
+  metadata: z.record(z.unknown()).optional(),
+});
+export type GraphEdge = z.infer<typeof GraphEdgeSchema>;
+
+export const KnowledgeGraphSchema = z.object({
+  nodes: z.array(GraphNodeSchema),
+  edges: z.array(GraphEdgeSchema),
+  lastUpdated: z.number(),
+  version: z.string(),
+});
+export type KnowledgeGraph = z.infer<typeof KnowledgeGraphSchema>;
+
+// ─── Workspaces ───────────────────────────────────────────────
+export const WorkspaceTypeSchema = z.enum(['project', 'collection']);
+export type WorkspaceType = z.infer<typeof WorkspaceTypeSchema>;
+
+export const WorkspaceSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  path: z.string(),
+  description: z.string().optional(),
+  type: WorkspaceTypeSchema,
+  lastIndexed: z.number().optional(),
+  nodeCount: z.number().default(0),
+  edgeCount: z.number().default(0),
+  indexingMode: z.enum(['fast', 'deep']).default('fast'),
+});
+export type Workspace = z.infer<typeof WorkspaceSchema>;
 
 export interface ToolDefinition {
   name: string;

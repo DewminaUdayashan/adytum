@@ -11,6 +11,7 @@ import crypto from 'node:crypto';
 export type MessageRow = {
   id: string;
   sessionId: string;
+  workspaceId?: string;
   role: string;
   content: string;
   createdAt: number;
@@ -18,6 +19,7 @@ export type MessageRow = {
 
 export type MemoryRow = {
   id: string;
+  workspaceId?: string;
   content: string;
   source: string;
   category: string;
@@ -102,6 +104,7 @@ export class MemoryDB {
       CREATE TABLE IF NOT EXISTS messages (
         id TEXT PRIMARY KEY,
         session_id TEXT NOT NULL,
+        workspace_id TEXT,
         role TEXT NOT NULL,
         content TEXT NOT NULL,
         created_at INTEGER NOT NULL
@@ -109,6 +112,7 @@ export class MemoryDB {
 
       CREATE TABLE IF NOT EXISTS memories (
         id TEXT PRIMARY KEY,
+        workspace_id TEXT,
         content TEXT NOT NULL,
         source TEXT NOT NULL,
         category TEXT NOT NULL,
@@ -166,6 +170,14 @@ export class MemoryDB {
       );
     `);
 
+    // Migration for workspace isolation
+    try {
+      this.db.exec('ALTER TABLE messages ADD COLUMN workspace_id TEXT;');
+    } catch { /* already exists */ }
+    try {
+      this.db.exec('ALTER TABLE memories ADD COLUMN workspace_id TEXT;');
+    } catch { /* already exists */ }
+
     try {
       this.db.exec(`
         CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts
@@ -182,11 +194,11 @@ export class MemoryDB {
    * @param role - Role.
    * @param content - Content.
    */
-  addMessage(sessionId: string, role: string, content: string): void {
+  addMessage(sessionId: string, role: string, content: string, workspaceId?: string): void {
     const stmt = this.db.prepare(
-      'INSERT INTO messages (id, session_id, role, content, created_at) VALUES (?, ?, ?, ?, ?)',
+      'INSERT INTO messages (id, session_id, workspace_id, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)',
     );
-    stmt.run(crypto.randomUUID(), sessionId, role, content, Date.now());
+    stmt.run(crypto.randomUUID(), sessionId, workspaceId || null, role, content, Date.now());
   }
 
   /**
@@ -194,11 +206,31 @@ export class MemoryDB {
    * @param limit - Limit.
    * @returns The resulting collection of values.
    */
-  getRecentMessages(limit: number = 40): MessageRow[] {
-    const stmt = this.db.prepare(
-      'SELECT id, session_id as sessionId, role, content, created_at as createdAt FROM messages ORDER BY created_at DESC LIMIT ?',
-    );
-    const rows = stmt.all(limit) as MessageRow[];
+  getRecentMessages(limit: number = 40, filters?: { sessionId?: string; workspaceId?: string }): MessageRow[] {
+    let query = 'SELECT id, session_id as sessionId, workspace_id as workspaceId, role, content, created_at as createdAt FROM messages';
+    const clauses: string[] = [];
+    const params: any[] = [];
+
+    if (filters?.sessionId) {
+      clauses.push('session_id = ?');
+      params.push(filters.sessionId);
+    }
+    if (filters?.workspaceId) {
+      clauses.push('workspace_id = ?');
+      params.push(filters.workspaceId);
+    } else if (filters?.workspaceId === null) {
+      clauses.push('workspace_id IS NULL');
+    }
+
+    if (clauses.length > 0) {
+      query += ' WHERE ' + clauses.join(' AND ');
+    }
+
+    query += ' ORDER BY created_at DESC LIMIT ?';
+    params.push(limit);
+
+    const stmt = this.db.prepare(query);
+    const rows = stmt.all(...params) as MessageRow[];
     return rows.reverse();
   }
 
@@ -211,10 +243,11 @@ export class MemoryDB {
     const id = crypto.randomUUID();
     const createdAt = Date.now();
     const stmt = this.db.prepare(
-      'INSERT INTO memories (id, content, source, category, tags, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO memories (id, workspace_id, content, source, category, tags, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     );
     stmt.run(
       id,
+      record.workspaceId || null,
       record.content,
       record.source,
       record.category,
