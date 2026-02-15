@@ -14,7 +14,9 @@ Your task is to check the file "HEARTBEAT.md" and execute any pending tasks.
 1. Read "HEARTBEAT.md" (if it exists).
 2. If it contains tasks, execute them using available tools.
 3. If a task is done, update "HEARTBEAT.md" to mark it as done or remove it.
-4. If the file is empty or all tasks are done, reply exactly "HEARTBEAT_OK".
+4. Always reply in this exact format:
+   STATUS: <idle|updated|error>
+   SUMMARY: <one short sentence>
 5. Do NOT chat. Do NOT act on previous conversation history. Only act on "HEARTBEAT.md".
 `;
 
@@ -80,10 +82,14 @@ export class HeartbeatManager {
       heartbeatContent = readFileSync(heartbeatFile, 'utf-8').trim();
       const meaningfulContent = heartbeatContent.replace(/^#.*$/gm, '').trim();
       if (!meaningfulContent) {
-        // Skip run to save tokens if nothing to do
+        console.log('[Heartbeat] Status: idle | Summary: HEARTBEAT.md has no actionable tasks.');
+        // Skip run to save tokens if nothing to do.
         return;
       }
       hasHeartbeatFile = true;
+    } else {
+      console.log('[Heartbeat] Status: idle | Summary: HEARTBEAT.md file not found.');
+      return;
     }
 
     const session = 'system-heartbeat';
@@ -96,16 +102,21 @@ export class HeartbeatManager {
 
     try {
       const result = await this.agent.run(prompt, session);
+      const parsedStatus = result.response.match(/^\s*STATUS:\s*(.+)$/im)?.[1]?.trim();
+      const parsedSummary = result.response.match(/^\s*SUMMARY:\s*(.+)$/im)?.[1]?.trim();
 
-      // Log simple status to console instead of full chat
-      if (result.response.includes('HEARTBEAT_OK')) {
-        console.log('[Heartbeat] Status: OK');
-      } else {
+      if (parsedStatus || parsedSummary) {
         console.log(
-          '[Heartbeat] Activity:',
-          result.response.slice(0, 100) + (result.response.length > 100 ? '...' : ''),
+          `[Heartbeat] Status: ${parsedStatus ?? 'unknown'} | Summary: ${parsedSummary ?? 'No summary provided.'}`,
         );
+        return;
       }
+
+      // Backward-compatible fallback if the model does not follow the structured format.
+      console.log(
+        '[Heartbeat] Activity:',
+        result.response.slice(0, 160) + (result.response.length > 160 ? '...' : ''),
+      );
     } catch (error) {
       console.error('Heartbeat run failed:', error);
     }
