@@ -53,6 +53,7 @@ export interface AgentTurnResult {
 export class AgentRuntime extends EventEmitter {
   private config: AgentRuntimeConfig;
   private context: ContextManager;
+  private systemPromptText: string = '';
 
   /**
    * Creates a new AgentRuntime instance.
@@ -103,6 +104,19 @@ export class AgentRuntime extends EventEmitter {
     sessionId: string,
     overrides?: { modelRole?: string; modelId?: string },
   ): Promise<AgentTurnResult> {
+    const isBackgroundSession = this.isBackgroundSession(sessionId);
+    if (!isBackgroundSession && this.hasHeartbeatPromptLeakage()) {
+      this.context.clear();
+      this.context.setSystemPrompt(this.systemPromptText);
+      this.emit('stream', {
+        traceId: uuid(),
+        sessionId,
+        streamType: 'status',
+        delta: 'Recovered from background-task prompt leakage by resetting volatile context.',
+      });
+    }
+    const context = isBackgroundSession ? this.createIsolatedContext() : this.context;
+
     const traceId = uuid();
     const trace: Trace = {
       id: traceId,
@@ -115,8 +129,8 @@ export class AgentRuntime extends EventEmitter {
     this.emit('trace_start', trace);
 
     // Add user message to context
-    this.context.addMessage({ role: 'user', content: userMessage });
-    if (this.config.memoryDb) {
+    context.addMessage({ role: 'user', content: userMessage });
+    if (this.config.memoryDb && !isBackgroundSession) {
       this.config.memoryDb.addMessage(sessionId, 'user', userMessage);
     }
 
@@ -139,8 +153,8 @@ export class AgentRuntime extends EventEmitter {
         iterations++;
 
         // Check for compaction
-        if (this.context.needsCompaction()) {
-          await this.compactContext(traceId, sessionId);
+        if (context.needsCompaction()) {
+          await this.compactContext(context, traceId, sessionId);
         }
 
         const roleToUse = overrides?.modelRole || this.config.defaultModelRole;
@@ -153,7 +167,7 @@ export class AgentRuntime extends EventEmitter {
             'model_call',
             {
               role: roleToUse,
-              messageCount: this.context.getMessageCount(),
+              messageCount: context.getMessageCount(),
             },
             'success',
           );
@@ -166,7 +180,7 @@ export class AgentRuntime extends EventEmitter {
           delta: `Thinking... (iteration ${iterations})`,
         });
 
-        const baseMessages = this.context.getMessages();
+        const baseMessages = context.getMessages();
         const modelMessages = memoryContext
           ? [
               baseMessages[0],
@@ -212,7 +226,7 @@ export class AgentRuntime extends EventEmitter {
             ...message,
             content: message.content || '',
           };
-          this.context.addMessage(sanitizedMessage as OpenAI.ChatCompletionMessageParam);
+          context.addMessage(sanitizedMessage as OpenAI.ChatCompletionMessageParam);
 
           // Execute each tool call
           for (const tc of message.tool_calls) {
@@ -253,7 +267,7 @@ export class AgentRuntime extends EventEmitter {
                 `Tool "${toolCall.name}" wants to execute: ${JSON.stringify(toolCall.arguments)}`,
               );
               if (!approved) {
-                this.context.addMessage({
+                context.addMessage({
                   role: 'tool',
                   tool_call_id: tc.id,
                   content: 'Action rejected by user.',
@@ -288,7 +302,7 @@ export class AgentRuntime extends EventEmitter {
             });
 
             // Add tool result to context
-            this.context.addMessage({
+            context.addMessage({
               role: 'tool',
               tool_call_id: tc.id,
               content:
@@ -315,8 +329,8 @@ export class AgentRuntime extends EventEmitter {
         }
 
         // Add assistant response to context
-        this.context.addMessage({ role: 'assistant', content: finalResponse });
-        if (this.config.memoryDb) {
+        context.addMessage({ role: 'assistant', content: finalResponse });
+        if (this.config.memoryDb && !isBackgroundSession) {
           this.config.memoryDb.addMessage(sessionId, 'assistant', finalResponse);
           this.config.memoryDb.addActionLog(
             traceId,
@@ -398,7 +412,11 @@ export class AgentRuntime extends EventEmitter {
    * @param traceId - Trace id.
    * @param sessionId - Session id.
    */
-  private async compactContext(traceId: string, sessionId: string): Promise<void> {
+  private async compactContext(
+    context: ContextManager,
+    traceId: string,
+    sessionId: string,
+  ): Promise<void> {
     this.emit('stream', {
       traceId,
       sessionId,
@@ -406,7 +424,7 @@ export class AgentRuntime extends EventEmitter {
       delta: 'Context limit approaching — compacting memory...',
     });
 
-    const compactionPrompt = this.context.buildCompactionPrompt();
+    const compactionPrompt = context.buildCompactionPrompt();
 
     // Use 'fast' model for compaction
     const { message, usage } = await this.config.modelRouter.chat(
@@ -418,7 +436,7 @@ export class AgentRuntime extends EventEmitter {
     this.trackTokenUsage(usage, sessionId);
 
     if (message.content) {
-      this.context.applyCompaction(message.content);
+      context.applyCompaction(message.content);
       if (this.config.memoryStore) {
         this.config.memoryStore.add(
           message.content,
@@ -581,7 +599,31 @@ ${skills}
 - Use the "cron_schedule" tool to create your own future triggers.
 `;
 
+    this.systemPromptText = systemPrompt;
     this.context.setSystemPrompt(systemPrompt);
+  }
+
+  private isBackgroundSession(sessionId: string): boolean {
+    const normalized = (sessionId || '').trim().toLowerCase();
+    return normalized.startsWith('system-') || normalized.startsWith('cron-');
+  }
+
+  private createIsolatedContext(): ContextManager {
+    const isolated = new ContextManager(this.config.contextSoftLimit);
+    isolated.setSystemPrompt(this.systemPromptText);
+    return isolated;
+  }
+
+  private hasHeartbeatPromptLeakage(): boolean {
+    const tail = this.context.getMessages().slice(-12);
+    return tail.some((message) => {
+      const text = typeof message.content === 'string' ? message.content : '';
+      if (!text) return false;
+      if (text.includes('You are the Heartbeat Manager.')) return true;
+      if (/^\s*STATUS:\s*(idle|updated|error)\s*$/im.test(text)) return true;
+      if (/^\s*SUMMARY:\s+/im.test(text)) return true;
+      return false;
+    });
   }
 
   /** Rebuild the system prompt (e.g., after SOUL.md changes). */

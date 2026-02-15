@@ -7,6 +7,8 @@ description: Unified Gmail and Google Calendar operations for inbox triage, mess
 
 Use this skill when work requires reading emails and coordinating schedules in one workflow.
 
+This skill supports multi-account Google OAuth. Each tool accepts optional `accountId`, and the value can be the account id, label, or email.
+
 ## What It Can Do
 
 - Read inbox messages with Gmail query filters
@@ -26,15 +28,19 @@ Use this skill when work requires reading emails and coordinating schedules in o
 - `email_calendar_create_event`
 - `email_calendar_daily_briefing`
 - `email_calendar_create_meeting_from_message`
+- `email_calendar_connect_google_account`
 
 ## Setup
 
-Provide OAuth credentials via skill config or environment variables:
+Recommended: connect accounts from **Skills Dashboard -> Email + Calendar -> Google Accounts -> Connect Google**. Account label is required.
+
+Manual fallback via config/env:
 
 - `ADYTUM_EMAIL_CALENDAR_ACCESS_TOKEN` (required unless refresh flow is configured)
 - `ADYTUM_EMAIL_CALENDAR_REFRESH_TOKEN` (optional, recommended)
 - `ADYTUM_EMAIL_CALENDAR_CLIENT_ID` (required for refresh flow)
 - `ADYTUM_EMAIL_CALENDAR_CLIENT_SECRET` (required for refresh flow)
+- `ADYTUM_EMAIL_CALENDAR_ACCOUNTS_JSON` (managed automatically by dashboard OAuth flow)
 
 Required Google scopes:
 
@@ -59,6 +65,14 @@ skills:
         defaultUnreadQuery: 'in:inbox is:unread newer_than:7d'
         allowWriteActions: false
 ```
+
+Multi-account usage:
+
+- Connect multiple Google accounts from the dashboard.
+- Use a unique label for each account (required).
+- For read/check tools (`list_messages`, `list_events`, `daily_briefing`), omitting `accountId` checks all connected accounts.
+- If `accountId` is provided (id, label, or email), only that account is used.
+- For write tools (`send_message`, `create_event`, `create_meeting_from_message`), specify `accountId` when multiple accounts are connected.
 
 ## Safety Rules
 

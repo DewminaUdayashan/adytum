@@ -148,7 +148,13 @@ export async function startGateway(projectRoot: string): Promise<void> {
   });
 
   // Seed context with recent persisted messages to restore short-term memory
-  const recentMessages = memoryDb.getRecentMessages(40);
+  const recentMessages = memoryDb
+    .getRecentMessages(120)
+    .filter((m) => {
+      const session = (m.sessionId || '').toLowerCase();
+      return !session.startsWith('system-') && !session.startsWith('cron-');
+    })
+    .slice(-40);
   agent.seedContext(recentMessages.map((m) => ({ role: m.role as any, content: m.content })));
   await skillLoader.start(agent);
 

@@ -110,6 +110,40 @@ type SkillsResponse = {
   };
 };
 
+type OAuthAccountRecord = {
+  id: string;
+  label: string;
+  email?: string;
+  provider: 'google';
+  connected: boolean;
+  hasRefreshToken: boolean;
+  connectedAt?: string;
+  updatedAt?: string;
+};
+
+type OAuthAccountsResponse = {
+  canStartAuth: boolean;
+  missingClientConfig: string[];
+  accounts: OAuthAccountRecord[];
+};
+
+type OAuthStartResponse = {
+  state: string;
+  accountId: string;
+  authorizationUrl: string;
+  expiresAtMs: number;
+};
+
+type OAuthStatusResponse = {
+  state: string;
+  status: 'pending' | 'success' | 'failed' | 'expired' | 'unknown';
+  accountId?: string;
+  connectedEmail?: string;
+  error?: string;
+  errorDescription?: string;
+  expiresAtMs?: number;
+};
+
 function instructionContentKey(skillId: string, relativePath: string): string {
   return `${skillId}:${relativePath}`;
 }
@@ -381,6 +415,11 @@ export default function SkillsPage() {
   const [instructionLoadingSkillId, setInstructionLoadingSkillId] = useState<string | null>(null);
   const [instructionSavingSkillId, setInstructionSavingSkillId] = useState<string | null>(null);
   const [secretDrafts, setSecretDrafts] = useState<Record<string, Record<string, string>>>({});
+  const [oauthAccountsBySkill, setOauthAccountsBySkill] = useState<
+    Record<string, OAuthAccountsResponse>
+  >({});
+  const [oauthBusySkillId, setOauthBusySkillId] = useState<string | null>(null);
+  const [oauthLabelDraftBySkill, setOauthLabelDraftBySkill] = useState<Record<string, string>>({});
 
   const loadSkills = async () => {
     try {
@@ -489,16 +528,131 @@ export default function SkillsPage() {
     }
   };
 
+  const loadOauthAccounts = async (skillId: string) => {
+    if (skillId !== 'email-calendar') return;
+    try {
+      const res = await gatewayFetch<OAuthAccountsResponse>(
+        `/api/skills/${skillId}/oauth/google/accounts`,
+      );
+      setOauthAccountsBySkill((prev) => ({
+        ...prev,
+        [skillId]: res,
+      }));
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+    }
+  };
+
+  const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+  const startGoogleOauth = async (skillId: string) => {
+    if (skillId !== 'email-calendar') return;
+    try {
+      setOauthBusySkillId(skillId);
+      const label = (oauthLabelDraftBySkill[skillId] || '').trim();
+      if (!label) {
+        throw new Error('Account label is required (example: work, personal).');
+      }
+      const start = await gatewayFetch<OAuthStartResponse>(
+        `/api/skills/${skillId}/oauth/google/start`,
+        {
+          method: 'POST',
+          body: JSON.stringify({
+            label,
+            callbackBaseUrl: window.location.origin,
+          }),
+        },
+      );
+
+      const popup = window.open(
+        start.authorizationUrl,
+        'adytum-google-oauth',
+        'popup,width=520,height=760',
+      );
+      if (!popup) {
+        throw new Error('Popup blocked by browser. Please allow popups and retry.');
+      }
+
+      let finalStatus: OAuthStatusResponse | null = null;
+      for (let i = 0; i < 240; i += 1) {
+        await sleep(1000);
+        const status = await gatewayFetch<OAuthStatusResponse>(
+          `/api/skills/${skillId}/oauth/google/status?state=${encodeURIComponent(start.state)}`,
+        );
+        if (
+          status.status === 'success' ||
+          status.status === 'failed' ||
+          status.status === 'expired' ||
+          status.status === 'unknown'
+        ) {
+          finalStatus = status;
+          break;
+        }
+        if (popup.closed) break;
+      }
+
+      try {
+        popup.close();
+      } catch {
+        // ignore
+      }
+
+      if (!finalStatus || finalStatus.status !== 'success') {
+        const reason =
+          finalStatus?.errorDescription ||
+          finalStatus?.error ||
+          `OAuth status: ${finalStatus?.status || 'unknown'}`;
+        throw new Error(`Google connect failed: ${reason}`);
+      }
+
+      setOauthLabelDraftBySkill((prev) => ({ ...prev, [skillId]: '' }));
+      await loadSkills();
+      await loadOauthAccounts(skillId);
+      setError(null);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+    } finally {
+      setOauthBusySkillId((current) => (current === skillId ? null : current));
+    }
+  };
+
+  const removeOauthAccount = async (skillId: string, accountId: string) => {
+    try {
+      setOauthBusySkillId(skillId);
+      await gatewayFetch(
+        `/api/skills/${skillId}/oauth/google/accounts/${encodeURIComponent(accountId)}`,
+        {
+          method: 'DELETE',
+        },
+      );
+      await loadSkills();
+      await loadOauthAccounts(skillId);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setError(message);
+    } finally {
+      setOauthBusySkillId((current) => (current === skillId ? null : current));
+    }
+  };
+
   useEffect(() => {
-    loadSkills();
-    loadExecPerms();
+    void loadSkills();
+    void loadExecPerms();
   }, []);
 
   useEffect(() => {
     if (!selectedSkillId) return;
     if (instructionFilesBySkill[selectedSkillId]) return;
-    loadSkillInstructions(selectedSkillId);
+    void loadSkillInstructions(selectedSkillId);
   }, [selectedSkillId, instructionFilesBySkill]);
+
+  useEffect(() => {
+    if (!selectedSkillId) return;
+    if (selectedSkillId !== 'email-calendar') return;
+    void loadOauthAccounts(selectedSkillId);
+  }, [selectedSkillId]);
 
   const hasSkillChanges = (skillId: string): boolean => {
     const cfgChanged =
@@ -854,6 +1008,98 @@ export default function SkillsPage() {
                             >
                               Save Required Env
                             </Button>
+                          </div>
+                        </div>
+                      )}
+
+                      {skill.id === 'email-calendar' && (
+                        <div className="space-y-3 rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <h3 className="text-sm font-semibold text-text-primary">
+                              Google Accounts
+                            </h3>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => loadOauthAccounts(skill.id)}
+                              disabled={oauthBusySkillId === skill.id}
+                            >
+                              <RefreshCw className="h-3.5 w-3.5" />
+                              Refresh Accounts
+                            </Button>
+                          </div>
+
+                          {oauthAccountsBySkill[skill.id]?.missingClientConfig?.length ? (
+                            <div className="rounded-lg border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning">
+                              OAuth client setup missing:{' '}
+                              {oauthAccountsBySkill[skill.id].missingClientConfig.join(', ')}. Set
+                              these in Configuration first.
+                            </div>
+                          ) : null}
+
+                          <div className="grid gap-2 md:grid-cols-[1fr_auto]">
+                            <input
+                              type="text"
+                              value={oauthLabelDraftBySkill[skill.id] || ''}
+                              onChange={(e) =>
+                                setOauthLabelDraftBySkill((prev) => ({
+                                  ...prev,
+                                  [skill.id]: e.target.value,
+                                }))
+                              }
+                              placeholder="Required account label (e.g. work, personal)"
+                              className="w-full rounded-lg border border-border-primary bg-bg-tertiary px-3 py-2 text-sm text-text-primary focus:border-accent-primary/50 focus:outline-none"
+                            />
+                            <Button
+                              variant="primary"
+                              size="sm"
+                              isLoading={oauthBusySkillId === skill.id}
+                              onClick={() => startGoogleOauth(skill.id)}
+                              disabled={
+                                oauthBusySkillId === skill.id ||
+                                oauthAccountsBySkill[skill.id]?.canStartAuth === false ||
+                                !(oauthLabelDraftBySkill[skill.id] || '').trim()
+                              }
+                            >
+                              Connect Google
+                            </Button>
+                          </div>
+
+                          <div className="space-y-2">
+                            {(oauthAccountsBySkill[skill.id]?.accounts || []).length === 0 ? (
+                              <p className="text-xs text-text-muted">
+                                No Google accounts connected yet.
+                              </p>
+                            ) : (
+                              (oauthAccountsBySkill[skill.id]?.accounts || []).map((account) => (
+                                <div
+                                  key={account.id}
+                                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-border-primary/60 bg-bg-tertiary/20 px-3 py-2"
+                                >
+                                  <div className="min-w-0">
+                                    <p className="truncate text-sm font-medium text-text-primary">
+                                      {account.label}
+                                    </p>
+                                    <p className="truncate text-xs text-text-muted">
+                                      {account.email || account.id}
+                                    </p>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Badge variant={account.connected ? 'success' : 'warning'}>
+                                      {account.connected ? 'Connected' : 'Reconnect'}
+                                    </Badge>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => removeOauthAccount(skill.id, account.id)}
+                                      disabled={oauthBusySkillId === skill.id}
+                                    >
+                                      Remove
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))
+                            )}
                           </div>
                         </div>
                       )}

@@ -18,6 +18,12 @@ Use OAuth Playground or your own auth flow to request:
 - `https://www.googleapis.com/auth/calendar.readonly`
 - `https://www.googleapis.com/auth/calendar.events` (if you need event creation)
 
+Dashboard OAuth flow uses:
+
+- Authorization endpoint: `https://accounts.google.com/o/oauth2/v2/auth`
+- Redirect URI: `http://localhost:3000/api/skills/email-calendar/oauth/google/callback` (or your dashboard base URL + this path)
+- Account label: required in Skills Dashboard when connecting each Google account.
+
 ## 3. Store Credentials
 
 Set environment variables (recommended):
@@ -27,6 +33,8 @@ export ADYTUM_EMAIL_CALENDAR_ACCESS_TOKEN="ya29..."
 export ADYTUM_EMAIL_CALENDAR_REFRESH_TOKEN="1//..."
 export ADYTUM_EMAIL_CALENDAR_CLIENT_ID="..."
 export ADYTUM_EMAIL_CALENDAR_CLIENT_SECRET="..."
+export ADYTUM_GOOGLE_OAUTH_CLIENT_ID="..." # optional global fallback for dashboard connect
+export ADYTUM_GOOGLE_OAUTH_CLIENT_SECRET="..." # optional global fallback
 ```
 
 Or store the same values under:

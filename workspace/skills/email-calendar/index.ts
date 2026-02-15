@@ -10,6 +10,8 @@ const PROVIDERS = ['google'] as const;
 const EMAIL_MESSAGE_FORMATS = ['metadata', 'full'] as const;
 const CALENDAR_ORDER_BY = ['startTime', 'updated'] as const;
 const SEND_UPDATES = ['all', 'externalOnly', 'none'] as const;
+const ACCOUNTS_SECRET_ENV_DEFAULT = 'ADYTUM_EMAIL_CALENDAR_ACCOUNTS_JSON';
+const LEGACY_DEFAULT_ACCOUNT_ID = 'default';
 const DEFAULT_MEETING_KEYWORDS = [
   'meeting',
   'call',
@@ -36,19 +38,31 @@ const PluginConfigSchema = z.object({
   clientSecret: z.string().optional(),
   clientSecretEnv: z.string().default('ADYTUM_EMAIL_CALENDAR_CLIENT_SECRET'),
   tokenUrl: z.string().default('https://oauth2.googleapis.com/token'),
+  gatewayBaseUrl: z.string().default('http://127.0.0.1:3001'),
+  dashboardBaseUrl: z.string().default('http://localhost:3000'),
   gmailBaseUrl: z.string().default('https://gmail.googleapis.com/gmail/v1'),
   calendarBaseUrl: z.string().default('https://www.googleapis.com/calendar/v3'),
   defaultCalendarId: z.string().default('primary'),
   defaultTimezone: z.string().default('UTC'),
   defaultUnreadQuery: z.string().default('in:inbox is:unread newer_than:7d'),
+  accountsSecretEnv: z.string().default(ACCOUNTS_SECRET_ENV_DEFAULT),
   allowWriteActions: z.boolean().default(false),
   autoRefreshToken: z.boolean().default(true),
   requestTimeoutMs: z.number().int().min(1000).max(60000).default(12000),
 });
 
 type PluginConfig = z.infer<typeof PluginConfigSchema>;
+type ResolvedPluginConfig = PluginConfig & { accountSecrets: AccountSecretMap };
+
+const AccountIdSchema = z
+  .string()
+  .optional()
+  .describe(
+    'Optional connected account selector (account id, label, or email). For read tools, omitting this checks all connected accounts when multiple are available.',
+  );
 
 const ListMessagesSchema = z.object({
+  accountId: AccountIdSchema,
   query: z
     .string()
     .optional()
@@ -63,6 +77,7 @@ const ListMessagesSchema = z.object({
 });
 
 const GetMessageSchema = z.object({
+  accountId: AccountIdSchema,
   messageId: z.string().min(1).describe('Gmail message ID.'),
   format: z
     .enum(EMAIL_MESSAGE_FORMATS)
@@ -71,6 +86,7 @@ const GetMessageSchema = z.object({
 });
 
 const SendMessageSchema = z.object({
+  accountId: AccountIdSchema,
   to: z.array(z.string().min(3)).min(1).describe('Recipient addresses.'),
   cc: z.array(z.string().min(3)).optional().describe('Optional CC recipients.'),
   bcc: z.array(z.string().min(3)).optional().describe('Optional BCC recipients.'),
@@ -86,6 +102,7 @@ const SendMessageSchema = z.object({
 });
 
 const ListEventsSchema = z.object({
+  accountId: AccountIdSchema,
   calendarId: z
     .string()
     .optional()
@@ -99,6 +116,7 @@ const ListEventsSchema = z.object({
 });
 
 const CreateEventSchema = z.object({
+  accountId: AccountIdSchema,
   calendarId: z
     .string()
     .optional()
@@ -123,6 +141,7 @@ const CreateEventSchema = z.object({
 });
 
 const DailyBriefingSchema = z.object({
+  accountId: AccountIdSchema,
   emailQuery: z.string().optional().describe('Gmail query for inbox briefing.'),
   emailLimit: z.number().int().min(1).max(25).default(10).describe('How many messages to scan.'),
   calendarId: z.string().optional().describe('Calendar ID for schedule scan.'),
@@ -136,6 +155,7 @@ const DailyBriefingSchema = z.object({
 });
 
 const CreateMeetingFromMessageSchema = z.object({
+  accountId: AccountIdSchema,
   messageId: z.string().min(1).describe('Source Gmail message ID.'),
   calendarId: z.string().optional().describe('Target calendar ID.'),
   summary: z.string().optional().describe('Event summary. Defaults to source subject.'),
@@ -158,6 +178,15 @@ const CreateMeetingFromMessageSchema = z.object({
     .default('none')
     .describe('Google Calendar attendee notification mode.'),
   confirm: z.boolean().default(false).describe('Set true to create the event (safety guard).'),
+});
+
+const ConnectGoogleAccountSchema = z.object({
+  label: z.string().min(1).describe('Required label for the new account (e.g. work, personal).'),
+  loginHint: z.string().optional().describe('Optional email hint shown on Google sign-in page.'),
+  callbackBaseUrl: z
+    .string()
+    .optional()
+    .describe('Optional callback base URL. Defaults to configured dashboard base URL.'),
 });
 
 type MessageSummary = {
@@ -190,6 +219,26 @@ type TokenState = {
   expiresAt: number | null;
 };
 
+type StoredAccountSecret = {
+  provider?: 'google';
+  label?: string;
+  refreshToken?: string;
+  accessToken?: string;
+  expiresAt?: number;
+  email?: string;
+  scope?: string;
+};
+
+type AccountSecretMap = Record<string, StoredAccountSecret>;
+
+type ResolvedAccountContext = {
+  id: string;
+  label?: string;
+  email?: string;
+  secret?: StoredAccountSecret;
+  source: 'stored' | 'legacy';
+};
+
 type SkillLogger = {
   info: (message: string) => void;
   warn: (message: string) => void;
@@ -213,103 +262,104 @@ type PluginApi = {
  * Google Workspace API wrapper with token management and high-level operations.
  */
 class GoogleWorkspaceGateway {
-  private tokenState: TokenState | null = null;
+  private tokenStateByAccount = new Map<string, TokenState>();
 
   constructor(
-    private config: PluginConfig,
+    private config: ResolvedPluginConfig,
     private logger: SkillLogger,
   ) {}
 
   async listMessages(args: z.infer<typeof ListMessagesSchema>) {
-    const query = (args.query || this.config.defaultUnreadQuery || '').trim();
-    const params = new URLSearchParams();
-    params.set('maxResults', String(args.maxResults));
-    if (query) params.set('q', query);
-    for (const labelId of args.labelIds || []) {
-      params.append('labelIds', labelId);
+    const accounts = this.resolveAccountsForRead(args.accountId);
+    if (accounts.length === 1) {
+      return this.listMessagesForAccount(accounts[0], args);
     }
 
-    const list = await this.gmailRequest(
-      `/users/me/messages${params.toString() ? `?${params.toString()}` : ''}`,
-      'GET',
+    const query = (args.query || this.config.defaultUnreadQuery || '').trim();
+    const perAccount = await Promise.allSettled(
+      accounts.map((account) => this.listMessagesForAccount(account, args)),
     );
-    const rawMessages = asArray(list?.messages);
-    if (rawMessages.length === 0) {
+    const results = perAccount.map((result, index) => {
+      const account = accounts[index];
+      if (result.status === 'fulfilled') {
+        return {
+          accountId: account.id,
+          accountLabel: account.label || account.id,
+          accountEmail: account.email || null,
+          total: result.value.total,
+          messages: result.value.messages,
+        };
+      }
       return {
-        provider: 'google',
-        query,
-        maxResults: args.maxResults,
+        accountId: account.id,
+        accountLabel: account.label || account.id,
+        accountEmail: account.email || null,
         total: 0,
         messages: [] as MessageSummary[],
+        error: errorMessage(result.reason),
       };
-    }
+    });
+    const total = results.reduce((sum, entry) => sum + entry.total, 0);
+    const mergedMessages = results
+      .flatMap((entry) =>
+        entry.messages.map((message) => ({
+          ...message,
+          accountId: entry.accountId,
+          accountLabel: entry.accountLabel,
+          accountEmail: entry.accountEmail,
+        })),
+      )
+      .sort((a, b) => compareIsoDesc(a.receivedAtIso, b.receivedAtIso));
 
-    const messages = await Promise.all(
-      rawMessages.map(async (entry: unknown) => {
-        const messageId = toNullableString(getProp(entry, 'id')) || '';
-        if (!messageId) return null;
-        return this.getMessageSummary(messageId, args.includeHeaders, args.includeBodyPreview);
-      }),
-    );
-
-    const filtered = messages.filter((entry): entry is MessageSummary => Boolean(entry));
     return {
       provider: 'google',
+      mode: 'multi_account',
       query,
       maxResults: args.maxResults,
-      total: filtered.length,
-      messages: filtered,
+      accountCount: accounts.length,
+      total,
+      messages: mergedMessages,
+      accounts: results,
     };
   }
 
   async getMessage(args: z.infer<typeof GetMessageSchema>) {
-    const params = new URLSearchParams();
-    params.set('format', args.format);
-    for (const headerName of GMAIL_METADATA_HEADERS) {
-      params.append('metadataHeaders', headerName);
+    const accounts = this.resolveAccountsForRead(args.accountId);
+    if (accounts.length === 1) {
+      return this.getMessageForAccount(accounts[0], args);
     }
-    const data = await this.gmailRequest(
-      `/users/me/messages/${encodeURIComponent(args.messageId)}?${params.toString()}`,
-      'GET',
+
+    for (const account of accounts) {
+      try {
+        return await this.getMessageForAccount(account, args);
+      } catch (error: unknown) {
+        const message = errorMessage(error);
+        if (
+          !message.includes('404') &&
+          !message.toLowerCase().includes('not found') &&
+          !message.toLowerCase().includes('requested entity was not found')
+        ) {
+          throw error;
+        }
+      }
+    }
+
+    throw new Error(
+      `Message "${args.messageId}" was not found in connected accounts. Checked: ${this.describeAvailableAccounts(accounts)}.`,
     );
-
-    const headers = asArray(data?.payload?.headers);
-    const textBody =
-      args.format === 'full' ? extractBodyByMimeType(data?.payload, 'text/plain') : null;
-    const htmlBody =
-      args.format === 'full' ? extractBodyByMimeType(data?.payload, 'text/html') : null;
-
-    return {
-      provider: 'google',
-      message: {
-        id: String(data?.id || args.messageId),
-        threadId: toNullableString(data?.threadId),
-        historyId: toNullableString(data?.historyId),
-        internalDate: toNullableString(data?.internalDate),
-        subject: getHeaderValue(headers, 'Subject'),
-        from: getHeaderValue(headers, 'From'),
-        to: getHeaderValue(headers, 'To'),
-        cc: getHeaderValue(headers, 'Cc'),
-        bcc: getHeaderValue(headers, 'Bcc'),
-        date: getHeaderValue(headers, 'Date'),
-        messageId: getHeaderValue(headers, 'Message-ID'),
-        labelIds: asArray(data?.labelIds).map((value) => String(value)),
-        snippet: toNullableString(data?.snippet),
-        textBody,
-        htmlBody,
-        payload: args.format === 'full' ? data?.payload || null : null,
-      },
-    };
   }
 
   async sendMessage(args: z.infer<typeof SendMessageSchema>) {
     this.assertWritesEnabled('email sends');
+    const account = this.resolveAccount(args.accountId);
 
     if (!args.confirm) {
       return {
         status: 'requires_confirmation',
         guidance: 'Re-run with confirm=true to send this email.',
         preview: {
+          accountId: account.id,
+          accountEmail: account.email || null,
           to: normalizeAddressList(args.to),
           cc: normalizeAddressList(args.cc),
           bcc: normalizeAddressList(args.bcc),
@@ -329,9 +379,16 @@ class GoogleWorkspaceGateway {
       payload.threadId = args.threadId.trim();
     }
 
-    const response = await this.gmailRequest('/users/me/messages/send', 'POST', payload);
+    const response = await this.gmailRequest(
+      account.id,
+      '/users/me/messages/send',
+      'POST',
+      payload,
+    );
     return {
       provider: 'google',
+      accountId: account.id,
+      accountEmail: account.email || null,
       status: 'sent',
       messageId: toNullableString(response?.id),
       threadId: toNullableString(response?.threadId),
@@ -341,41 +398,73 @@ class GoogleWorkspaceGateway {
   }
 
   async listEvents(args: z.infer<typeof ListEventsSchema>) {
-    const calendarId = resolveCalendarId(args.calendarId, this.config.defaultCalendarId);
+    const accounts = this.resolveAccountsForRead(args.accountId);
+    if (accounts.length === 1) {
+      return this.listEventsForAccount(accounts[0], args);
+    }
+
     const timeMinIso = args.timeMinIso || new Date().toISOString();
     const timeMaxIso =
       args.timeMaxIso || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
-    const params = new URLSearchParams();
-    params.set('timeMin', timeMinIso);
-    params.set('timeMax', timeMaxIso);
-    params.set('singleEvents', String(args.singleEvents));
-    params.set('maxResults', String(args.maxResults));
-    params.set('orderBy', args.orderBy);
-    if (args.query?.trim()) params.set('q', args.query.trim());
-
-    const data = await this.calendarRequest(
-      `/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`,
-      'GET',
+    const perAccount = await Promise.allSettled(
+      accounts.map((account) => this.listEventsForAccount(account, args)),
     );
-    const events = asArray(getProp(data, 'items')).map((entry) => toEventSummary(entry));
+    const results = perAccount.map((result, index) => {
+      const account = accounts[index];
+      if (result.status === 'fulfilled') {
+        return {
+          accountId: account.id,
+          accountLabel: account.label || account.id,
+          accountEmail: account.email || null,
+          calendarId: result.value.calendarId,
+          total: result.value.total,
+          events: result.value.events,
+        };
+      }
+      return {
+        accountId: account.id,
+        accountLabel: account.label || account.id,
+        accountEmail: account.email || null,
+        calendarId: resolveCalendarId(args.calendarId, this.config.defaultCalendarId),
+        total: 0,
+        events: [] as CalendarEventSummary[],
+        error: errorMessage(result.reason),
+      };
+    });
+    const total = results.reduce((sum, entry) => sum + entry.total, 0);
+    const mergedEvents = results
+      .flatMap((entry) =>
+        entry.events.map((event) => ({
+          ...event,
+          accountId: entry.accountId,
+          accountLabel: entry.accountLabel,
+          accountEmail: entry.accountEmail,
+        })),
+      )
+      .sort((a, b) => compareIsoDesc(a.start, b.start));
 
     return {
       provider: 'google',
-      calendarId,
+      mode: 'multi_account',
+      accountCount: accounts.length,
+      total,
       window: { start: timeMinIso, end: timeMaxIso },
-      total: events.length,
-      events,
+      events: mergedEvents,
+      accounts: results,
     };
   }
 
   async createEvent(args: z.infer<typeof CreateEventSchema>) {
     this.assertWritesEnabled('calendar writes');
+    const account = this.resolveAccount(args.accountId);
 
     if (!args.confirm) {
       return {
         status: 'requires_confirmation',
         guidance: 'Re-run with confirm=true to create this event.',
         preview: {
+          accountId: account.id,
+          accountEmail: account.email || null,
           calendarId: resolveCalendarId(args.calendarId, this.config.defaultCalendarId),
           summary: args.summary.trim(),
           startIso: args.startIso,
@@ -389,6 +478,7 @@ class GoogleWorkspaceGateway {
     }
 
     return this.createEventInternal({
+      accountId: account.id,
       calendarId: args.calendarId,
       summary: args.summary,
       description: args.description,
@@ -404,69 +494,76 @@ class GoogleWorkspaceGateway {
   }
 
   async dailyBriefing(args: z.infer<typeof DailyBriefingSchema>) {
-    const calendarId = resolveCalendarId(args.calendarId, this.config.defaultCalendarId);
-    const windowStartIso = args.windowStartIso || new Date().toISOString();
-    const windowEndIso =
-      args.windowEndIso || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-    const keywords = normalizeKeywords(args.meetingKeywords);
+    const accounts = this.resolveAccountsForRead(args.accountId);
+    if (accounts.length === 1) {
+      return this.dailyBriefingForAccount(accounts[0], args);
+    }
 
-    const [emails, events] = await Promise.all([
-      this.listMessages({
-        query: args.emailQuery || this.config.defaultUnreadQuery,
-        maxResults: args.emailLimit,
-        includeHeaders: true,
-        includeBodyPreview: true,
-        labelIds: undefined,
-      }),
-      this.listEvents({
-        calendarId,
-        timeMinIso: windowStartIso,
-        timeMaxIso: windowEndIso,
-        maxResults: args.eventLimit,
-        query: undefined,
-        singleEvents: true,
-        orderBy: 'startTime',
-      }),
-    ]);
-
-    const meetingCandidates = emails.messages
-      .filter((message) => hasMeetingSignal(message, keywords))
-      .map((message) => ({
-        messageId: message.id,
-        subject: message.subject,
-        from: message.from,
-        snippet: message.snippet,
-      }));
-
-    const nextActions = buildNextActions(meetingCandidates.length, events.events.length);
+    const perAccount = await Promise.allSettled(
+      accounts.map((account) => this.dailyBriefingForAccount(account, args)),
+    );
+    const results = perAccount.map((result, index) => {
+      const account = accounts[index];
+      if (result.status === 'fulfilled') {
+        return {
+          accountId: account.id,
+          accountLabel: account.label || account.id,
+          accountEmail: account.email || null,
+          briefing: result.value,
+        };
+      }
+      return {
+        accountId: account.id,
+        accountLabel: account.label || account.id,
+        accountEmail: account.email || null,
+        error: errorMessage(result.reason),
+      };
+    });
+    const totalMessages = results.reduce(
+      (sum, entry) =>
+        sum +
+        (entry.briefing && typeof entry.briefing.inbox?.total === 'number'
+          ? entry.briefing.inbox.total
+          : 0),
+      0,
+    );
+    const totalEvents = results.reduce(
+      (sum, entry) =>
+        sum +
+        (entry.briefing && typeof entry.briefing.calendar?.total === 'number'
+          ? entry.briefing.calendar.total
+          : 0),
+      0,
+    );
+    const totalMeetingCandidates = results.reduce(
+      (sum, entry) =>
+        sum +
+        (entry.briefing && typeof entry.briefing.signals?.meetingCandidateCount === 'number'
+          ? entry.briefing.signals.meetingCandidateCount
+          : 0),
+      0,
+    );
 
     return {
       provider: 'google',
+      mode: 'multi_account',
       generatedAtIso: new Date().toISOString(),
-      inbox: {
-        query: emails.query,
-        total: emails.total,
-        messages: emails.messages,
+      accountCount: accounts.length,
+      totals: {
+        messages: totalMessages,
+        events: totalEvents,
+        meetingCandidates: totalMeetingCandidates,
       },
-      calendar: {
-        calendarId,
-        window: events.window,
-        total: events.total,
-        events: events.events,
-      },
-      signals: {
-        meetingKeywords: keywords,
-        meetingCandidateCount: meetingCandidates.length,
-        meetingCandidates,
-        nextActions,
-      },
+      accounts: results,
     };
   }
 
   async createMeetingFromMessage(args: z.infer<typeof CreateMeetingFromMessageSchema>) {
     this.assertWritesEnabled('calendar writes from email context');
+    const account = this.resolveAccount(args.accountId);
 
     const source = await this.getMessage({
+      accountId: account.id,
       messageId: args.messageId,
       format: 'metadata',
     });
@@ -494,6 +591,8 @@ class GoogleWorkspaceGateway {
         status: 'requires_confirmation',
         guidance: 'Re-run with confirm=true to create this event from the email.',
         preview: {
+          accountId: account.id,
+          accountEmail: account.email || null,
           sourceMessageId: args.messageId,
           summary: (args.summary || sourceSubject).trim(),
           startIso: args.startIso,
@@ -507,6 +606,7 @@ class GoogleWorkspaceGateway {
     }
 
     const eventResult = await this.createEventInternal({
+      accountId: account.id,
       calendarId: args.calendarId,
       summary: args.summary || sourceSubject,
       description: descriptionParts.join('\n\n'),
@@ -522,6 +622,8 @@ class GoogleWorkspaceGateway {
 
     return {
       provider: 'google',
+      accountId: account.id,
+      accountEmail: account.email || null,
       sourceMessage: {
         id: source.message.id,
         subject: source.message.subject,
@@ -532,7 +634,249 @@ class GoogleWorkspaceGateway {
     };
   }
 
+  async connectGoogleAccount(args: z.infer<typeof ConnectGoogleAccountSchema>) {
+    const gatewayBase = stripTrailingSlash(this.config.gatewayBaseUrl || 'http://127.0.0.1:3001');
+    const callbackBase =
+      toNullableString(args.callbackBaseUrl) ||
+      toNullableString(this.config.dashboardBaseUrl) ||
+      'http://localhost:3000';
+    const response = await this.fetchJson(
+      `${gatewayBase}/api/skills/email-calendar/oauth/google/start`,
+      {
+        method: 'POST',
+        token: null,
+        contentType: 'application/json',
+        jsonBody: {
+          label: args.label.trim(),
+          loginHint: args.loginHint || undefined,
+          callbackBaseUrl: callbackBase,
+        },
+      },
+    );
+    const payload = unwrapApiResponse(response, 'OAuth start');
+    const data = asRecord(payload) || {};
+    const authorizationUrl = toNullableString(data.authorizationUrl);
+
+    return {
+      provider: 'google',
+      status: authorizationUrl ? 'auth_started' : 'auth_failed',
+      accountId: toNullableString(data.accountId),
+      state: toNullableString(data.state),
+      expiresAtMs:
+        typeof data.expiresAtMs === 'number' && Number.isFinite(data.expiresAtMs)
+          ? data.expiresAtMs
+          : null,
+      authorizationUrl,
+      guidance: authorizationUrl
+        ? 'Open authorizationUrl in browser, sign in to Google, then continue your task.'
+        : 'Failed to create OAuth authorization URL.',
+    };
+  }
+
+  private async listMessagesForAccount(
+    account: ResolvedAccountContext,
+    args: z.infer<typeof ListMessagesSchema>,
+  ) {
+    const query = (args.query || this.config.defaultUnreadQuery || '').trim();
+    const params = new URLSearchParams();
+    params.set('maxResults', String(args.maxResults));
+    if (query) params.set('q', query);
+    for (const labelId of args.labelIds || []) {
+      params.append('labelIds', labelId);
+    }
+
+    const list = await this.gmailRequest(
+      account.id,
+      `/users/me/messages${params.toString() ? `?${params.toString()}` : ''}`,
+      'GET',
+    );
+    const rawMessages = asArray(list?.messages);
+    if (rawMessages.length === 0) {
+      return {
+        provider: 'google',
+        accountId: account.id,
+        accountEmail: account.email || null,
+        query,
+        maxResults: args.maxResults,
+        total: 0,
+        messages: [] as MessageSummary[],
+      };
+    }
+
+    const messages = await Promise.all(
+      rawMessages.map(async (entry: unknown) => {
+        const messageId = toNullableString(getProp(entry, 'id')) || '';
+        if (!messageId) return null;
+        return this.getMessageSummary(
+          account.id,
+          messageId,
+          args.includeHeaders,
+          args.includeBodyPreview,
+        );
+      }),
+    );
+
+    const filtered = messages.filter((entry): entry is MessageSummary => Boolean(entry));
+    return {
+      provider: 'google',
+      accountId: account.id,
+      accountEmail: account.email || null,
+      query,
+      maxResults: args.maxResults,
+      total: filtered.length,
+      messages: filtered,
+    };
+  }
+
+  private async getMessageForAccount(
+    account: ResolvedAccountContext,
+    args: z.infer<typeof GetMessageSchema>,
+  ) {
+    const params = new URLSearchParams();
+    params.set('format', args.format);
+    for (const headerName of GMAIL_METADATA_HEADERS) {
+      params.append('metadataHeaders', headerName);
+    }
+    const data = await this.gmailRequest(
+      account.id,
+      `/users/me/messages/${encodeURIComponent(args.messageId)}?${params.toString()}`,
+      'GET',
+    );
+
+    const headers = asArray(data?.payload?.headers);
+    const textBody =
+      args.format === 'full' ? extractBodyByMimeType(data?.payload, 'text/plain') : null;
+    const htmlBody =
+      args.format === 'full' ? extractBodyByMimeType(data?.payload, 'text/html') : null;
+
+    return {
+      provider: 'google',
+      accountId: account.id,
+      accountEmail: account.email || null,
+      message: {
+        id: String(data?.id || args.messageId),
+        threadId: toNullableString(data?.threadId),
+        historyId: toNullableString(data?.historyId),
+        internalDate: toNullableString(data?.internalDate),
+        subject: getHeaderValue(headers, 'Subject'),
+        from: getHeaderValue(headers, 'From'),
+        to: getHeaderValue(headers, 'To'),
+        cc: getHeaderValue(headers, 'Cc'),
+        bcc: getHeaderValue(headers, 'Bcc'),
+        date: getHeaderValue(headers, 'Date'),
+        messageId: getHeaderValue(headers, 'Message-ID'),
+        labelIds: asArray(data?.labelIds).map((value) => String(value)),
+        snippet: toNullableString(data?.snippet),
+        textBody,
+        htmlBody,
+        payload: args.format === 'full' ? data?.payload || null : null,
+      },
+    };
+  }
+
+  private async listEventsForAccount(
+    account: ResolvedAccountContext,
+    args: z.infer<typeof ListEventsSchema>,
+  ) {
+    const calendarId = resolveCalendarId(args.calendarId, this.config.defaultCalendarId);
+    const timeMinIso = args.timeMinIso || new Date().toISOString();
+    const timeMaxIso =
+      args.timeMaxIso || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString();
+    const params = new URLSearchParams();
+    params.set('timeMin', timeMinIso);
+    params.set('timeMax', timeMaxIso);
+    params.set('singleEvents', String(args.singleEvents));
+    params.set('maxResults', String(args.maxResults));
+    params.set('orderBy', args.orderBy);
+    if (args.query?.trim()) params.set('q', args.query.trim());
+
+    const data = await this.calendarRequest(
+      account.id,
+      `/calendars/${encodeURIComponent(calendarId)}/events?${params.toString()}`,
+      'GET',
+    );
+    const events = asArray(getProp(data, 'items')).map((entry) => toEventSummary(entry));
+
+    return {
+      provider: 'google',
+      accountId: account.id,
+      accountEmail: account.email || null,
+      calendarId,
+      window: { start: timeMinIso, end: timeMaxIso },
+      total: events.length,
+      events,
+    };
+  }
+
+  private async dailyBriefingForAccount(
+    account: ResolvedAccountContext,
+    args: z.infer<typeof DailyBriefingSchema>,
+  ) {
+    const calendarId = resolveCalendarId(args.calendarId, this.config.defaultCalendarId);
+    const windowStartIso = args.windowStartIso || new Date().toISOString();
+    const windowEndIso =
+      args.windowEndIso || new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+    const keywords = normalizeKeywords(args.meetingKeywords);
+
+    const [emails, events] = await Promise.all([
+      this.listMessagesForAccount(account, {
+        accountId: account.id,
+        query: args.emailQuery || this.config.defaultUnreadQuery,
+        maxResults: args.emailLimit,
+        includeHeaders: true,
+        includeBodyPreview: true,
+        labelIds: undefined,
+      }),
+      this.listEventsForAccount(account, {
+        accountId: account.id,
+        calendarId,
+        timeMinIso: windowStartIso,
+        timeMaxIso: windowEndIso,
+        maxResults: args.eventLimit,
+        query: undefined,
+        singleEvents: true,
+        orderBy: 'startTime',
+      }),
+    ]);
+
+    const meetingCandidates = emails.messages
+      .filter((message) => hasMeetingSignal(message, keywords))
+      .map((message) => ({
+        messageId: message.id,
+        subject: message.subject,
+        from: message.from,
+        snippet: message.snippet,
+      }));
+
+    const nextActions = buildNextActions(meetingCandidates.length, events.events.length);
+
+    return {
+      provider: 'google',
+      accountId: account.id,
+      accountEmail: account.email || null,
+      generatedAtIso: new Date().toISOString(),
+      inbox: {
+        query: emails.query,
+        total: emails.total,
+        messages: emails.messages,
+      },
+      calendar: {
+        calendarId,
+        window: events.window,
+        total: events.total,
+        events: events.events,
+      },
+      signals: {
+        meetingKeywords: keywords,
+        meetingCandidateCount: meetingCandidates.length,
+        meetingCandidates,
+        nextActions,
+      },
+    };
+  }
+
   private async createEventInternal(args: {
+    accountId: string;
     calendarId?: string;
     summary: string;
     description?: string;
@@ -545,8 +889,10 @@ class GoogleWorkspaceGateway {
     colorId?: string;
     sendUpdates: z.infer<typeof CreateEventSchema>['sendUpdates'];
   }) {
+    const account = this.resolveAccount(args.accountId);
+    const fallbackTimezone = this.config.defaultTimezone || 'UTC';
     const calendarId = resolveCalendarId(args.calendarId, this.config.defaultCalendarId);
-    const timezone = (args.timezone || this.config.defaultTimezone || 'UTC').trim();
+    const timezone = (args.timezone || fallbackTimezone).trim();
     const params = new URLSearchParams();
     if (args.sendUpdates !== 'none') params.set('sendUpdates', args.sendUpdates);
     if (args.createMeetLink) params.set('conferenceDataVersion', '1');
@@ -581,12 +927,15 @@ class GoogleWorkspaceGateway {
     }
 
     const event = await this.calendarRequest(
+      account.id,
       `/calendars/${encodeURIComponent(calendarId)}/events${suffix}`,
       'POST',
       payload,
     );
     return {
       provider: 'google',
+      accountId: account.id,
+      accountEmail: account.email || null,
       status: 'created',
       calendarId,
       event: toEventSummary(event),
@@ -594,6 +943,7 @@ class GoogleWorkspaceGateway {
   }
 
   private async getMessageSummary(
+    accountId: string,
     messageId: string,
     includeHeaders: boolean,
     includeBodyPreview: boolean,
@@ -604,6 +954,7 @@ class GoogleWorkspaceGateway {
       params.append('metadataHeaders', headerName);
     }
     const data = await this.gmailRequest(
+      accountId,
       `/users/me/messages/${encodeURIComponent(messageId)}?${params.toString()}`,
       'GET',
     );
@@ -623,11 +974,13 @@ class GoogleWorkspaceGateway {
   }
 
   private async gmailRequest(
+    accountId: string,
     path: string,
     method: 'GET' | 'POST',
     body?: unknown,
   ): Promise<Record<string, unknown>> {
     return this.googleRequest(
+      accountId,
       `${stripTrailingSlash(this.config.gmailBaseUrl)}${path}`,
       method,
       body,
@@ -636,11 +989,13 @@ class GoogleWorkspaceGateway {
   }
 
   private async calendarRequest(
+    accountId: string,
     path: string,
     method: 'GET' | 'POST',
     body?: unknown,
   ): Promise<Record<string, unknown>> {
     return this.googleRequest(
+      accountId,
       `${stripTrailingSlash(this.config.calendarBaseUrl)}${path}`,
       method,
       body,
@@ -649,12 +1004,13 @@ class GoogleWorkspaceGateway {
   }
 
   private async googleRequest(
+    accountId: string,
     url: string,
     method: 'GET' | 'POST',
     body: unknown,
     service: string,
   ): Promise<Record<string, unknown>> {
-    const token = await this.ensureAccessToken(false);
+    const token = await this.ensureAccessToken(accountId, false);
     let response = await this.fetchJson(url, {
       method,
       token,
@@ -665,11 +1021,13 @@ class GoogleWorkspaceGateway {
     if (
       response.status === 401 &&
       this.config.autoRefreshToken &&
-      this.hasRefreshCredentials() &&
+      this.hasRefreshCredentials(accountId) &&
       !response.ok
     ) {
-      this.logger.warn(`${service}: token rejected; attempting refresh and retry.`);
-      const refreshedToken = await this.ensureAccessToken(true);
+      this.logger.warn(
+        `${service}: token rejected for account ${accountId}; attempting refresh and retry.`,
+      );
+      const refreshedToken = await this.ensureAccessToken(accountId, true);
       response = await this.fetchJson(url, {
         method,
         token: refreshedToken,
@@ -682,57 +1040,62 @@ class GoogleWorkspaceGateway {
     return asRecord(parsed) || {};
   }
 
-  private async ensureAccessToken(forceRefresh: boolean): Promise<string> {
+  private async ensureAccessToken(accountId: string, forceRefresh: boolean): Promise<string> {
+    const account = this.resolveAccount(accountId);
+    const accountKey = account.id;
     const now = Date.now();
-    if (
-      !forceRefresh &&
-      this.tokenState &&
-      (!this.tokenState.expiresAt || this.tokenState.expiresAt - 30_000 > now)
-    ) {
-      return this.tokenState.accessToken;
+    if (!forceRefresh && this.tokenStateByAccount.has(accountKey)) {
+      const cached = this.tokenStateByAccount.get(accountKey)!;
+      if (!cached.expiresAt || cached.expiresAt - 30_000 > now) {
+        return cached.accessToken;
+      }
     }
 
-    if (!forceRefresh && this.config.accessToken?.trim()) {
-      this.tokenState = {
-        accessToken: this.config.accessToken.trim(),
-        expiresAt: null,
-      };
-      return this.tokenState.accessToken;
+    if (!forceRefresh) {
+      const seeded = this.getInitialAccountAccessToken(account);
+      if (seeded) {
+        this.tokenStateByAccount.set(accountKey, seeded);
+        return seeded.accessToken;
+      }
     }
 
-    if (this.config.autoRefreshToken && this.hasRefreshCredentials()) {
-      const refreshed = await this.refreshAccessToken();
-      this.tokenState = refreshed;
+    if (this.config.autoRefreshToken && this.hasRefreshCredentials(account.id)) {
+      const refreshed = await this.refreshAccessToken(account.id);
+      this.tokenStateByAccount.set(accountKey, refreshed);
       return refreshed.accessToken;
     }
 
-    if (this.config.accessToken?.trim()) {
-      return this.config.accessToken.trim();
+    const fallback = this.getInitialAccountAccessToken(account);
+    if (fallback?.accessToken) {
+      return fallback.accessToken;
     }
 
     throw new Error(
-      `Missing OAuth credentials. Provide ${this.config.accessTokenEnv} or configure refresh token credentials.`,
+      'No connected Google account found. Connect an account from Skills > Email + Calendar.',
     );
   }
 
-  private hasRefreshCredentials(): boolean {
-    return Boolean(
-      this.config.refreshToken?.trim() &&
-      this.config.clientId?.trim() &&
-      this.config.clientSecret?.trim(),
-    );
+  private hasRefreshCredentials(accountId: string): boolean {
+    const account = this.resolveAccount(accountId);
+    const refreshToken = toNullableString(account.secret?.refreshToken) || this.config.refreshToken;
+    return Boolean(refreshToken?.trim() && this.config.clientId?.trim());
   }
 
-  private async refreshAccessToken(): Promise<TokenState> {
-    if (!this.hasRefreshCredentials()) {
+  private async refreshAccessToken(accountId: string): Promise<TokenState> {
+    const account = this.resolveAccount(accountId);
+    const refreshToken =
+      toNullableString(account.secret?.refreshToken) || toNullableString(this.config.refreshToken);
+    if (!refreshToken || !this.config.clientId?.trim()) {
       throw new Error('Refresh token flow is not configured.');
     }
 
     const form = new URLSearchParams();
     form.set('grant_type', 'refresh_token');
-    form.set('refresh_token', this.config.refreshToken!.trim());
+    form.set('refresh_token', refreshToken.trim());
     form.set('client_id', this.config.clientId!.trim());
-    form.set('client_secret', this.config.clientSecret!.trim());
+    if (this.config.clientSecret?.trim()) {
+      form.set('client_secret', this.config.clientSecret.trim());
+    }
 
     const response = await this.fetchJson(this.config.tokenUrl, {
       method: 'POST',
@@ -750,6 +1113,144 @@ class GoogleWorkspaceGateway {
     const expiresAt =
       Number.isFinite(expiresIn) && expiresIn > 0 ? Date.now() + expiresIn * 1000 : null;
     return { accessToken, expiresAt };
+  }
+
+  private getAccountSecrets(): AccountSecretMap {
+    return this.config.accountSecrets || {};
+  }
+
+  private listStoredAccounts(): ResolvedAccountContext[] {
+    const secrets = this.getAccountSecrets();
+    return Object.entries(secrets).map(([id, secret]) => ({
+      id,
+      label: toNullableString(secret?.label) || undefined,
+      email: toNullableString(secret?.email) || undefined,
+      secret,
+      source: 'stored',
+    }));
+  }
+
+  private resolveAccountsForRead(requestedAccountId?: string): ResolvedAccountContext[] {
+    if (toNullableString(requestedAccountId)) {
+      return [this.resolveAccount(requestedAccountId)];
+    }
+
+    const accounts = this.listStoredAccounts();
+    if (accounts.length > 0) {
+      return accounts;
+    }
+
+    if (this.config.accessToken?.trim() || this.config.refreshToken?.trim()) {
+      return [
+        {
+          id: LEGACY_DEFAULT_ACCOUNT_ID,
+          label: 'Legacy OAuth',
+          email: undefined,
+          source: 'legacy',
+        },
+      ];
+    }
+
+    throw new Error(
+      'No connected Google account. Connect from Skills > Email + Calendar and try again.',
+    );
+  }
+
+  private resolveAccount(requestedAccountId?: string): ResolvedAccountContext {
+    const accounts = this.listStoredAccounts();
+    const normalizedRequested = toNullableString(requestedAccountId)?.toLowerCase() || null;
+
+    if (normalizedRequested) {
+      const matches = accounts.filter((entry) => {
+        if (entry.id.toLowerCase() === normalizedRequested) return true;
+        if (entry.label?.toLowerCase() === normalizedRequested) return true;
+        if (entry.email?.toLowerCase() === normalizedRequested) return true;
+        return false;
+      });
+      if (matches.length === 1) {
+        const match = matches[0];
+        return {
+          id: match.id,
+          label: match.label,
+          email: match.email,
+          secret: match.secret,
+          source: 'stored',
+        };
+      }
+      if (matches.length > 1) {
+        throw new Error(
+          `Account selector "${requestedAccountId}" is ambiguous. Use a unique label or email. Options: ${this.describeAvailableAccounts(accounts)}.`,
+        );
+      }
+      throw new Error(
+        `Account "${requestedAccountId}" was not found. Available accounts: ${this.describeAvailableAccounts(accounts)}.`,
+      );
+    }
+
+    if (accounts.length === 1) {
+      const only = accounts[0];
+      return {
+        id: only.id,
+        label: only.label,
+        email: only.email,
+        secret: only.secret,
+        source: 'stored',
+      };
+    }
+    if (accounts.length > 1) {
+      throw new Error(
+        `Multiple Google accounts are connected. Provide accountId as account id, label, or email. Options: ${this.describeAvailableAccounts(accounts)}.`,
+      );
+    }
+
+    if (this.config.accessToken?.trim() || this.config.refreshToken?.trim()) {
+      return {
+        id: LEGACY_DEFAULT_ACCOUNT_ID,
+        label: 'Legacy OAuth',
+        email: undefined,
+        source: 'legacy',
+      };
+    }
+
+    throw new Error(
+      'No connected Google account. Connect from Skills > Email + Calendar and try again.',
+    );
+  }
+
+  private describeAvailableAccounts(
+    accounts: Array<{ id: string; label?: string; email?: string }>,
+  ): string {
+    if (accounts.length === 0) return 'none';
+    return accounts
+      .map((entry) => {
+        if (entry.label && entry.email) return `${entry.label} (${entry.email})`;
+        if (entry.label) return `${entry.label} (${entry.id})`;
+        if (entry.email) return entry.email;
+        return entry.id;
+      })
+      .join(', ');
+  }
+
+  private getInitialAccountAccessToken(account: ResolvedAccountContext): TokenState | null {
+    const accountAccessToken = toNullableString(account.secret?.accessToken);
+    if (accountAccessToken) {
+      return {
+        accessToken: accountAccessToken,
+        expiresAt:
+          typeof account.secret?.expiresAt === 'number' && Number.isFinite(account.secret.expiresAt)
+            ? account.secret.expiresAt
+            : null,
+      };
+    }
+
+    if (this.config.accessToken?.trim()) {
+      return {
+        accessToken: this.config.accessToken.trim(),
+        expiresAt: null,
+      };
+    }
+
+    return null;
   }
 
   private assertWritesEnabled(operation: string) {
@@ -893,6 +1394,15 @@ const emailCalendarPlugin = {
       execute: (args: unknown) =>
         runTool(() => gateway.createMeetingFromMessage(CreateMeetingFromMessageSchema.parse(args))),
     });
+
+    api.registerTool({
+      name: 'email_calendar_connect_google_account',
+      description:
+        'Start Google OAuth account connection and return an authorization URL to complete sign-in.',
+      parameters: ConnectGoogleAccountSchema,
+      execute: (args: unknown) =>
+        runTool(() => gateway.connectGoogleAccount(ConnectGoogleAccountSchema.parse(args))),
+    });
   },
 };
 
@@ -908,9 +1418,11 @@ async function runTool<T>(op: () => Promise<T>): Promise<T | { error: string }> 
   }
 }
 
-function resolveConfig(raw: unknown): PluginConfig {
+function resolveConfig(raw: unknown): ResolvedPluginConfig {
   const parsed = PluginConfigSchema.safeParse(raw || {});
   const base = parsed.success ? parsed.data : PluginConfigSchema.parse({});
+  const accountsSecretRaw = fromValueOrEnv(undefined, base.accountsSecretEnv) || '';
+  const accountSecrets = parseAccountSecrets(accountsSecretRaw);
 
   return {
     ...base,
@@ -918,6 +1430,7 @@ function resolveConfig(raw: unknown): PluginConfig {
     refreshToken: fromValueOrEnv(base.refreshToken, base.refreshTokenEnv),
     clientId: fromValueOrEnv(base.clientId, base.clientIdEnv),
     clientSecret: fromValueOrEnv(base.clientSecret, base.clientSecretEnv),
+    accountSecrets,
   };
 }
 
@@ -963,6 +1476,14 @@ function toIsoDateString(epochMsString: unknown): string | null {
   const raw = typeof epochMsString === 'string' ? Number(epochMsString) : Number(epochMsString);
   if (!Number.isFinite(raw) || raw <= 0) return null;
   return new Date(raw).toISOString();
+}
+
+function compareIsoDesc(a: string | null, b: string | null): number {
+  const timeA = a ? Date.parse(a) : 0;
+  const timeB = b ? Date.parse(b) : 0;
+  const safeA = Number.isFinite(timeA) ? timeA : 0;
+  const safeB = Number.isFinite(timeB) ? timeB : 0;
+  return safeB - safeA;
 }
 
 function getHeaderValue(headers: unknown[], targetName: string): string | null {
@@ -1168,4 +1689,36 @@ function isAbortError(error: unknown): boolean {
 function errorMessage(error: unknown): string {
   const root = asRecord(error);
   return toNullableString(root?.message) || 'Skill operation failed.';
+}
+
+function parseAccountSecrets(raw: string): AccountSecretMap {
+  if (!raw.trim()) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    const root = asRecord(parsed);
+    const nested = asRecord(root?.accounts);
+    const container = nested || root;
+    if (!container) return {};
+    const result: AccountSecretMap = {};
+    for (const [key, value] of Object.entries(container)) {
+      const id = toNullableString(key);
+      const rec = asRecord(value);
+      if (!id || !rec) continue;
+      result[id] = {
+        provider: 'google',
+        label: toNullableString(rec.label) || undefined,
+        refreshToken: toNullableString(rec.refreshToken) || undefined,
+        accessToken: toNullableString(rec.accessToken) || undefined,
+        expiresAt:
+          typeof rec.expiresAt === 'number' && Number.isFinite(rec.expiresAt)
+            ? rec.expiresAt
+            : undefined,
+        email: toNullableString(rec.email) || undefined,
+        scope: toNullableString(rec.scope) || undefined,
+      };
+    }
+    return result;
+  } catch {
+    return {};
+  }
 }
