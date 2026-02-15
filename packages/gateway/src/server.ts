@@ -38,6 +38,7 @@ import type { SkillLoader } from './application/services/skill-loader.js';
 import type { ToolRegistry } from './tools/registry.js';
 import type { MemoryDB } from './infrastructure/repositories/memory-db.js';
 import type { ModelCatalog } from './infrastructure/llm/model-catalog.js';
+import type { ModelRouter } from './infrastructure/llm/model-router.js';
 
 export interface ServerConfig {
   port: number;
@@ -50,6 +51,7 @@ export interface ServerConfig {
   toolRegistry?: ToolRegistry;
   memoryDb?: MemoryDB;
   modelCatalog?: ModelCatalog;
+  modelRouter?: ModelRouter;
   secretsStore?: SecretsStore;
   onScheduleUpdate?: (type: 'dreamer' | 'monologue', intervalMinutes: number) => void;
   onSkillsReload?: () => Promise<void>;
@@ -81,7 +83,12 @@ export class GatewayServer extends EventEmitter {
   async start(): Promise<void> {
     await this.app.register(websocket);
     await this.app.register(cors, {
-      origin: ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:3002', 'http://127.0.0.1:3002'],
+      origin: [
+        'http://localhost:3000',
+        'http://127.0.0.1:3000',
+        'http://localhost:3002',
+        'http://127.0.0.1:3002',
+      ],
       methods: ['GET', 'POST', 'PUT', 'DELETE'],
     });
 
@@ -96,6 +103,12 @@ export class GatewayServer extends EventEmitter {
     await this.app.register(agentRoutes);
     await this.app.register(systemRoutes);
     await this.app.register(taskRoutes);
+
+    this.app.get('/api/models/runtime-status', async () => {
+      return {
+        statuses: this.config.modelRouter?.getModelRuntimeStatuses() || {},
+      };
+    });
 
     // WebSocket handling is now fully delegated to AgentController via agentRoutes
     // (Route /ws is registered in agentRoutes)
@@ -175,6 +188,4 @@ export class GatewayServer extends EventEmitter {
   async stop(): Promise<void> {
     await this.app.close();
   }
-
-
 }

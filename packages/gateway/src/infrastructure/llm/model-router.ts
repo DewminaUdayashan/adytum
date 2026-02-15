@@ -18,6 +18,14 @@ interface ModelRouterConfig {
   routing: AdytumConfig['routing'];
 }
 
+export type ModelRuntimeStatus = {
+  state: 'rate_limited' | 'quota_exceeded';
+  cooldownUntil: number;
+  resetAt?: number;
+  message?: string;
+  updatedAt: number;
+};
+
 /**
  * Routes LLM requests to the correct model.
  *
@@ -41,6 +49,7 @@ export class ModelRouter {
   private useProxy: boolean = false;
   private initialized: boolean = false;
   private cooldowns = new Map<string, number>(); // modelId -> timestamp until which it is cooled down
+  private modelRuntimeStatus = new Map<string, ModelRuntimeStatus>();
   private routing: AdytumConfig['routing'];
 
   constructor(config: ModelRouterConfig) {
@@ -273,6 +282,7 @@ export class ModelRouter {
     if (!until) return false;
     if (Date.now() > until) {
       this.cooldowns.delete(modelId);
+      this.clearCooldownStatus(modelId);
       return false;
     }
     return true;
@@ -283,8 +293,53 @@ export class ModelRouter {
    * @param modelId - Model id.
    * @param ttlMs - Ttl ms.
    */
-  private setRateLimited(modelId: string, ttlMs: number = 60_000) {
-    this.cooldowns.set(modelId, Date.now() + ttlMs);
+  private setRateLimited(
+    modelId: string,
+    details: {
+      ttlMs?: number;
+      resetAt?: number;
+      reason?: 'rate_limited' | 'quota_exceeded';
+      message?: string;
+    } = {},
+  ) {
+    const now = Date.now();
+    const ttlMs = Math.max(
+      1000,
+      details.ttlMs ?? (typeof details.resetAt === 'number' ? details.resetAt - now : 60_000),
+    );
+    const cooldownUntil = now + ttlMs;
+    this.cooldowns.set(modelId, cooldownUntil);
+    this.modelRuntimeStatus.set(modelId, {
+      state: details.reason || 'rate_limited',
+      cooldownUntil,
+      resetAt: details.resetAt,
+      message: details.message,
+      updatedAt: now,
+    });
+  }
+
+  private clearCooldownStatus(modelId: string): void {
+    const status = this.modelRuntimeStatus.get(modelId);
+    if (!status) return;
+    if (Date.now() >= status.cooldownUntil) {
+      this.modelRuntimeStatus.delete(modelId);
+    }
+  }
+
+  private markModelHealthy(modelId: string): void {
+    this.cooldowns.delete(modelId);
+    this.modelRuntimeStatus.delete(modelId);
+  }
+
+  getModelRuntimeStatuses(): Record<string, ModelRuntimeStatus> {
+    const now = Date.now();
+    for (const [modelId, until] of this.cooldowns.entries()) {
+      if (now >= until) {
+        this.cooldowns.delete(modelId);
+        this.modelRuntimeStatus.delete(modelId);
+      }
+    }
+    return Object.fromEntries(this.modelRuntimeStatus.entries());
   }
 
   /**
@@ -294,7 +349,131 @@ export class ModelRouter {
    */
   private isRateLimitError(err: any): boolean {
     const msg = String(err?.message || '').toLowerCase();
-    return msg.includes('429') || msg.includes('rate limit') || msg.includes('rate-limit');
+    const status = Number(err?.status || err?.response?.status || err?.cause?.status || 0);
+    return (
+      status === 429 ||
+      msg.includes('429') ||
+      msg.includes('rate limit') ||
+      msg.includes('rate-limit') ||
+      msg.includes('insufficient_quota') ||
+      msg.includes('quota exceeded')
+    );
+  }
+
+  private getHeaderValue(err: any, headerName: string): string | undefined {
+    const target = headerName.toLowerCase();
+    const headerContainers = [err?.headers, err?.response?.headers, err?.cause?.headers].filter(
+      Boolean,
+    );
+
+    for (const headers of headerContainers) {
+      if (typeof headers.get === 'function') {
+        const value = headers.get(headerName) || headers.get(target);
+        if (value) return String(value);
+      }
+
+      if (typeof headers === 'object') {
+        for (const [key, value] of Object.entries(headers)) {
+          if (key.toLowerCase() === target && value != null) {
+            return String(value);
+          }
+        }
+      }
+    }
+
+    return undefined;
+  }
+
+  private parseRetryDelayMs(raw: string): number | undefined {
+    const value = raw.trim().toLowerCase();
+    if (!value) return undefined;
+
+    if (/^\d+(\.\d+)?$/.test(value)) {
+      const n = Number(value);
+      if (!Number.isFinite(n)) return undefined;
+      return n <= 1000 ? Math.round(n * 1000) : Math.round(n);
+    }
+
+    const durationMatch = value.match(/^(\d+(\.\d+)?)(ms|s|m|h)$/);
+    if (durationMatch) {
+      const amount = Number(durationMatch[1]);
+      const unit = durationMatch[3];
+      if (unit === 'ms') return Math.round(amount);
+      if (unit === 's') return Math.round(amount * 1000);
+      if (unit === 'm') return Math.round(amount * 60_000);
+      if (unit === 'h') return Math.round(amount * 3_600_000);
+    }
+
+    const dateMs = Date.parse(raw);
+    if (!Number.isNaN(dateMs)) {
+      return Math.max(0, dateMs - Date.now());
+    }
+
+    return undefined;
+  }
+
+  private extractResetAt(err: any): number | undefined {
+    const now = Date.now();
+    const headerNames = [
+      'retry-after',
+      'retry-after-ms',
+      'x-ratelimit-reset',
+      'x-ratelimit-reset-requests',
+      'x-ratelimit-reset-tokens',
+      'ratelimit-reset',
+    ];
+
+    for (const name of headerNames) {
+      const raw = this.getHeaderValue(err, name);
+      if (!raw) continue;
+      const delayMs = this.parseRetryDelayMs(raw);
+      if (delayMs !== undefined) {
+        if (name === 'retry-after-ms') return now + delayMs;
+        return now + Math.max(1000, delayMs);
+      }
+
+      const numeric = Number(raw);
+      if (!Number.isFinite(numeric)) continue;
+      if (numeric > 1_000_000_000_000) return numeric; // epoch ms
+      if (numeric > 1_000_000_000) return numeric * 1000; // epoch sec
+      if (numeric > 0) return now + numeric * 1000; // seconds
+    }
+
+    const message = String(err?.message || '');
+    const inMatch = message.match(
+      /(?:try again|retry|reset)[^\n]*?in\s+(\d+(\.\d+)?)\s*(ms|milliseconds?|s|sec|seconds?|m|min|minutes?|h|hr|hours?)/i,
+    );
+    if (inMatch) {
+      const amount = Number(inMatch[1]);
+      const unit = inMatch[3].toLowerCase();
+      let delayMs = 0;
+      if (unit.startsWith('ms')) delayMs = amount;
+      else if (unit.startsWith('s')) delayMs = amount * 1000;
+      else if (unit.startsWith('m')) delayMs = amount * 60_000;
+      else if (unit.startsWith('h')) delayMs = amount * 3_600_000;
+      if (delayMs > 0) return now + Math.round(delayMs);
+    }
+
+    return undefined;
+  }
+
+  private buildRateLimitState(err: any): {
+    reason: 'rate_limited' | 'quota_exceeded';
+    resetAt?: number;
+    ttlMs: number;
+    message: string;
+  } {
+    const message = String(err?.message || 'Rate limited');
+    const lower = message.toLowerCase();
+    const reason =
+      lower.includes('insufficient_quota') ||
+      (lower.includes('quota') &&
+        (lower.includes('exceed') || lower.includes('insufficient') || lower.includes('credit')))
+        ? 'quota_exceeded'
+        : 'rate_limited';
+    const resetAt = this.extractResetAt(err);
+    const ttlMs = Math.max(1000, (resetAt ? resetAt - Date.now() : 60_000) || 60_000);
+    return { reason, resetAt, ttlMs, message };
   }
 
   /**
@@ -392,6 +571,7 @@ export class ModelRouter {
           console.log(
             `[ModelRouter] Trying ${modelConfig.model} (role ${roleOrTask}) attempt ${attempt}/${maxRetries}...`,
           );
+          this.markModelHealthy(modelId);
           if (this.useProxy) {
             return await this.chatViaProxy(modelConfig, roleOrTask as ModelRole, messages, options);
           } else {
@@ -400,7 +580,7 @@ export class ModelRouter {
         } catch (error: any) {
           const isRateLimited = this.isRateLimitError(error);
           if (isRateLimited) {
-            this.setRateLimited(modelId);
+            this.setRateLimited(modelId, this.buildRateLimitState(error));
           }
 
           const retriable = isRateLimited || this.isRetriableError(error);
@@ -568,6 +748,7 @@ export class ModelRouter {
 
       try {
         console.log(`[ModelRouter] Streaming with ${modelConfig.model} for role ${role}...`);
+        this.markModelHealthy(modelId);
 
         if (!this.useProxy) {
           // Fallback: do a non-streaming call and yield the full result
@@ -605,7 +786,7 @@ export class ModelRouter {
       } catch (error: any) {
         const isRateLimited = this.isRateLimitError(error);
         if (isRateLimited) {
-          this.setRateLimited(modelId);
+          this.setRateLimited(modelId, this.buildRateLimitState(error));
         }
 
         const errorMsg = `[${modelConfig.model}] ${error.message}`;

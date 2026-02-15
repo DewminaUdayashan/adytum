@@ -332,6 +332,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
       modelRouter.updateRouting(routing);
     },
     modelCatalog,
+    modelRouter,
   });
 
   // Route WebSocket messages to agent
