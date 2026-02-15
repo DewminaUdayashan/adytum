@@ -1,0 +1,104 @@
+{
+  "id": "email-calendar",
+  "name": "Email + Calendar",
+  "description": "Unified Gmail + Google Calendar skill for inbox triage, event management, and cross-domain planning.",
+  "metadata": {
+    "communication": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": { "type": "boolean", "default": true },
+      "provider": { "type": "string", "enum": ["google"], "default": "google" },
+      "accessToken": { "type": "string" },
+      "accessTokenEnv": { "type": "string", "default": "ADYTUM_EMAIL_CALENDAR_ACCESS_TOKEN" },
+      "refreshToken": { "type": "string" },
+      "refreshTokenEnv": { "type": "string", "default": "ADYTUM_EMAIL_CALENDAR_REFRESH_TOKEN" },
+      "clientId": { "type": "string" },
+      "clientIdEnv": { "type": "string", "default": "ADYTUM_EMAIL_CALENDAR_CLIENT_ID" },
+      "clientSecret": { "type": "string" },
+      "clientSecretEnv": { "type": "string", "default": "ADYTUM_EMAIL_CALENDAR_CLIENT_SECRET" },
+      "tokenUrl": { "type": "string", "default": "https://oauth2.googleapis.com/token" },
+      "gmailBaseUrl": { "type": "string", "default": "https://gmail.googleapis.com/gmail/v1" },
+      "calendarBaseUrl": { "type": "string", "default": "https://www.googleapis.com/calendar/v3" },
+      "defaultCalendarId": { "type": "string", "default": "primary" },
+      "defaultTimezone": { "type": "string", "default": "UTC" },
+      "defaultUnreadQuery": { "type": "string", "default": "in:inbox is:unread newer_than:7d" },
+      "allowWriteActions": { "type": "boolean", "default": false },
+      "autoRefreshToken": { "type": "boolean", "default": true },
+      "requestTimeoutMs": { "type": "integer", "default": 12000 }
+    }
+  },
+  "uiHints": {
+    "enabled": {
+      "label": "Enable Skill"
+    },
+    "provider": {
+      "label": "Provider"
+    },
+    "accessToken": {
+      "label": "OAuth Access Token",
+      "help": "Short-lived OAuth token with Gmail + Calendar scopes.",
+      "sensitive": true
+    },
+    "accessTokenEnv": {
+      "advanced": true
+    },
+    "refreshToken": {
+      "label": "OAuth Refresh Token",
+      "help": "Optional but recommended for long-running sessions.",
+      "sensitive": true
+    },
+    "refreshTokenEnv": {
+      "advanced": true
+    },
+    "clientId": {
+      "label": "OAuth Client ID"
+    },
+    "clientIdEnv": {
+      "advanced": true
+    },
+    "clientSecret": {
+      "label": "OAuth Client Secret",
+      "sensitive": true
+    },
+    "clientSecretEnv": {
+      "advanced": true
+    },
+    "tokenUrl": {
+      "label": "Token URL",
+      "advanced": true
+    },
+    "gmailBaseUrl": {
+      "label": "Gmail API Base URL",
+      "advanced": true
+    },
+    "calendarBaseUrl": {
+      "label": "Calendar API Base URL",
+      "advanced": true
+    },
+    "defaultCalendarId": {
+      "label": "Default Calendar ID"
+    },
+    "defaultTimezone": {
+      "label": "Default Timezone"
+    },
+    "defaultUnreadQuery": {
+      "label": "Default Gmail Query",
+      "help": "Used when list/briefing tools are called without a query."
+    },
+    "allowWriteActions": {
+      "label": "Allow Write Actions",
+      "help": "Enables email send and calendar event creation tools."
+    },
+    "autoRefreshToken": {
+      "label": "Auto Refresh Token",
+      "advanced": true
+    },
+    "requestTimeoutMs": {
+      "label": "Request Timeout (ms)",
+      "advanced": true
+    }
+  }
+}
