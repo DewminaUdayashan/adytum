@@ -8,12 +8,15 @@ import { join } from 'node:path';
 import cron from 'node-cron';
 import { z } from 'zod';
 import type { AgentRuntime } from '../../domain/logic/agent-runtime.js';
+import type { LogbookService } from './logbook-service.js';
+import type { RuntimeRegistry } from '../../domain/agents/runtime-registry.js';
 
 export const CronJobSchema = z.object({
   id: z.string(),
   name: z.string(),
   schedule: z.string(), // Cron expression
   task: z.string(), // Prompt/Instruction for the agent
+  systemPrompt: z.string().optional(), // Optional system prompt override
   enabled: z.boolean().default(true),
   lastRun: z.number().optional(),
   createdAt: z.number(),
@@ -32,6 +35,8 @@ export class CronManager {
   constructor(
     private agent: AgentRuntime,
     private dataPath: string,
+    private runtimeRegistry: RuntimeRegistry,
+    private logbook?: LogbookService,
   ) {
     this.filePath = join(this.dataPath, 'cron.json');
     this.load();
@@ -102,11 +107,40 @@ export class CronManager {
 
       try {
         const sessionId = `cron-${job.id}`;
-        const prompt = `[CRON JOB TRIGGERED: ${job.name}]\nRequired Action: ${job.task}\n\nExecute this action now. If the task involves sending a message to the user, just generate the response.`;
+        const prompt = `[CRON JOB TRIGGERED: ${job.name}]
 
-        await this.agent.run(prompt, sessionId);
+Required Action: ${job.task}
+
+EXECUTION GUIDELINES:
+1. PARALLELISM: If the task involves multiple sub-tasks, use 'spawn_sub_agent' with the 'batch' parameter to execute them in parallel.
+2. CAPABILITY CHECK: Before executing a delivery or external action (e.g. sending a message, writing to a DB), verify that the required skill is loaded and its configuration (API keys, tokens, IDs) is valid.
+3. ERROR HANDLING: If an action fails, log the error clearly and attempt an alternative if possible. You are responsible for ensuring the workflow completes or fails gracefully.
+
+When done, reply with a brief summary: status (OK/failed), what was done, any errors.`;
+
+        const result = await this.agent.run(prompt, sessionId);
+        
+        // Register this cron job session as a root session (no parent)
+        // Handled inside agent.run() via its internal calls, but for clarity 
+        // we rely on the agent to register itself.
+        
+        const summary = (result?.response ?? '').trim().slice(0, 600);
+        if (this.logbook && summary) {
+          this.logbook.append({
+            timestamp: Date.now(),
+            event: 'cron_complete',
+            detail: `[${job.name}] ${summary}`,
+          });
+        }
       } catch (err) {
         console.error(`[Cron] Job ${job.name} failed:`, err);
+        if (this.logbook) {
+          this.logbook.append({
+            timestamp: Date.now(),
+            event: 'cron_failed',
+            detail: `[${job.name}] ${err instanceof Error ? err.message : String(err)}`,
+          });
+        }
       }
     });
 
@@ -129,6 +163,13 @@ export class CronManager {
       name,
       schedule,
       task: taskDescription,
+      systemPrompt: `You are an automated Cron Agent. Your goal is to execute the user's scheduled task efficiently.
+
+RULES:
+1. BATCHING: For multi-step independent tasks, ALWAYS use the 'batch' parameter in 'spawn_sub_agent' to run them in PARALLEL.
+2. RESOURCEFULNESS: Assign appropriate models based on task complexity. Use efficient models for simple data processing and powerful models for complex reasoning.
+3. CONTINUITY: If the task is part of a recurring workflow, check if a persistent agent session exists that you can resume or reuse.
+`,
       enabled: true,
       createdAt: Date.now(),
     };
@@ -156,6 +197,10 @@ export class CronManager {
     // Re-schedule if needed
     if (updates.schedule || updates.enabled !== undefined) {
       this.tasks.get(id)?.stop();
+      // Abort any running instances of this job
+      const sessionId = `cron-${id}`;
+      this.runtimeRegistry.abortHierarchy(sessionId);
+
       if (updated.enabled) {
         this.schedule(updated);
       }
@@ -170,6 +215,11 @@ export class CronManager {
    */
   removeJob(id: string) {
     this.tasks.get(id)?.stop();
+    // Kill any running agents
+    const sessionId = `cron-${id}`;
+    this.runtimeRegistry.abortHierarchy(sessionId);
+    
+    this.tasks.delete(id);
     this.tasks.delete(id);
     this.jobs.delete(id);
     this.save();

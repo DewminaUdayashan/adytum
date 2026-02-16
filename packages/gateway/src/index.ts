@@ -44,6 +44,13 @@ import { ApprovalService } from './domain/logic/approval-service.js';
 import { GraphStore } from './domain/knowledge/graph-store.js';
 import { GraphIndexer } from './domain/knowledge/graph-indexer.js';
 import { GraphContext } from './domain/knowledge/graph-context.js';
+import { AgentRegistry } from './domain/agents/agent-registry.js';
+import { LogbookService } from './application/services/logbook-service.js';
+import { AgentLogStore } from './domain/agents/agent-log-store.js';
+import { AgentsController } from './api/controllers/agents.controller.js';
+import { SubAgentSpawner } from './domain/logic/sub-agent.js';
+import { createSpawnAgentTool } from './tools/spawn-agent.js';
+import { RuntimeRegistry } from './domain/agents/runtime-registry.js';
 
 // ─── Direct Execution Detection ─────────────────────────────
 // If this file is run directly (e.g. `node dist/index.js start`),
@@ -132,6 +139,8 @@ export async function startGateway(projectRoot: string): Promise<void> {
     routing: config.routing,
   });
 
+  const runtimeRegistry = new RuntimeRegistry();
+  container.register(RuntimeRegistry, { useValue: runtimeRegistry });
   // Detect LiteLLM vs direct API mode
   const llmStatus = await modelRouter.initialize();
   console.log(chalk.green('  ✓ ') + chalk.white(`LLM: ${llmStatus}`));
@@ -149,7 +158,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
   const graphIndexer = new GraphIndexer(config.workspacePath, graphStore, semanticProcessor);
   const graphContext = new GraphContext(graphStore);
 
-  const agent = new AgentRuntime({
+  const agentRuntimeConfig = {
     modelRouter,
     toolRegistry,
     soulEngine,
@@ -157,14 +166,18 @@ export async function startGateway(projectRoot: string): Promise<void> {
     graphContext,
     contextSoftLimit: config.contextSoftLimit,
     maxIterations: 20,
-    defaultModelRole: 'thinking',
+    defaultModelRole: 'thinking' as const,
     agentName: config.agentName,
     workspacePath: config.workspacePath,
     memoryStore,
     memoryTopK: 3,
     memoryDb,
     graphStore,
-  });
+    runtimeRegistry,
+    tier: 1 as const,
+  };
+
+  const agent = new AgentRuntime(agentRuntimeConfig);
 
   // Seed context with recent persisted messages to restore short-term memory
   const recentMessages = memoryDb
@@ -298,7 +311,8 @@ export async function startGateway(projectRoot: string): Promise<void> {
   scheduleDreamer(config.dreamerIntervalMinutes);
   scheduleMonologue(config.monologueIntervalMinutes);
 
-  const cronManager = new CronManager(agent, config.dataPath);
+  const logbookService = new LogbookService(config.workspacePath);
+  const cronManager = new CronManager(agent, config.dataPath, runtimeRegistry, logbookService);
 
   // Register Cron Tools (needs agent instance)
   for (const tool of createCronTools(cronManager)) {
@@ -335,6 +349,65 @@ export async function startGateway(projectRoot: string): Promise<void> {
   container.register(GraphIndexer, { useValue: graphIndexer });
   container.register(GraphContext, { useValue: graphContext });
 
+  // ── Hierarchical Multi-Agent (Birth Protocol) ─────────────────
+  const agentRegistry = new AgentRegistry(config.dataPath);
+  const agentLogStore = new AgentLogStore(config.dataPath);
+  container.register('AgentRegistry', { useValue: agentRegistry });
+  container.register('LogbookService', { useValue: logbookService });
+  container.register('AgentLogStore', { useValue: agentLogStore });
+  container.registerSingleton(AgentsController);
+  // Ensure Prometheus (Tier 1) exists in registry
+  const prometheusAvatarUrl = '/avatars/prometheus.png'; // Dashboard public asset
+  let tier1 = agentRegistry.getActive().filter((a) => a.tier === 1);
+  if (tier1.length === 0) {
+    agentRegistry.birth({
+      name: config.agentName,
+      tier: 1,
+      parentId: null,
+      avatarUrl: prometheusAvatarUrl,
+    });
+    logbookService.append({
+      timestamp: Date.now(),
+      agentName: config.agentName,
+      tier: 1,
+      event: 'birth',
+      detail: 'Prometheus (Tier 1) initialized',
+    });
+    tier1 = agentRegistry.getActive().filter((a) => a.tier === 1);
+  } else if (!tier1[0]!.avatar) {
+    agentRegistry.setAvatar(tier1[0]!.id, prometheusAvatarUrl);
+  }
+  const prometheusAgentId = tier1[0]!.id;
+
+  // Tool: Prometheus (and Tier 2) can spawn Tier 2/3 sub-agents during a run
+  const subAgentSpawner = new SubAgentSpawner(agentRuntimeConfig, runtimeRegistry);
+  const hierarchyConfig = (config as { hierarchy?: { avatarGenerationEnabled?: boolean } }).hierarchy;
+  const avatarEnabled = hierarchyConfig?.avatarGenerationEnabled !== false;
+  const generateAvatar = async (name: string, _tier: number): Promise<string | null> => {
+    const seed = encodeURIComponent(name || 'agent');
+    return `https://api.dicebear.com/9.x/adventurer/svg?seed=${seed}`;
+  };
+  const spawnAgentTool = createSpawnAgentTool(
+    agentRegistry,
+    logbookService,
+    agentLogStore,
+    subAgentSpawner,
+    prometheusAgentId,
+    { generateAvatar, avatarEnabled },
+  );
+  toolRegistry.register(spawnAgentTool);
+  agent.refreshSystemPrompt();
+
+  // Emergency stop: log critical model failure to LOGBOOK
+  modelRouter.on('critical_failure', (payload: { roleOrTask: string; errors: string[] }) => {
+    logbookService.append({
+      timestamp: Date.now(),
+      event: 'critical_failure',
+      detail: `All models failed for "${payload.roleOrTask}". Errors: ${payload.errors.slice(0, 3).join('; ')}`,
+    });
+    logger.warn({ roleOrTask: payload.roleOrTask, errors: payload.errors }, 'Critical task failure — pipeline emergency stop');
+  });
+
   // Wire up SkillService reload callback
   const skillService = container.resolve(SkillService);
   skillService.setReloadCallback(reloadSkills);
@@ -342,7 +415,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
   // ── Gateway Server ────────────────────────────────────────
   const server = new GatewayServer({
     port: config.gatewayPort,
-    host: '127.0.0.1',
+    host: '0.0.0.0', // Listen on all interfaces so dashboard proxy (localhost or 127.0.0.1) can connect; avoids EADDRNOTAVAIL on macOS.
     permissionManager,
     workspacePath: config.workspacePath,
     heartbeatManager,

@@ -20,6 +20,7 @@ import type { MemoryDB } from '../../infrastructure/repositories/memory-db.js';
 
 import { GraphContext } from '../knowledge/graph-context.js';
 import { GraphStore } from '../knowledge/graph-store.js';
+import { RuntimeRegistry } from '../agents/runtime-registry.js';
 
 export interface AgentRuntimeConfig {
   modelRouter: ModelRouter;
@@ -40,6 +41,8 @@ export interface AgentRuntimeConfig {
     description: string,
     context: { sessionId: string; workspaceId?: string },
   ) => Promise<boolean>;
+  runtimeRegistry: RuntimeRegistry;
+  tier?: 1 | 2 | 3;
 }
 
 export interface AgentTurnResult {
@@ -64,6 +67,7 @@ export class AgentRuntime extends EventEmitter {
   private config: AgentRuntimeConfig;
   private contexts: Map<string, ContextManager> = new Map();
   private baseSystemPrompt: string = '';
+  private abortControllers = new Map<string, AbortController>();
 
   /**
    * Creates a new AgentRuntime instance.
@@ -81,6 +85,19 @@ export class AgentRuntime extends EventEmitter {
    */
   setApprovalHandler(handler: (description: string) => Promise<boolean>): void {
     this.config.onApprovalRequired = handler;
+  }
+
+  /**
+   * Aborts a specific session.
+   * Triggers the AbortSignal which ModelRouter and other components should respect.
+   */
+  abort(sessionId: string): void {
+    const controller = this.abortControllers.get(sessionId);
+    if (controller) {
+      controller.abort();
+      this.abortControllers.delete(sessionId);
+      auditLogger.logSystemEvent('session_aborted', { sessionId });
+    }
   }
 
   /**
@@ -180,6 +197,16 @@ ${knowledge}`,
 
     this.emit('trace_start', trace);
 
+    // Register session with RuntimeRegistry
+    // We assume overrides.parentSessionId might be passed in future, but for now we register basic session
+    // SubAgentSpawner handles the parent-child registration explicitly
+    this.config.runtimeRegistry.register(sessionId, this);
+
+    // Create AbortController for this session
+    const abortController = new AbortController();
+    this.abortControllers.set(sessionId, abortController);
+    const signal = abortController.signal;
+
     // Add user message to context
     context.addMessage({ role: 'user', content: userMessage });
     if (this.config.memoryDb && !isBackgroundSession) {
@@ -211,6 +238,10 @@ ${knowledge}`,
 
     try {
       while (iterations < this.config.maxIterations) {
+        if (signal.aborted) {
+          throw new Error('Session aborted by user or system.');
+        }
+
         iterations++;
 
         // Check for compaction
@@ -259,6 +290,8 @@ ${knowledge}`,
             fallbackRole: roleToUse as any,
           },
         );
+        
+        if (signal.aborted) throw new Error('Session aborted.');
         lastMessage = message;
 
         // Track tokens
@@ -520,6 +553,10 @@ ${knowledge}`,
 
     this.emit('trace_end', trace);
 
+    // Cleanup
+    this.config.runtimeRegistry.unregister(sessionId);
+    this.abortControllers.delete(sessionId);
+
     return {
       response: finalResponse,
       trace,
@@ -635,12 +672,20 @@ ${knowledge}`,
     if (!this.config.memoryDb) return;
 
     const identity = this.parseModelIdentity(usage.model);
+    
+    // Sanitize role: if it's a raw model ID or task name, map to 'fast' generic role
+    let safeRole = usage.role;
+    const validRoles = ['thinking', 'fast', 'local'];
+    if (!validRoles.includes(safeRole)) {
+      safeRole = 'fast' as ModelRole;
+    }
+
     this.config.memoryDb.addTokenUsage({
       sessionId,
       provider: identity.provider,
       model: identity.model,
       modelId: identity.modelId,
-      role: usage.role,
+      role: safeRole,
       promptTokens: usage.promptTokens,
       completionTokens: usage.completionTokens,
       totalTokens: usage.totalTokens,
@@ -806,7 +851,7 @@ ${knowledge}`,
     const soul = this.config.soulEngine.getSoulPrompt();
     const skills = this.config.skillLoader.getSkillsContext();
 
-    const systemPrompt = `${soul}
+    let systemPrompt = `${soul}
 
 ## Tools
 You have access to the following native tools. Use them when needed to accomplish the user's goals.
@@ -845,6 +890,15 @@ ${skills}
   5. Do not ask where to create files unless there is irreducible ambiguity.
   6. After edits, run at least one relevant validation command (tests/build/lint/typecheck) when possible, or explain why it could not be run.
 - If the user asks for a daily/weekly task, use the "cron_schedule" tool immediately. Do not say "I can set up a cron job"—just do it and confirm it's done.
+- **Scheduling vs execution**: When the user asks to **schedule** or **set up** a recurring task (any frequency: daily, weekly, at a specific time), you must ONLY call **cron_schedule**. Do NOT run the pipeline, spawn Tier 2, or execute the task in that same turn. The pipeline runs only when the cron job **fires at the scheduled time**. Confirm to the user that the job is scheduled and when it will run.
+- **Cron task text for workflows**: When you create a cron job, the **taskDescription** MUST be a full execution instruction so that when cron fires, you run the pipeline. Describe exactly what to do: spawn Tier 2 (if needed), goal, and how to deliver (e.g. one message, one file, one API call). Examples: "Execute the pipeline now: spawn a Tier 2 agent (deactivate_after: false) with goal to [X]; Tier 2 spawns Tier 3s for sub-tasks, aggregates results, then [single delivery]. Run the pipeline." Or for a simple task: "Run [concrete action] now." Do NOT use vague task text.
+- **When you see [CRON JOB TRIGGERED]**: Execute the required action immediately. Use the tools described in the task (spawn_sub_agent, file_write, discord_send, web_fetch, etc.). Do not run a monologue—run the pipeline. When done, reply with a brief token-efficient summary: status (OK/failed), what was done, any errors (one short paragraph).
+- **Hierarchical agents (spawn_sub_agent)**: For any recurring, scheduled, or multi-step workflow (reports, monitoring, data sync, research, notifications, etc.), use spawn_sub_agent when the trigger **fires** (cron or user says "run it now"). Do not spawn when the user only asks to schedule.
+  1. **When only scheduling**: Only call cron_schedule. Do not spawn any agents or run the pipeline.
+  2. **When cron fires or user says "run it now"**: Spawn a Tier 2 agent with the concrete goal. Use **deactivate_after: false** for recurring/long-lived work. Tier 2 = coordinator; Tier 3 = micro-task (one unit of work). Tier 2 spawns Tier 3s with parent_id so they appear under it in the hierarchy.
+  3. **Data flow (bottom to top, any workflow)**: Tier 3 agents do their sub-task and **return their result** to Tier 2 (via spawn_sub_agent return). Tier 3 must NOT perform the final delivery (e.g. do not have each Tier 3 send a message, write a separate file, or call the same API). Tier 2 collects all Tier 3 results, aggregates or combines them, then performs the **single delivery action once** (e.g. one discord_send, one file_write, one API call, one email—whatever the workflow requires). This applies to any pipeline: news digest, daily report, multi-source research, monitoring summary, etc.
+  4. **Pipeline vision**: Tier 2 spawns N Tier 3 agents (one per source/task/unit), waits for their results, aggregates, then performs one delivery. When Tier 2 spawns Tier 3, assign one concrete sub-goal per agent and pass parent_id. Tier 2's final reply to you should be a short summary (e.g. "Done. N units processed. No errors." or "Report written. 3 sources. 1 timeout.") so you can report status.
+  5. **Unique names**: Give every spawned agent a **unique, personal nickname** that is NOT already in use (e.g. Mercury, Iron, Ace, Bolt, Patch, Reed, Sage). Each agent in the hierarchy must have a distinct name.
 - **Resilience**: Ignore transient errors (rate limits, timeouts) in your message history. Never base your current capability on previous failures. Always attempt requested actions as if for the first time.
 - Explain your reasoning transparently but briefly.
 - Log your internal reasoning for the live console.
@@ -855,6 +909,32 @@ Whenever you use a tool that generates an image (like "generate_image"), you MUS
 Use the standard markdown format: ![Description](image_url)
 If the tool result contains a "Preview" or markdown string, copy it exactly into your response.
 `;
+
+    // Inject Tier-Specific Persona Instructions
+    const tier = this.config.tier ?? 1; // Default to Tier 1 (Root/Architect) if undefined
+    if (tier === 1) {
+      systemPrompt += `
+## ROLE: ARCHITECT (Tier 1)
+- **PLAN FIRST**: Before executing complex requests, pause to DESIGN the pipeline. List the steps.
+- **CHECK CAPABILITIES**: Verify skills (e.g., "Is Discord configured?") BEFORE starting work or delegating.
+- **DELEGATE**: Use 'spawn_sub_agent' to create Tier 2 Managers for distinct sub-systems.
+`;
+    } else if (tier === 2) {
+      systemPrompt += `
+## ROLE: MANAGER (Tier 2)
+- **ORCHESTRATE**: You are a Coordinator. break down the user request into parallel subtasks.
+- **MANDATORY BATCHING**: You MUST use 'spawn_sub_agent' with the 'batch' parameter to spawn all workers at once.
+- **STRICT HIERARCHY**: Do NOT spawn another Tier 2 Manager. You spawn Tier 3 Operatives only.
+- **NO LOOPS**: Do not spawn agents sequentially in a loop. List all items, then spawn a single BATCH.
+- **AGGREGATE**: Wait for all results, synthesize them into a single report, and reply to your parent.
+`;
+    } else if (tier === 3) {
+      systemPrompt += `
+## ROLE: OPERATIVE (Tier 3)
+- **EXECUTE**: You have a single, concrete goal. Focus on it.
+- **REPORT**: Return the specific result (code, file, summary) clearly.
+`;
+    }
 
     this.baseSystemPrompt = systemPrompt;
   }

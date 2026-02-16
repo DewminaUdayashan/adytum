@@ -23,6 +23,7 @@ import { agentRoutes } from './api/routes/agent.routes.js';
 import { systemRoutes } from './api/routes/system.routes.js';
 import { taskRoutes } from './api/routes/task.routes.js';
 import { knowledgeRoutes } from './api/routes/knowledge.routes.js';
+import { agentsRoutes } from './api/routes/agents.routes.js';
 
 import { tokenTracker } from './domain/logic/token-tracker.js';
 import { auditLogger } from './security/audit-logger.js';
@@ -105,6 +106,7 @@ export class GatewayServer extends EventEmitter {
     await this.app.register(systemRoutes);
     await this.app.register(taskRoutes);
     await this.app.register(knowledgeRoutes);
+    await this.app.register(agentsRoutes);
 
     this.app.get('/api/models/runtime-status', async () => {
       return {

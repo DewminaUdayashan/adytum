@@ -66,7 +66,9 @@ export const api = {
   post: <T = any>(path: string, body?: any, options?: RequestInit) => 
     gatewayFetch<T>(path, { ...options, method: 'POST', body: JSON.stringify(body) }),
   put: <T = any>(path: string, body?: any, options?: RequestInit) => 
-    gatewayFetch<T>(path, { ...options, method: 'PUT', body: JSON.stringify(body) }),
+    gatewayFetch<T>(path, { ...options, method: 'PUT', body: body !== undefined ? JSON.stringify(body) : undefined }),
+  patch: <T = any>(path: string, body?: any, options?: RequestInit) => 
+    gatewayFetch<T>(path, { ...options, method: 'PATCH', body: body !== undefined ? JSON.stringify(body) : undefined }),
   delete: <T = any>(path: string, options?: RequestInit) => gatewayFetch<T>(path, { ...options, method: 'DELETE' }),
 };
 

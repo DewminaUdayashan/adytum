@@ -221,3 +221,6 @@ Input.displayName = 'Input';
 
 /* ─────────────────────────── Select ─────────────────────────── */
 export { Select } from './ui/select';
+
+/* ─────────────────────────── Checkbox ─────────────────────────── */
+export { Checkbox } from './ui/checkbox';

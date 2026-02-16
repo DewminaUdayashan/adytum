@@ -10,7 +10,7 @@ import cron from 'node-cron';
 
 const CronScheduleSchema = z.object({
   schedule: z.string().describe('Cron expression (e.g. "0 5 * * *" for daily at 5am)'),
-  taskDescription: z.string().describe('Description of what to do (e.g. "Search for AI news")'),
+  taskDescription: z.string().describe('Full execution instruction for when the job runs (e.g. "Run daily report pipeline: spawn Tier 2 to aggregate and write report" or "Check monitoring and send alert if needed")'),
   name: z.string().describe('Unique name for this job'),
 });
 
@@ -28,7 +28,7 @@ export function createCronTools(cronManager: CronManager): ToolDefinition[] {
   return [
     {
       name: 'cron_schedule',
-      description: 'Schedule a recurring task. Persists across restarts.',
+      description: 'Schedule a recurring task. Persists across restarts. PRE-REQUISITES: 1. If a delivery channel is specified (e.g. "Discord"), VERIFY the skill/config exists first. 2. If NO delivery channel is specified for a notification task, ASK the user for their preference before scheduling.',
       parameters: CronScheduleSchema,
       execute: async (args: unknown) => {
         const { schedule, taskDescription, name } = CronScheduleSchema.parse(args);

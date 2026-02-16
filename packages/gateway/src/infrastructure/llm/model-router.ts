@@ -4,6 +4,7 @@
  */
 
 import { singleton, inject } from 'tsyringe';
+import { EventEmitter } from 'node:events';
 import OpenAI from 'openai';
 import type { ModelRole, TokenUsage, AdytumConfig, ModelConfig } from '@adytum/shared';
 import { LLMClient, isLiteLLMAvailable } from './llm-client.js';
@@ -37,8 +38,11 @@ export type ModelRuntimeStatus = {
  *      b. Otherwise → call providers directly.
  *   3. If all models in the chain fail, throw an error.
  */
+/** Emitted when all models in chain fail after max retries (emergency stop signal). */
+export type CriticalFailurePayload = { roleOrTask: string; errors: string[] };
+
 @singleton()
-export class ModelRouter {
+export class ModelRouter extends EventEmitter {
   private openaiClient: OpenAI;
   private llmClient: LLMClient;
   private modelCatalog: ModelRepository;
@@ -55,6 +59,7 @@ export class ModelRouter {
   private routing: AdytumConfig['routing'];
 
   constructor(@inject('RouterConfig') config: any) {
+    super();
     this.litellmBaseUrl = config.litellmBaseUrl;
     this.modelChains = config.modelChains || { thinking: [], fast: [], local: [] };
     this.taskOverrides = config.taskOverrides || {};
@@ -271,6 +276,8 @@ export class ModelRouter {
     if (entry.baseUrl) {
       updated.baseUrl = entry.baseUrl;
     }
+    if (entry.inputCost !== undefined) updated.inputCost = entry.inputCost;
+    if (entry.outputCost !== undefined) updated.outputCost = entry.outputCost;
     return updated;
   }
 
@@ -510,6 +517,8 @@ export class ModelRouter {
       maxTokens?: number;
       stream?: boolean;
       fallbackRole?: ModelRole;
+      /** Tier 1/2: max 5 models; Tier 3: max 3 models (hierarchy spec). */
+      tier?: 1 | 2 | 3;
     } = {},
   ): Promise<{
     message: OpenAI.ChatCompletionMessage;
@@ -540,6 +549,11 @@ export class ModelRouter {
       seen.add(id);
       return true;
     });
+
+    // Tier-aware limit: Tier 3 up to 3 models, Tier 1/2 up to 5 (hierarchy spec)
+    const tier = options.tier;
+    if (tier === 3) chain = chain.slice(0, 3);
+    else if (tier === 1 || tier === 2) chain = chain.slice(0, 5);
 
     // If no chain found (e.g. invalid role), try to find ANY model as a last ditch fallback
     if (chain.length === 0) {
@@ -622,9 +636,13 @@ export class ModelRouter {
       }
     }
 
-    // Build a helpful error message
+    // Build a helpful error message and emit critical_failure for emergency stop
     const errorDetails = errors.map((e) => `  • ${e.message}`).join('\n');
     const triedModels = chain.map((m) => `${m.provider}/${m.model}`).join(', ');
+    this.emit('critical_failure', {
+      roleOrTask,
+      errors: errors.map((e) => e.message),
+    } as CriticalFailurePayload);
 
     throw new Error(
       `All models in chain failed for "${roleOrTask}".\n` +
@@ -850,6 +868,17 @@ export class ModelRouter {
    * @returns The resulting numeric value.
    */
   private estimateCost(model: string, promptTokens: number, completionTokens: number): number {
+    // 1. Try to find model in catalog (handles user overrides and pi-ai defaults)
+    // We look up by ID if possible, or just model name
+    // Since this method only gets 'model' string (which might be 'provider/model' or just 'model'),
+    // we'll try to find it in our local map first
+    const config = this.modelMap.get(model);
+    
+    if (config?.inputCost !== undefined && config?.outputCost !== undefined) {
+      return (promptTokens / 1_000_000) * config.inputCost + (completionTokens / 1_000_000) * config.outputCost;
+    }
+
+    // 2. Fallback to hardcoded defaults for known models
     // Cost per million tokens: [input, output]
     const costs: Record<string, [number, number]> = {
       'claude-sonnet-4-20250514': [3, 15],
@@ -867,14 +896,20 @@ export class ModelRouter {
       'deepseek-reasoner': [0.55, 2.19],
       'gemini-2.0-flash': [0.1, 0.4],
       'gemini-2.0-flash-lite': [0.075, 0.3],
-      'gemini-2.5-pro-preview-06-05': [1.25, 10],
+      'gemini-2.5-flash': [0.1, 0.4], // Estimated
+      'gemini-2.5-flash-lite': [0.075, 0.3],
+      'gemini-2.5-pro-preview-06-05': [1.25, 10], // Estimated
       'gemini-1.5-pro': [1.25, 5],
       'gemini-1.5-flash': [0.075, 0.3],
       'llama3.3': [0, 0],
       'llama3.2': [0, 0],
     };
 
-    const [inputCost, outputCost] = costs[model] || [0, 0];
+    // Normalize model name (remove provider prefix if present for lookup)
+    const shortName = model.includes('/') ? model.split('/').pop()! : model;
+    
+    // Check full name first, then short name
+    const [inputCost, outputCost] = costs[model] || costs[shortName] || [0.05, 0.2]; // Generic fallback instead of 0
     return (promptTokens / 1_000_000) * inputCost + (completionTokens / 1_000_000) * outputCost;
   }
 }

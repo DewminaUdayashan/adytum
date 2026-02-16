@@ -14,6 +14,8 @@ export interface ModelEntry {
   baseUrl?: string;
   source: 'default' | 'user' | 'discovered';
   input?: ('text' | 'image')[];
+  inputCost?: number; // Cost per 1M tokens
+  outputCost?: number; // Cost per 1M tokens
 }
 
 export interface ModelRepository {

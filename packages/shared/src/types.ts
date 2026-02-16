@@ -61,6 +61,8 @@ export const ModelConfigSchema = z.object({
   baseUrl: z.string().optional(),
   maxTokens: z.number().optional(),
   temperature: z.number().min(0).max(2).optional(),
+  inputCost: z.number().optional(),
+  outputCost: z.number().optional(),
 });
 export type ModelConfig = z.infer<typeof ModelConfigSchema>;
 
@@ -122,6 +124,7 @@ export const AgentLogSchema = z.object({
     'monologue_run',
     'dreamer_run',
     'soul_evolve',
+    'system_event',
   ]),
   payload: z.record(z.unknown()),
   status: z.enum(['success', 'error', 'blocked', 'pending']),
@@ -278,6 +281,46 @@ export const RoutingConfigSchema = z.object({
 });
 export type RoutingConfig = z.infer<typeof RoutingConfigSchema>;
 
+// ─── Hierarchical Multi-Agent (Birth Protocol) ─────────────────
+
+export const AgentTierSchema = z.union([z.literal(1), z.literal(2), z.literal(3)]);
+export type AgentTier = z.infer<typeof AgentTierSchema>;
+
+export const AgentMetadataSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  role: z.string().optional(),
+  tier: AgentTierSchema,
+  birthTime: z.number(),
+  lastBreath: z.number().nullable(),
+  avatar: z.string().nullable(),
+  parentId: z.string().uuid().nullable(),
+  /** Allocated LLM model IDs (e.g. "google/gemini-2.0-flash"). Tier 1/2: max 5, Tier 3: max 3. */
+  modelIds: z.array(z.string()).max(5).optional(),
+});
+export type AgentMetadata = z.infer<typeof AgentMetadataSchema>;
+
+export const HierarchySettingsSchema = z.object({
+  avatarGenerationEnabled: z.boolean().default(true),
+  maxTier2Agents: z.number().int().min(0).max(50).default(10),
+  maxTier3Agents: z.number().int().min(0).max(100).default(30),
+  defaultRetryLimit: z.number().int().min(1).max(10).default(3),
+  modelPriorityTier1And2: z.array(z.string()).max(5).default([]),
+  modelPriorityTier3: z.array(z.string()).max(3).default([]),
+});
+export type HierarchySettings = z.infer<typeof HierarchySettingsSchema>;
+
+export const AgentLogEntrySchema = z.object({
+  id: z.string().uuid(),
+  agentId: z.string().uuid(),
+  timestamp: z.number(),
+  type: z.enum(['thought', 'action', 'interaction']),
+  content: z.string(),
+  payload: z.record(z.unknown()).optional(),
+  model: z.string().optional(),
+});
+export type AgentLogEntry = z.infer<typeof AgentLogEntrySchema>;
+
 // ─── Agent Config ─────────────────────────────────────────────
 
 export const AdytumConfigSchema = z.object({
@@ -314,6 +357,7 @@ export const AdytumConfigSchema = z.object({
     fallbackOnRateLimit: true,
     fallbackOnError: false,
   }),
+  hierarchy: HierarchySettingsSchema.optional(),
 });
 export type AdytumConfig = z.infer<typeof AdytumConfigSchema>;
 

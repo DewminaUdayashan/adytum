@@ -5,6 +5,7 @@
  * @description Defines route-level UI composition and page behavior.
  */
 
+import { clsx } from 'clsx';
 import { useEffect, useMemo, useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { gatewayFetch } from '@/lib/api';
@@ -126,27 +127,37 @@ export default function MemoriesPage() {
         </div>
       </PageHeader>
 
-      <div className="p-6 flex flex-col gap-4 overflow-auto">
-        <Card className="flex flex-wrap items-center gap-3" hover>
-          <div className="flex items-center gap-2 text-sm font-semibold text-text-primary">
-            <Filter className="h-4 w-4" /> Filters
+      <div className="p-6 flex flex-col gap-6 overflow-auto">
+        <Card className="p-4 bg-bg-secondary/40 border-border-primary/40" hover={false}>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-2 text-sm font-bold text-text-primary uppercase tracking-wider opacity-60">
+                <Filter className="h-3.5 w-3.5" />
+                <span>Filters</span>
+              </div>
+              <div className="h-6 w-px bg-border-primary/40" />
+              <div className="flex items-center gap-2">
+                {CATEGORY_OPTIONS.map((opt) => {
+                  const active = activeCats.includes(opt.value);
+                  return (
+                    <Button
+                      key={opt.value}
+                      variant={active ? 'primary' : 'ghost'}
+                      size="sm"
+                      className={clsx(
+                        'transition-all duration-200',
+                        active ? 'shadow-lg shadow-accent-primary/20' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
+                      )}
+                      onClick={() => toggleCategory(opt.value)}
+                    >
+                      {opt.label}
+                    </Button>
+                  );
+                })}
+              </div>
+            </div>
+            {error && <div className="text-error text-xs font-medium animate-pulse">{error}</div>}
           </div>
-          <div className="flex flex-wrap gap-2">
-            {CATEGORY_OPTIONS.map((opt) => {
-              const active = activeCats.includes(opt.value);
-              return (
-                <Button
-                  key={opt.value}
-                  variant={active ? 'primary' : 'outline'}
-                  size="sm"
-                  onClick={() => toggleCategory(opt.value)}
-                >
-                  {opt.label}
-                </Button>
-              );
-            })}
-          </div>
-          {error && <div className="text-error text-sm">{error}</div>}
         </Card>
 
         {loading ? (

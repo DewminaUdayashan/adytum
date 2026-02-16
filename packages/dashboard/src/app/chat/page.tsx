@@ -7,7 +7,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useGatewaySocket, type StreamEvent } from '@/hooks/use-gateway-socket';
-import { Send, Bot, User, Zap, Sparkles, Paperclip, File, X } from 'lucide-react';
+import { Send, Bot, User, Zap, Sparkles, Paperclip, File, X, Layers } from 'lucide-react';
 import { clsx } from 'clsx';
 import { MarkdownRenderer } from '@/components/chat/markdown-renderer';
 import { LinkPreviewList } from '@/components/chat/link-previews';
@@ -16,8 +16,8 @@ import {
   type ThinkingActivityEntry,
 } from '@/components/chat/thinking-indicator';
 import { ChatModelSelector } from '@/components/chat/model-selector';
-import { Layers } from 'lucide-react';
 import { api } from '@/lib/api';
+import { Select } from '@/components/ui';
 import type { Workspace } from '@adytum/shared';
 
 interface ChatMessage {
@@ -91,6 +91,13 @@ export default function ChatPage() {
     }
     setHasRestored(true);
   }, []);
+
+  // Auto-scroll to bottom
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, isThinking, activityFeed]);
 
   // Persist chat history
   useEffect(() => {
@@ -392,16 +399,15 @@ export default function ChatPage() {
             {workspaces.length > 0 && (
               <div className="flex items-center gap-2 bg-bg-secondary border border-border-primary rounded-xl px-3 py-1.5 shadow-sm">
                  <Layers className="h-4 w-4 text-text-muted" />
-                 <select 
+                 <Select 
                    value={selectedWorkspaceId}
-                   onChange={(e) => setSelectedWorkspaceId(e.target.value)}
-                   className="bg-transparent text-xs font-semibold text-text-secondary focus:outline-none cursor-pointer"
-                 >
-                   <option value="">No context</option>
-                   {workspaces.map(ws => (
-                     <option key={ws.id} value={ws.id}>{ws.name}</option>
-                   ))}
-                 </select>
+                   onChange={setSelectedWorkspaceId}
+                   options={[
+                     { value: '', label: 'No context' },
+                     ...workspaces.map(ws => ({ value: ws.id, label: ws.name }))
+                   ]}
+                   className="min-w-[140px]"
+                 />
               </div>
             )}
             <div className="flex items-center gap-2 text-xs font-medium">
