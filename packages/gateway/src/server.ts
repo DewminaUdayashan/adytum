@@ -4,7 +4,7 @@
  */
 
 import Fastify from 'fastify';
-import websocket from '@fastify/websocket';
+// import websocket from '@fastify/websocket';
 import cors from '@fastify/cors';
 import { EventEmitter } from 'node:events';
 import type { WebSocket } from 'ws';
@@ -13,6 +13,7 @@ import crypto from 'node:crypto';
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import { execFile } from 'node:child_process';
+import { logger } from './logger.js';
 
 import { errorHandler } from './api/middleware/error.middleware.js';
 import { modelRoutes } from './api/routes/model.routes.js';
@@ -41,6 +42,7 @@ import type { ToolRegistry } from './tools/registry.js';
 import type { MemoryDB } from './infrastructure/repositories/memory-db.js';
 import type { ModelCatalog } from './infrastructure/llm/model-catalog.js';
 import type { ModelRouter } from './infrastructure/llm/model-router.js';
+import type { SocketIOService } from './infrastructure/events/socket-io-service.js';
 
 export interface ServerConfig {
   port: number;
@@ -59,6 +61,7 @@ export interface ServerConfig {
   onSkillsReload?: () => Promise<void>;
   onChainsUpdate?: (chains: Record<string, string[]>) => void;
   onRoutingUpdate?: (routing: AdytumConfig['routing']) => void;
+  socketIOService?: SocketIOService;
 }
 
 /**
@@ -83,7 +86,22 @@ export class GatewayServer extends EventEmitter {
    * Executes start.
    */
   async start(): Promise<void> {
-    await this.app.register(websocket);
+    // Initialize Socket.IO with the underlying HTTP server EARLY to get priority for upgrade events
+    if (this.config.socketIOService) {
+      this.config.socketIOService.initialize(this.app.server);
+      
+      // Bridge incoming Socket.IO messages to the internal frame system
+      this.config.socketIOService.on('message', (data: any) => {
+        if (data && data.sessionId) {
+            this.emit('frame', {
+                sessionId: data.sessionId,
+                frame: data
+            });
+        }
+      });
+    }
+
+
     await this.app.register(cors, {
       origin: [
         'http://localhost:3000',
@@ -92,6 +110,11 @@ export class GatewayServer extends EventEmitter {
         'http://127.0.0.1:3002',
       ],
       methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    });
+
+    // Register a placeholder route for /socket.io to prevent Fastify 404s during polling
+    this.app.get('/socket.io/*', async (req, reply) => {
+        return reply.status(200).send();
     });
 
     // Centralized Error Handling
@@ -135,15 +158,19 @@ export class GatewayServer extends EventEmitter {
       });
     });
 
-    await this.app.listen({ port: this.config.port, host: this.config.host });
+    logger.info(`Starting Gateway Server on ${this.config.host}:${this.config.port}...`);
+
+    await this.app.ready();
+
+    const address = await this.app.listen({ port: this.config.port, host: this.config.host });
+    logger.info(`Gateway Server listening at ${address}`);
   }
 
   /** Send a frame to a specific session (delegated to agentController). */
   sendToSession(sessionId: string, frame: WebSocketFrame): void {
-    // Note: sessionId here might refer to connection ID or agent sessionId.
-    // AgentController currently doesn't map sessionIds to sockets, but it has connections map.
-    // For now we broadcast or just delegate better later.
-    this.agentController.broadcast(frame);
+    if (this.config.socketIOService) {
+        this.config.socketIOService.broadcast('message', frame); // For now broadcast, or improve SocketIOService to target sessions
+    }
   }
 
   /** Resolve a pending approval (returns false if not found). */
@@ -182,7 +209,9 @@ export class GatewayServer extends EventEmitter {
 
   /** Broadcast a frame to all connected clients. */
   public broadcast(frame: WebSocketFrame): void {
-    this.agentController.broadcast(frame);
+    if (this.config.socketIOService) {
+      this.config.socketIOService.broadcast('message', frame);
+    }
   }
 
   /** Get connection count (delegated). */

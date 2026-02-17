@@ -1,0 +1,18 @@
+[
+  {
+    "id": "cerebras/zai-glm-4.7",
+    "name": "Z.AI GLM-4.7",
+    "provider": "cerebras",
+    "model": "zai-glm-4.7",
+    "contextWindow": 131072,
+    "reasoning": false,
+    "input": [
+      "text"
+    ],
+    "inputCost": 0,
+    "outputCost": 0,
+    "source": "user",
+    "baseUrl": "https://api.cerebras.ai/v1",
+    "apiKey": "26b558c66bbf4edaa9232d8f23f43b19.qvK6c4pUuLjtDbmP"
+  }
+]

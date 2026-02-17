@@ -11,55 +11,26 @@ import { GraphStore } from './graph-store.js';
 import { logger } from '../../logger.js';
 import { SemanticProcessor } from './semantic-processor.js';
 
+import { EventBusService } from '../../infrastructure/events/event-bus.js';
+import { GraphEvents } from '@adytum/shared';
+
+// ...
+
 export class GraphIndexer {
-  private supportedExtensions = [
-    '.ts',
-    '.js',
-    '.tsx',
-    '.jsx',
-    '.py',
-    '.go',
-    '.md',
-    '.yaml',
-    '.yml',
-    '.dart',
-    '.pdf',
-    '.zip',
-    '.png',
-    '.jpg',
-    '.jpeg',
-    '.txt',
-    '.json',
-  ];
-  private ignoredDirs = [
-    'node_modules',
-    '.git',
-    'dist',
-    'build',
-    '.dart_tool',
-    'ios',
-    'android',
-    'macos',
-    'windows',
-    'linux',
-    '.fvm',
-    '.symlinks',
-    '.cxx',
-    'Pods',
-    'Carthage',
-    'Debug',
-    'Release',
-    'derivedData',
-    '.adytum_extracted',
-    'data',
-    '.gemini',
-  ];
+  // ... (properties)
+  private eventBus?: EventBusService;
+  private ignoredDirs = ['node_modules', '.git', 'dist', 'coverage', '.next', 'out', 'build'];
+  private supportedExtensions = ['.ts', '.tsx', '.js', '.jsx', '.md', '.json', '.txt'];
 
   constructor(
     private workspacePath: string,
     private store: GraphStore,
     private semanticProcessor?: SemanticProcessor,
   ) {}
+
+  setEventBus(eventBus: EventBusService) {
+    this.eventBus = eventBus;
+  }
 
   /**
    * Performs an incremental update of the knowledge graph.
@@ -74,6 +45,11 @@ export class GraphIndexer {
 
     // Safety Net: Force skipLLM to true if undefined, to prevent accidental costs.
     if (options.skipLLM === undefined) options.skipLLM = true;
+    
+    if (this.eventBus) {
+        this.eventBus.publish(GraphEvents.INDEXING_STARTED, { path, mode: options.mode }, 'GraphIndexer');
+    }
+
     const graph = this.store.load(workspaceId);
     const existingNodeMap = new Map<string, GraphNode>(graph.nodes.map((n) => [n.path || n.id, n]));
 
@@ -83,12 +59,13 @@ export class GraphIndexer {
 
     // 0. Ensure root node exists
     if (!existingNodeMap.has('.')) {
-      updatedNodes.push({
+      const rootNode = {
         id: '.',
-        type: 'directory',
+        type: 'directory' as const,
         label: basename(path) || 'Project Root',
         path: '.',
-      });
+      };
+      updatedNodes.push(rootNode);
     }
 
     const updatedEdges: GraphEdge[] = []; // Re-extract all edges for simplicity/consistency
@@ -106,6 +83,10 @@ export class GraphIndexer {
         if (!existingNode || existingNode.metadata?.hash !== hash) {
           logger.debug(`Processing changed file: ${relPath}`);
           currentNode = this.createFileNode(relPath, filePath, hash);
+          
+          if (this.eventBus) {
+             this.eventBus.publish(GraphEvents.NODE_UPDATED, currentNode, 'GraphIndexer');
+          }
         } else {
           currentNode = existingNode;
         }
@@ -161,9 +142,19 @@ export class GraphIndexer {
 
     this.store.save(graph, workspaceId);
 
+    const duration = Date.now() - startTime;
     logger.info(
-      `Scan [${options.mode}] completed in ${Date.now() - startTime}ms. Total nodes: ${graph.nodes.length}, Edges: ${graph.edges.length}`,
+      `Scan [${options.mode}] completed in ${duration}ms. Total nodes: ${graph.nodes.length}, Edges: ${graph.edges.length}`,
     );
+
+    if (this.eventBus) {
+        this.eventBus.publish(GraphEvents.INDEXING_COMPLETED, { 
+            nodes: graph.nodes.length, 
+            edges: graph.edges.length,
+            duration 
+        }, 'GraphIndexer');
+    }
+
     return graph;
   }
 

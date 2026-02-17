@@ -3,6 +3,7 @@
  * @description Defines module behavior for the Adytum workspace.
  */
 
+import 'reflect-metadata';
 import { v4 as uuid } from 'uuid';
 import chalk from 'chalk';
 import { createInterface } from 'node:readline';
@@ -59,37 +60,31 @@ import { TaskPlanner } from './domain/logic/task-planner.js';
 import { ParallelExecutor } from './domain/logic/parallel-executor.js';
 import { createPlannerTools } from './tools/planner.js';
 import { ToolErrorHandler } from './domain/logic/tool-error-handler.js';
+import { EventBusService } from './infrastructure/events/event-bus.js';
+import { SocketIOService } from './infrastructure/events/socket-io-service.js';
 
-// ─── Direct Execution Detection ─────────────────────────────
-// If this file is run directly (e.g. `node dist/index.js start`),
-// delegate to the CLI entry point which uses Commander.
-const __filename = fileURLToPath(import.meta.url);
-const entryFile = process.argv[1] ? resolve(process.argv[1]) : '';
+const defaultProjectRoot = resolve(fileURLToPath(import.meta.url), '../../..');
 
-if (entryFile === __filename) {
-  // Dynamically import the CLI which parses process.argv via Commander
-  import('./cli/index.js').catch((err) => {
-    // We can't import logger here easily since it might not be built/available if things are broken,
-    // but assuming it is:
-    import('./logger.js')
-      .then(({ logger }) => {
-        logger.fatal(err, 'Fatal error starting gateway');
-      })
-      .catch(() => {
-        console.error(chalk.red('\n  ❌ Fatal error:'), err.message || err);
-      });
-    process.exit(1);
-  });
-}
-
-/** Start the full Adytum gateway with terminal CLI. */
-export async function startGateway(projectRoot: string): Promise<void> {
+export const startGateway = async (rootPath?: string) => {
+  const projectRoot = rootPath || defaultProjectRoot;
   const config = loadConfig(projectRoot);
 
   // Initialize DI Container
   setupContainer();
 
+// ... (imports)
+
+  // Initialize DI Container
+  setupContainer();
+
   console.log(chalk.dim(`\n  Starting ${config.agentName}...\n`));
+
+  // ── Event Bus (Phase 2.1) ─────────────────────────────────
+  const eventBus = new EventBusService();
+  container.register(EventBusService, { useValue: eventBus });
+
+  const socketIOService = new SocketIOService(eventBus);
+  container.register(SocketIOService, { useValue: socketIOService });
 
   // ── Storage Auto-Provisioning ─────────────────────────────
   const dbResult = await autoProvisionStorage(config);
@@ -100,13 +95,9 @@ export async function startGateway(projectRoot: string): Promise<void> {
 
   // Vector Embeddings Support
   const embeddingService = container.resolve(EmbeddingService);
-  // Note: We resolve it from container (singleton) but we can also new it up if strictly manual
-  // For now let's just use the class since we aren't fully using DI for everything in index.ts yet
-  // actually, let's just new it up to match the style of this file
-  // const embeddingService = new EmbeddingService();
-  // BUT MemoryStore expects it now.
-
+  
   const memoryStore = new MemoryStore(memoryDb, embeddingService);
+  memoryStore.setEventBus(eventBus);
   const graphStore = new GraphStore(config.dataPath);
 
   // ── Security Layer ────────────────────────────────────────
@@ -166,6 +157,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
 
   const semanticProcessor = new SemanticProcessor(modelRouter, memoryStore);
   const graphIndexer = new GraphIndexer(config.workspacePath, graphStore, semanticProcessor);
+  graphIndexer.setEventBus(eventBus);
   const graphContext = new GraphContext(graphStore);
 
   for (const kTool of createKnowledgeTools(traversalService, graphIndexer, memoryStore)) {
@@ -502,7 +494,10 @@ export async function startGateway(projectRoot: string): Promise<void> {
     },
     modelCatalog,
     modelRouter,
+    socketIOService,
   });
+
+  (global as any).adytumServer = server;
 
   // Route WebSocket messages to agent
   server.on('frame', async ({ sessionId, frame }) => {
@@ -753,5 +748,15 @@ export async function startGateway(projectRoot: string): Promise<void> {
     await skillLoader.stop();
     await server.stop();
     process.exit(0);
+  });
+}
+
+
+
+// Only auto-start if run directly (node index.js)
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  startGateway().catch((err) => {
+    console.error(err);
+    process.exit(1);
   });
 }

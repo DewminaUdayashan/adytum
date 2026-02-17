@@ -6,6 +6,8 @@
 import { inject, singleton } from 'tsyringe';
 import { EmbeddingService } from '../llm/embedding-service.js';
 import type { MemoryDB, MemoryRow } from './memory-db.js';
+import { EventBusService } from '../events/event-bus.js';
+import { MemoryEvents } from '@adytum/shared';
 
 export type MemoryCategory =
   | 'episodic_raw'
@@ -64,11 +66,20 @@ export function redactSecrets(input: string): string {
  */
 @singleton()
 export class MemoryStore {
+  private eventBus?: EventBusService;
+
   constructor(
     @inject('MemoryDB') private db: MemoryDB,
     private embeddingService: EmbeddingService,
   ) {
     this.db.redactSensitiveData(redactSecrets);
+  }
+
+  /**
+   * Sets the event bus instance.
+   */
+  setEventBus(eventBus: EventBusService) {
+    this.eventBus = eventBus;
   }
 
   /**
@@ -98,7 +109,7 @@ export class MemoryStore {
       console.error('[MemoryStore] Failed to generate embedding:', err);
     }
 
-    return this.db.addMemory({
+    const memory = this.db.addMemory({
       content: sanitized,
       source,
       category,
@@ -107,6 +118,12 @@ export class MemoryStore {
       workspaceId,
       embedding, // Add embedding to DB
     });
+
+    if (memory && this.eventBus) {
+        this.eventBus.publish(MemoryEvents.CREATED, memory, 'MemoryStore');
+    }
+
+    return memory;
   }
 
   /**

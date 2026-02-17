@@ -61,6 +61,22 @@ export function getWebSocketUrl(): string {
   return WS_URL;
 }
 
+export function getSocketIOUrl(): string {
+  // If we have an absolute WS_URL (likely), use that as the base for Socket.IO
+  if (WS_URL.startsWith('ws')) {
+    const url = WS_URL.replace('ws://', 'http://').replace('wss://', 'https://');
+    // Remove the /ws suffix if it exists, as Socket.IO uses its own path config
+    return url.split('/ws')[0]!;
+  }
+
+  // Fallback to relative proxying if we really have to
+  if (typeof window !== 'undefined' && GATEWAY_URL.startsWith('/')) {
+    return window.location.origin;
+  }
+  
+  return WS_URL;
+}
+
 export const api = {
   get: <T = any>(path: string, options?: RequestInit) => gatewayFetch<T>(path, { ...options, method: 'GET' }),
   post: <T = any>(path: string, body?: any, options?: RequestInit) => 

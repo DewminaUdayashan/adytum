@@ -15,37 +15,43 @@ import { ToolRegistry } from '../../tools/registry.js';
 import { tokenTracker } from './token-tracker.js';
 import { auditLogger } from '../../security/audit-logger.js';
 import { EventEmitter } from 'node:events';
-import type { MemoryStore } from '../../infrastructure/repositories/memory-store.js';
-import type { MemoryDB } from '../../infrastructure/repositories/memory-db.js';
-
+import { EventBusService } from '../../infrastructure/events/event-bus.js';
+import { AgentEvents } from '@adytum/shared';
 import { GraphContext } from '../knowledge/graph-context.js';
+import { MemoryStore } from '../../infrastructure/repositories/memory-store.js';
+import { MemoryDB } from '../../infrastructure/repositories/memory-db.js';
 import { GraphStore } from '../knowledge/graph-store.js';
 import { RuntimeRegistry } from '../agents/runtime-registry.js';
 import { ToolErrorHandler } from './tool-error-handler.js';
+
+// ...
 
 export interface AgentRuntimeConfig {
   modelRouter: ModelRouter;
   toolRegistry: ToolRegistry;
   soulEngine: SoulEngine;
   skillLoader: SkillLoader;
-  graphContext?: GraphContext;
-  contextSoftLimit: number;
+  graphContext: GraphContext;
+  contextSoftLimit?: number;
   maxIterations: number;
   defaultModelRole: ModelRole;
   agentName: string;
-  workspacePath?: string;
+  workspacePath: string;
   memoryStore?: MemoryStore;
   memoryTopK?: number;
   memoryDb?: MemoryDB;
   graphStore?: GraphStore;
+  runtimeRegistry: RuntimeRegistry;
+  tier?: number;
+  toolErrorHandler?: ToolErrorHandler;
+  eventBus?: EventBusService;
   onApprovalRequired?: (
     description: string,
-    context: { sessionId: string; workspaceId?: string },
+    context?: { sessionId?: string; workspaceId?: string },
   ) => Promise<boolean>;
-  runtimeRegistry: RuntimeRegistry;
-  tier?: 1 | 2 | 3;
-  toolErrorHandler?: ToolErrorHandler;
 }
+
+
 
 export interface AgentTurnResult {
   response: string;
@@ -296,6 +302,15 @@ ${knowledge}`,
         if (signal.aborted) throw new Error('Session aborted.');
         lastMessage = message;
 
+        // Publish Thought Event
+        if (message.content && this.config.eventBus) {
+             this.config.eventBus.publish(AgentEvents.THOUGHT, {
+                 sessionId,
+                 content: message.content,
+                 traceId
+             }, 'AgentRuntime');
+        }
+
         // Track tokens
         this.trackTokenUsage(usage, sessionId);
         auditLogger.logModelResponse(traceId, usage.model, usage);
@@ -337,6 +352,15 @@ ${knowledge}`,
             };
 
             allToolCalls.push(toolCall);
+
+            if (this.config.eventBus) {
+                this.config.eventBus.publish(AgentEvents.TOOL_CALL, {
+                    sessionId,
+                    tool: toolCall.name,
+                    args: toolCall.arguments,
+                    traceId
+                }, 'AgentRuntime');
+            }
 
             // Emit tool call event for live console
             this.emit('stream', {
@@ -403,6 +427,16 @@ ${knowledge}`,
                   delta: `Self-Correction: ${analysis.strategy.replace('_', ' ')} suggested.`,
                 });
               }
+            }
+
+            if (this.config.eventBus) {
+                this.config.eventBus.publish(AgentEvents.TOOL_RESULT, {
+                    sessionId,
+                    tool: toolCall.name,
+                    result: result.result,
+                    isError: result.isError,
+                    traceId
+                }, 'AgentRuntime');
             }
 
             auditLogger.logToolResult(traceId, toolCall.name, result.result, result.isError);
