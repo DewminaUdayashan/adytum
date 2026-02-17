@@ -45,6 +45,8 @@ import { ApprovalService } from './domain/logic/approval-service.js';
 import { GraphStore } from './domain/knowledge/graph-store.js';
 import { GraphIndexer } from './domain/knowledge/graph-indexer.js';
 import { GraphContext } from './domain/knowledge/graph-context.js';
+import { GraphTraversalService } from './domain/knowledge/graph-traversal.js';
+import { createKnowledgeTools } from './tools/knowledge.js';
 import { AgentRegistry } from './domain/agents/agent-registry.js';
 import { LogbookService } from './application/services/logbook-service.js';
 import { AgentLogStore } from './domain/agents/agent-log-store.js';
@@ -139,6 +141,14 @@ export async function startGateway(projectRoot: string): Promise<void> {
 
   for (const pTool of createPersonalityTools(memoryDb)) {
     toolRegistry.register(pTool);
+  }
+
+  // ─── Knowledge Graph Tools (Phase 1.2) ─────────────────────
+  const traversalService = new GraphTraversalService(graphStore);
+  container.register(GraphTraversalService, { useValue: traversalService });
+
+  for (const kTool of createKnowledgeTools(traversalService)) {
+    toolRegistry.register(kTool);
   }
 
   // ─── Agent Runtime ─────────────────────────────────────────
