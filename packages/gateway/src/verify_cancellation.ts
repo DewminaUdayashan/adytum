@@ -1,4 +1,3 @@
-
 import 'reflect-metadata';
 import { container } from 'tsyringe';
 import { AgentRuntime } from './domain/logic/agent-runtime.js';
@@ -55,7 +54,10 @@ async function runTest() {
   // 2. Create Child Runtime via Spawner (simulated)
   const spawner = new SubAgentSpawner(
     { ...mockConfig, parentTraceId: uuid(), parentSessionId, goal: 'Sub-task' },
-    registry
+    registry,
+    {} as any,
+    {} as any,
+    {} as any,
   );
 
   console.log(`[Setup] Parent Session: ${parentSessionId}`);
@@ -63,7 +65,7 @@ async function runTest() {
 
   // Manually register for test simulation (since we aren't running full loops)
   registry.register(parentSessionId, parentRuntime);
-  
+
   const childRuntime = new AgentRuntime({ ...mockConfig, runtimeRegistry: registry });
   registry.register(childSessionId, childRuntime, parentSessionId);
 
@@ -85,8 +87,10 @@ async function runTest() {
   // Ideally, we'd mock AgentRuntime.abort, but let's check registry integrity.
   // Note: Registry doesn't auto-remove on abort, only on unregister() which happens at end of run().
   // So we expect sessions to still be in registry, but their abortControllers to be triggered.
-  
-  console.log('✅ Abort signal sent. If no errors occurred, generic cancellation implementation is linked.');
+
+  console.log(
+    '✅ Abort signal sent. If no errors occurred, generic cancellation implementation is linked.',
+  );
 }
 
 runTest().catch(console.error);

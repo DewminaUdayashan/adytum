@@ -105,49 +105,78 @@ export class CronManager {
         this.save();
       }
 
-      try {
-        const sessionId = `cron-${job.id}`;
-        const prompt = `[CRON JOB TRIGGERED: ${job.name}]
-
-Required Action: ${job.task}
-
-EXECUTION GUIDELINES:
-1. PARALLELISM: If the task involves multiple sub-tasks, use 'spawn_sub_agent' with the 'batch' parameter to execute them in parallel.
-2. CAPABILITY CHECK: Before executing a delivery or external action (e.g. sending a message, writing to a DB), verify that the required skill is loaded and its configuration (API keys, tokens, IDs) is valid.
-3. ERROR HANDLING: If an action fails, log the error clearly and attempt an alternative if possible. You are responsible for ensuring the workflow completes or fails gracefully.
-
-When done, reply with a brief summary: status (OK/failed), what was done, any errors.`;
-
-        const result = await this.agent.run(prompt, sessionId);
-        
-        // Register this cron job session as a root session (no parent)
-        // Handled inside agent.run() via its internal calls, but for clarity 
-        // we rely on the agent to register itself.
-        
-        const summary = (result?.response ?? '').trim().slice(0, 600);
-        if (this.logbook && summary) {
-          this.logbook.append({
-            timestamp: Date.now(),
-            event: 'cron_complete',
-            detail: `[${job.name}] ${summary}`,
-          });
-        }
-      } catch (err) {
-        console.error(`[Cron] Job ${job.name} failed:`, err);
-        if (this.logbook) {
-          this.logbook.append({
-            timestamp: Date.now(),
-            event: 'cron_failed',
-            detail: `[${job.name}] ${err instanceof Error ? err.message : String(err)}`,
-          });
-        }
-      }
+      await this.executeJob(job);
     });
 
     this.tasks.set(job.id, task);
   }
 
+  /**
+   * Executes the core logic of a cron job.
+   * Extracted for reuse by manual triggers.
+   */
+  private async executeJob(job: CronJob): Promise<string> {
+    try {
+      const sessionId = `cron-${job.id}`;
+      const prompt = `[CRON JOB TRIGGERED: ${job.name}]
+
+Required Action: ${job.task}
+
+EXECUTION GUIDELINES (PROTOCOL DYNAMO-01):
+1. META-INSTRUCTION: You are the MANAGER (Tier 2). Your goal is to execute the user's request, but you must first PLAN.
+2. AMBIGUITY CHECK: Do you have concrete targets (URLs, specific IDs, filenames)?
+   - IF NO: Do NOT spawn "generic" workers. Spawn a Tier 3 Scout/Researcher first to find the targets.
+   - IF YES: Proceed to spawn Execution Agents.
+3. BATCHING: Once you have targets, use 'spawn_sub_agent' with the 'batch' parameter to spawn all workers in PARALLEL.
+4. PERSISTENCE (CRITICAL FOR DAILY JOBS):
+   - You MUST spawn your Tier 2/3 sub-agents with 'deactivate_after: false' so they persist for the next run.
+   - NAMING: Use *ONLY* a single-word CATCHY CALLSIGN (e.g., "Viper", "Cobalt", "Nebula", "Onyx"). 
+     - FORBIDDEN: Do NOT use "Agent-", "Weather-", "Scout-", or any descriptive prefix.
+     - CORRECT: "Viper"
+     - INCORRECT: "Agent-Viper", "Weather-Scout-Galle"
+     - Make them sound like a specialized operative team.
+   - If they already exist, the system will reuse them.
+   - IGNORE any user instruction to "deactivate" if this is a recurring job. KEEP AGENTS ALIVE.
+5. AGGREGATION: Wait for all results, then compile the final report.
+
+When done, reply with a brief summary: status (OK/failed), what was done, any errors.`;
+
+      const result = await this.agent.run(prompt, sessionId);
+
+      const summary = (result?.response ?? '').trim().slice(0, 600);
+      if (this.logbook && summary) {
+        this.logbook.append({
+          timestamp: Date.now(),
+          event: 'cron_complete',
+          detail: `[${job.name}] ${summary}`,
+        });
+      }
+      return summary;
+    } catch (err) {
+      console.error(`[Cron] Job ${job.name} failed:`, err);
+      if (this.logbook) {
+        this.logbook.append({
+          timestamp: Date.now(),
+          event: 'cron_failed',
+          detail: `[${job.name}] ${err instanceof Error ? err.message : String(err)}`,
+        });
+      }
+      throw err;
+    }
+  }
+
   // ── Public API ────────────────────────────────────────────────
+
+  /**
+   * Manually triggers a job by ID.
+   */
+  async triggerJob(id: string): Promise<string> {
+    const job = this.jobs.get(id);
+    if (!job) throw new Error(`Job ${id} not found`);
+
+    console.log(`[Cron] Manual trigger for job: ${job.name}`);
+    return this.executeJob(job);
+  }
 
   /**
    * Executes add job.
@@ -218,7 +247,7 @@ RULES:
     // Kill any running agents
     const sessionId = `cron-${id}`;
     this.runtimeRegistry.abortHierarchy(sessionId);
-    
+
     this.tasks.delete(id);
     this.tasks.delete(id);
     this.jobs.delete(id);

@@ -22,6 +22,8 @@ export interface BirthParams {
 export interface AgentRecord extends AgentMetadata {
   /** In-memory only: current uptime start (null if deactivated). */
   _activeSince?: number | null;
+  /** Persistent session ID for long-lived agents. */
+  activeSessionId?: string;
 }
 
 /**
@@ -71,7 +73,7 @@ export class AgentRegistry {
   }
 
   /** Birth: create a new agent with metadata. Returns the new AgentMetadata. */
-  birth(params: BirthParams): AgentMetadata {
+  birth(params: BirthParams & { sessionId?: string }): AgentMetadata {
     const id = uuid();
     const now = Math.floor(Date.now() / 1000);
     const record: AgentRecord = {
@@ -85,6 +87,7 @@ export class AgentRegistry {
       parentId: params.parentId,
       modelIds: params.model ? [params.model] : [], // Store assigned model
       _activeSince: now,
+      activeSessionId: params.sessionId,
     };
     this.agents.set(id, record);
     this.save();
@@ -107,6 +110,17 @@ export class AgentRegistry {
   get(agentId: string): AgentMetadata | null {
     const r = this.agents.get(agentId);
     return r ? this.toMetadata(r) : null;
+  }
+
+  /** Find active agent by name (case-insensitive) for reuse. */
+  findActiveByName(name: string): AgentRecord | null {
+    const normalized = name.trim().toLowerCase();
+    for (const agent of this.agents.values()) {
+      if (agent.lastBreath === null && agent.name.trim().toLowerCase() === normalized) {
+        return agent;
+      }
+    }
+    return null;
   }
 
   /** Get all agents (active and deactivated). */

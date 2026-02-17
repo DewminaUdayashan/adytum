@@ -290,7 +290,7 @@ ${knowledge}`,
             fallbackRole: roleToUse as any,
           },
         );
-        
+
         if (signal.aborted) throw new Error('Session aborted.');
         lastMessage = message;
 
@@ -672,7 +672,7 @@ ${knowledge}`,
     if (!this.config.memoryDb) return;
 
     const identity = this.parseModelIdentity(usage.model);
-    
+
     // Sanitize role: if it's a raw model ID or task name, map to 'fast' generic role
     let safeRole = usage.role;
     const validRoles = ['thinking', 'fast', 'local'];
@@ -921,17 +921,31 @@ If the tool result contains a "Preview" or markdown string, copy it exactly into
 `;
     } else if (tier === 2) {
       systemPrompt += `
-## ROLE: MANAGER (Tier 2)
-- **ORCHESTRATE**: You are a Coordinator. break down the user request into parallel subtasks.
-- **MANDATORY BATCHING**: You MUST use 'spawn_sub_agent' with the 'batch' parameter to spawn all workers at once.
-- **STRICT HIERARCHY**: Do NOT spawn another Tier 2 Manager. You spawn Tier 3 Operatives only.
-- **NO LOOPS**: Do not spawn agents sequentially in a loop. List all items, then spawn a single BATCH.
-- **AGGREGATE**: Wait for all results, synthesize them into a single report, and reply to your parent.
+## ROLE: MANAGER (Tier 2) - PROTOCOL DYNAMO-01
+You are a persistent state machine for this session. Your goal is to execute the user's high-level request by ORCHESTRATING a team of workers.
+
+### THE OODA LOOP (Observe, Orient, Decide, Act)
+1. **OBSERVE**: Read the User Goal. Is it ambiguous? (e.g., "Get news" -> Which site? "Track prices" -> Which items?)
+2. **ORIENT**: Check your context. Do you have the *specific targets* (URLs, IDs, filenames) needed to execute?
+   - **IF NO**: You CANNOT execute yet.
+     - **DECIDE**: Spawn a **Tier 3 Scout** with the goal: "Find the list of [targets] for [Goal]. Return as a simple list."
+     - **ACT**: Wait for the Scout's results.
+   - **IF YES** (You have the list):
+     - **DECIDE**: Convert the list into a Batch of tasks.
+     - **ACT**: Use 'spawn_sub_agent' with the **'batch'** parameter.
+     - **NOTE**: The 'batch' parameter MUST be an array of OBJECTS, e.g. \`[{ "goal": "...", "name": "..." }]\`. Do NOT send an array of strings.
+
+### RULES
+- **NO GENERIC WORKERS**: Never spawn a worker with a vague goal like "Find news". Only spawn workers with CONCRETE goals like "Scrape dailymirror.lk for headers".
+- **STRICT HIERARCHY**: You handle the *strategy*. Tier 3 handles the *tactics*. Do NOT spawn another Tier 2.
+- **AGGREGATION**: You must wait for all Tier 3 agents to finish, then compile their results into one final report.
+- **PERSISTENCE**: For daily/recurring tasks, assign **consistent names** to your workers (e.g. "News_Source_1"). The system will automatically persist them if you reuse the name. No need to set 'deactivate_after' explicitly if reusing.
 `;
     } else if (tier === 3) {
       systemPrompt += `
 ## ROLE: OPERATIVE (Tier 3)
 - **EXECUTE**: You have a single, concrete goal. Focus on it.
+- **NO CHATTER**: Do NOT ask clarifying questions. If the goal is ambiguous, FAIL with an error message explaining what is missing.
 - **REPORT**: Return the specific result (code, file, summary) clearly.
 `;
     }

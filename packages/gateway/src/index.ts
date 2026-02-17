@@ -93,7 +93,11 @@ export async function startGateway(projectRoot: string): Promise<void> {
   const graphStore = new GraphStore(config.dataPath);
 
   // ── Security Layer ────────────────────────────────────────
-  const permissionManager = new PermissionManager(config.workspacePath, config.dataPath, graphStore);
+  const permissionManager = new PermissionManager(
+    config.workspacePath,
+    config.dataPath,
+    graphStore,
+  );
   permissionManager.startWatching();
 
   // ── Tool Registry ─────────────────────────────────────────
@@ -334,8 +338,8 @@ export async function startGateway(projectRoot: string): Promise<void> {
 
   container.register(AgentRuntime, { useValue: agent });
   container.register(ModelRouter, { useValue: modelRouter });
-  container.register("RuntimeConfig", { useValue: config });
-  container.register("RouterConfig", { useValue: config });
+  container.register('RuntimeConfig', { useValue: config });
+  container.register('RouterConfig', { useValue: config });
   container.register(SkillLoader, { useValue: skillLoader });
   container.register(CronManager, { useValue: cronManager });
   container.register(ModelCatalog, { useValue: modelCatalog });
@@ -380,13 +384,22 @@ export async function startGateway(projectRoot: string): Promise<void> {
   const prometheusAgentId = tier1[0]!.id;
 
   // Tool: Prometheus (and Tier 2) can spawn Tier 2/3 sub-agents during a run
-  const subAgentSpawner = new SubAgentSpawner(agentRuntimeConfig, runtimeRegistry);
-  const hierarchyConfig = (config as { hierarchy?: { avatarGenerationEnabled?: boolean } }).hierarchy;
+  const hierarchyConfig = (config as { hierarchy?: { avatarGenerationEnabled?: boolean } })
+    .hierarchy;
   const avatarEnabled = hierarchyConfig?.avatarGenerationEnabled !== false;
   const generateAvatar = async (name: string, _tier: number): Promise<string | null> => {
     const seed = encodeURIComponent(name || 'agent');
     return `https://api.dicebear.com/9.x/adventurer/svg?seed=${seed}`;
   };
+
+  const subAgentSpawner = new SubAgentSpawner(
+    agentRuntimeConfig,
+    runtimeRegistry,
+    agentRegistry,
+    logbookService,
+    agentLogStore,
+    { generateAvatar, avatarEnabled },
+  );
   const spawnAgentTool = createSpawnAgentTool(
     agentRegistry,
     logbookService,
@@ -405,7 +418,10 @@ export async function startGateway(projectRoot: string): Promise<void> {
       event: 'critical_failure',
       detail: `All models failed for "${payload.roleOrTask}". Errors: ${payload.errors.slice(0, 3).join('; ')}`,
     });
-    logger.warn({ roleOrTask: payload.roleOrTask, errors: payload.errors }, 'Critical task failure — pipeline emergency stop');
+    logger.warn(
+      { roleOrTask: payload.roleOrTask, errors: payload.errors },
+      'Critical task failure — pipeline emergency stop',
+    );
   });
 
   // Wire up SkillService reload callback
@@ -531,7 +547,13 @@ export async function startGateway(projectRoot: string): Promise<void> {
       const defaultCommSkillId = latestConfig.execution?.defaultCommSkillId;
 
       if (mode === 'deny') {
-        return { approved: false, mode, reason: 'policy_denied', defaultChannel, defaultCommSkillId };
+        return {
+          approved: false,
+          mode,
+          reason: 'policy_denied',
+          defaultChannel,
+          defaultCommSkillId,
+        };
       }
 
       if (mode === 'auto') {
@@ -558,30 +580,31 @@ export async function startGateway(projectRoot: string): Promise<void> {
         };
       }
 
-    if (process.stdin.isTTY) {
-      const ttyApproved = await promptApproval(
-        chalk.yellow(
-          `\n  ⚠  Tool "shell_execute" wants to execute: ${chalk.bold(JSON.stringify({ command }))}\n  Approve? [y/N]: `,
-        ),
-      );
+      if (process.stdin.isTTY) {
+        const ttyApproved = await promptApproval(
+          chalk.yellow(
+            `\n  ⚠  Tool "shell_execute" wants to execute: ${chalk.bold(JSON.stringify({ command }))}\n  Approve? [y/N]: `,
+          ),
+        );
+        return {
+          approved: ttyApproved,
+          mode,
+          reason: ttyApproved ? undefined : 'user_denied',
+          defaultChannel,
+          defaultCommSkillId,
+        };
+      }
+
       return {
-        approved: ttyApproved,
+        approved: false,
         mode,
-        reason: ttyApproved ? undefined : 'user_denied',
+        reason: 'approval_required',
         defaultChannel,
         defaultCommSkillId,
+        message: 'Command cancelled by user request. You may try again if necessary.',
       };
-    }
-
-    return {
-      approved: false,
-      mode,
-      reason: 'approval_required',
-      defaultChannel,
-      defaultCommSkillId,
-      message: 'Command cancelled by user request. You may try again if necessary.',
-    };
-  });
+    },
+  );
 
   // Re-wire the agent's approval callback too (used by tools marked requiresApproval)
   agent.setApprovalHandler(async (description) => {
