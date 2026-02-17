@@ -28,7 +28,7 @@ export function createSemanticTools(memoryStore: MemoryStore): ToolDefinition[] 
           category: 'doc_chunk',
         });
 
-        return {
+        const data = {
           query,
           count: results.length,
           results: results.map((r) => ({
@@ -38,6 +38,14 @@ export function createSemanticTools(memoryStore: MemoryStore): ToolDefinition[] 
             tags: r.tags,
           })),
         };
+
+        return `
+\`\`\`search-results
+${JSON.stringify(data, null, 2)}
+\`\`\`
+
+Found ${results.length} relevant snippets for "${query}".
+        `.trim();
       },
     },
   ];

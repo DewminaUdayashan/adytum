@@ -22,7 +22,10 @@ export class KnowledgeWatcher {
     // Note: Recursive is supported on macOS and Windows, which matches USER's OS (mac).
     try {
       this.watcher = watch(this.workspacePath, { recursive: true }, (event, filename) => {
-        if (!filename || !filename.endsWith('.md')) return;
+        if (!filename) return;
+        const ext = extname(filename).toLowerCase();
+        const supported = ['.md', '.ts', '.js', '.tsx', '.jsx', '.py', '.dart', '.txt', '.json'];
+        if (!supported.includes(ext)) return;
 
         // Debounce and trigger re-index
         this.handleFileChange(filename);
@@ -50,7 +53,8 @@ export class KnowledgeWatcher {
         // We call update() on the indexer.
         // In a more optimized version we could add a method to index a single file.
         // For now, indexer.update() handles incremental logic via hashing.
-        await this.indexer.update();
+        // CRITICAL: Ensure we skip LLM summaries to avoid costs during auto-indexing.
+        await this.indexer.update(undefined, undefined, { mode: 'fast', skipLLM: true });
       } catch (err) {
         logger.error({ err, filename }, 'Failed to re-index file');
       } finally {

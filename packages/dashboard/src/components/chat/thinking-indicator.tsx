@@ -17,13 +17,14 @@ import {
   Sparkles,
   Wrench,
   Zap,
+  RefreshCw,
   type LucideIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 
 export interface ThinkingActivityEntry {
   id: string;
-  type: 'status' | 'thinking' | 'tool_call' | 'tool_result' | 'response' | 'error';
+  type: 'status' | 'thinking' | 'tool_call' | 'tool_result' | 'response' | 'error' | 'recovery';
   text: string;
   timestamp: number;
 }
@@ -35,6 +36,7 @@ const ACTIVITY_STYLE: Record<ThinkingActivityEntry['type'], { icon: LucideIcon; 
   tool_result: { icon: CheckCircle2, color: 'text-success' },
   response: { icon: Sparkles, color: 'text-accent-secondary' },
   error: { icon: AlertTriangle, color: 'text-error' },
+  recovery: { icon: RefreshCw, color: 'text-accent-secondary' },
 };
 
 export function ThinkingIndicator({
@@ -174,7 +176,11 @@ export function ThinkingIndicator({
                   <Icon className={clsx('mt-0.5 h-3 w-3 shrink-0', style.color)} />
                   <div className="break-words text-text-secondary min-w-0 flex-1">
                     {activity.text.includes('![') || activity.text.includes('](') ? (
-                      <MarkdownRenderer content={activity.text} variant="assistant" className="text-[11px]" />
+                      <MarkdownRenderer
+                        content={activity.text}
+                        variant="assistant"
+                        className="text-[11px]"
+                      />
                     ) : (
                       <span>{activity.text}</span>
                     )}

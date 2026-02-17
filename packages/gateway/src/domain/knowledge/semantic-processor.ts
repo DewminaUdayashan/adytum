@@ -21,23 +21,31 @@ export class SemanticProcessor {
    * Performs deep semantic analysis on a set of nodes.
    * Injects summaries and extracts key concepts (entities/tags).
    */
-  async process(nodes: GraphNode[]): Promise<GraphNode[]> {
-    logger.info(`Starting semantic analysis on ${nodes.length} nodes...`);
+  async process(nodes: GraphNode[], options: { skipLLM?: boolean } = {}): Promise<GraphNode[]> {
+    logger.info(
+      `Starting semantic analysis on ${nodes.length} nodes (skipLLM: ${options.skipLLM})...`,
+    );
 
-    // Process in small batches to avoid overwhelming the LLM
     const items = [...nodes];
     const results: GraphNode[] = [];
 
     while (items.length > 0) {
-      const batch = items.splice(0, 5);
-      const batchResults = await Promise.all(batch.map((node) => this.processNode(node)));
+      // Reduced batch size to 2 to prevent event loop blocking
+      const batch = items.splice(0, 2);
+      const batchResults = await Promise.all(batch.map((node) => this.processNode(node, options)));
       results.push(...batchResults);
+
+      // Yield to event loop to allow heartbeats and other requests
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
 
     return results;
   }
 
-  private async processNode(node: GraphNode): Promise<GraphNode> {
+  private async processNode(
+    node: GraphNode,
+    options: { skipLLM?: boolean } = {},
+  ): Promise<GraphNode> {
     if (node.type !== 'file' && node.type !== 'doc') return node;
     if (!node.path || !existsSync(node.path)) return node;
 
@@ -45,8 +53,9 @@ export class SemanticProcessor {
       const content = readFileSync(node.path, 'utf-8');
       if (content.length < 50) return node; // Skip tiny files
 
-      // 1. Generate Summary & Concepts
-      const prompt = `
+      // 1. Generate Summary & Concepts (only if not skipped)
+      if (!options.skipLLM) {
+        const prompt = `
 Analyze the following file content and provide:
 1. A concise 1-2 sentence summary of its purpose.
 2. A list of 3-5 key technical concepts or entities defined in it.
@@ -60,23 +69,24 @@ Summary: [text]
 Concepts: [comma separated list]
 `;
 
-      const { message } = await this.modelRouter.chat('fast', [
-        { role: 'system', content: 'You are a technical documentation assistant.' },
-        { role: 'user', content: prompt },
-      ]);
+        const { message } = await this.modelRouter.chat('fast', [
+          { role: 'system', content: 'You are a technical documentation assistant.' },
+          { role: 'user', content: prompt },
+        ]);
 
-      if (message.content) {
-        const summaryMatch = message.content.match(/Summary:\s*(.*)/i);
-        const conceptsMatch = message.content.match(/Concepts:\s*(.*)/i);
+        if (message.content) {
+          const summaryMatch = message.content.match(/Summary:\s*(.*)/i);
+          const conceptsMatch = message.content.match(/Concepts:\s*(.*)/i);
 
-        if (summaryMatch) {
-          node.description = summaryMatch[1].trim();
-        }
-        if (conceptsMatch) {
-          node.metadata = {
-            ...node.metadata,
-            concepts: conceptsMatch[1].split(',').map((c) => c.trim()),
-          };
+          if (summaryMatch) {
+            node.description = summaryMatch[1].trim();
+          }
+          if (conceptsMatch) {
+            node.metadata = {
+              ...node.metadata,
+              concepts: conceptsMatch[1].split(',').map((c) => c.trim()),
+            };
+          }
         }
       }
 
@@ -85,6 +95,12 @@ Concepts: [comma separated list]
         ? (node.metadata.concepts as string[])
         : [];
       await this.indexDocumentChunks(node.path, content, concepts);
+
+      // 3. Mark as processed
+      node.metadata = {
+        ...node.metadata,
+        lastProcessed: Date.now(),
+      };
 
       return node;
     } catch (err) {
@@ -105,6 +121,8 @@ Concepts: [comma separated list]
         { path },
         'doc_chunk', // Category for semantic search tool
       );
+      // Small pause between chunks to keep event loop alive
+      await new Promise((resolve) => setTimeout(resolve, 20));
     }
   }
 

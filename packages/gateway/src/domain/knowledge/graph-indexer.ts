@@ -66,9 +66,12 @@ export class GraphIndexer {
   async update(
     customPath?: string,
     workspaceId?: string,
-    options: { mode?: 'fast' | 'deep' } = { mode: 'fast' },
+    options: { mode: 'fast' | 'deep'; skipLLM?: boolean } = { mode: 'fast', skipLLM: true },
   ): Promise<KnowledgeGraph> {
     const path = customPath || this.workspacePath;
+
+    // Safety Net: Force skipLLM to true if undefined, to prevent accidental costs.
+    if (options.skipLLM === undefined) options.skipLLM = true;
     const graph = this.store.load(workspaceId);
     const existingNodeMap = new Map<string, GraphNode>(graph.nodes.map((n) => [n.path || n.id, n]));
 
@@ -133,9 +136,25 @@ export class GraphIndexer {
 
     // 4. Handle Deep Indexing (Semantic Analysis)
     if (options.mode === 'deep' && this.semanticProcessor) {
-      logger.info('Performing deep semantic analysis...');
-      const nodesToProcess = graph.nodes.filter((n) => n.type === 'file' || n.type === 'doc');
-      await this.semanticProcessor.process(nodesToProcess);
+      logger.info(`Performing deep semantic analysis (skipLLM: ${options.skipLLM === true})...`);
+
+      // Only process nodes that were updated or are missing semantic metadata
+      const nodesToProcess = graph.nodes.filter((n) => {
+        if (n.type !== 'file' && n.type !== 'doc') return false;
+
+        const existing = existingNodeMap.get(n.path || n.id);
+        const isChanged = !existing || existing.metadata?.hash !== n.metadata?.hash;
+        const reflectsNeeds = !n.description || !n.metadata?.lastProcessed;
+
+        return isChanged || reflectsNeeds;
+      });
+
+      if (nodesToProcess.length > 0) {
+        logger.info(`Processing ${nodesToProcess.length} pending/changed nodes...`);
+        await this.semanticProcessor.process(nodesToProcess, { skipLLM: options.skipLLM });
+      } else {
+        logger.info('All nodes are already up to date semantically.');
+      }
     }
 
     this.store.save(graph, workspaceId);

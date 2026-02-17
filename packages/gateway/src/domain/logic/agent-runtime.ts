@@ -389,10 +389,19 @@ ${knowledge}`,
               );
               // Append analysis to the result so the model sees it
               if (typeof result.result === 'string') {
-                result.result += this.config.toolErrorHandler.formatErrorForContext(
+                const recoveryMsg = this.config.toolErrorHandler.formatErrorForContext(
                   { message: result.result },
                   analysis,
                 );
+                result.result += recoveryMsg;
+
+                // Emit recovery event for dashboard
+                this.emit('stream', {
+                  traceId,
+                  sessionId,
+                  streamType: 'recovery',
+                  delta: `Self-Correction: ${analysis.strategy.replace('_', ' ')} suggested.`,
+                });
               }
             }
 

@@ -267,7 +267,6 @@ export class MemoryDB {
       record.source,
       record.category,
       record.tags ? JSON.stringify(record.tags) : null,
-      record.tags ? JSON.stringify(record.tags) : null,
       record.metadata ? JSON.stringify(record.metadata) : null,
       record.embedding || null,
       createdAt,

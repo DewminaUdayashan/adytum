@@ -5,6 +5,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
+import { createRequire } from 'node:module';
 import { createJiti } from 'jiti';
 import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
@@ -297,6 +298,13 @@ export class SkillLoader {
   private jiti = createJiti(__filename, {
     interopDefault: true,
     extensions: ['.ts', '.tsx', '.mts', '.cts', '.js', '.mjs', '.cjs', '.json'],
+    alias: {
+      zod: createRequire(import.meta.url).resolve('zod'),
+      '@adytum/shared': join(
+        dirname(fileURLToPath(import.meta.url)),
+        '../../../shared/src/index.ts',
+      ),
+    },
   });
 
   private projectRoot: string;
@@ -412,20 +420,32 @@ export class SkillLoader {
     this.discover();
 
     console.log(chalk.dim(`  Discovered ${this.skills.length} total skills.`));
-    
+
     const enabled = this.skills.filter((s) => s.enabled && s.status === 'discovered');
     if (enabled.length > 0) {
-      console.log(chalk.dim(`  Initializing ${enabled.length} enabled skills: ${enabled.map(s => s.id).join(', ')}...`));
+      console.log(
+        chalk.dim(
+          `  Initializing ${enabled.length} enabled skills: ${enabled.map((s) => s.id).join(', ')}...`,
+        ),
+      );
     } else {
-      console.log(chalk.yellow(`  No enabled skills found to initialize (status === 'discovered').`));
-      const allEnabled = this.skills.filter(s => s.enabled);
+      console.log(
+        chalk.yellow(`  No enabled skills found to initialize (status === 'discovered').`),
+      );
+      const allEnabled = this.skills.filter((s) => s.enabled);
       if (allEnabled.length > 0) {
-        console.log(chalk.dim(`  Note: ${allEnabled.length} skills are enabled but have status: ${allEnabled.map(s => `${s.id}(${s.status})`).join(', ')}`));
+        console.log(
+          chalk.dim(
+            `  Note: ${allEnabled.length} skills are enabled but have status: ${allEnabled.map((s) => `${s.id}(${s.status})`).join(', ')}`,
+          ),
+        );
       }
     }
 
     for (const skill of enabled) {
-      console.log(chalk.blue(`    → Loading skill: ${skill.id} from ${skill.source || 'instructions'}`));
+      console.log(
+        chalk.blue(`    → Loading skill: ${skill.id} from ${skill.source || 'instructions'}`),
+      );
       this.applyEnvOverrides(skill);
       if (!skill.source) {
         // Instruction-only skill
@@ -602,7 +622,12 @@ export class SkillLoader {
       if (entry?.config) {
         const configLines: string[] = [];
         for (const [key, val] of Object.entries(entry.config)) {
-          if (val && typeof val === 'string' && !key.toLowerCase().includes('token') && !key.toLowerCase().includes('key')) {
+          if (
+            val &&
+            typeof val === 'string' &&
+            !key.toLowerCase().includes('token') &&
+            !key.toLowerCase().includes('key')
+          ) {
             configLines.push(`- ${key}: ${val}`);
           }
         }
@@ -621,7 +646,11 @@ export class SkillLoader {
 
     const result = lines.join('\n');
     if (result.includes('discord')) {
-      console.log(chalk.magenta(`[SkillLoader] Context for discord injected: ${result.includes('defaultUserId')}`));
+      console.log(
+        chalk.magenta(
+          `[SkillLoader] Context for discord injected: ${result.includes('defaultUserId')}`,
+        ),
+      );
     }
     return result;
   }

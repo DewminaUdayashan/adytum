@@ -111,4 +111,19 @@ export class GraphTraversalService {
     }
     return null;
   }
+
+  /**
+   * Searches for nodes by query (filtering by label or path).
+   */
+  findNodesByQuery(query: string, workspaceId: string, limit: number = 5): GraphNode[] {
+    const graph = this.graphStore.load(workspaceId);
+    const lower = query.toLowerCase();
+
+    return graph.nodes
+      .filter(
+        (n) =>
+          n.label.toLowerCase().includes(lower) || (n.path && n.path.toLowerCase().includes(lower)),
+      )
+      .slice(0, limit);
+  }
 }

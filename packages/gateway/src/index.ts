@@ -152,10 +152,6 @@ export async function startGateway(projectRoot: string): Promise<void> {
   const traversalService = new GraphTraversalService(graphStore);
   container.register(GraphTraversalService, { useValue: traversalService });
 
-  for (const kTool of createKnowledgeTools(traversalService)) {
-    toolRegistry.register(kTool);
-  }
-
   // ─── Agent Runtime ─────────────────────────────────────────
   const modelCatalog = container.resolve(ModelCatalog);
 
@@ -167,6 +163,14 @@ export async function startGateway(projectRoot: string): Promise<void> {
     modelCatalog,
     routing: config.routing,
   });
+
+  const semanticProcessor = new SemanticProcessor(modelRouter, memoryStore);
+  const graphIndexer = new GraphIndexer(config.workspacePath, graphStore, semanticProcessor);
+  const graphContext = new GraphContext(graphStore);
+
+  for (const kTool of createKnowledgeTools(traversalService, graphIndexer)) {
+    toolRegistry.register(kTool);
+  }
 
   // ─── Error Recovery (Phase 2.2) ────────────────────────────
   const toolErrorHandler = new ToolErrorHandler();
@@ -201,10 +205,6 @@ export async function startGateway(projectRoot: string): Promise<void> {
   });
   skillLoader.setSecrets(secretsStore.getAll());
   await skillLoader.init(toolRegistry);
-
-  const semanticProcessor = new SemanticProcessor(modelRouter, memoryStore);
-  const graphIndexer = new GraphIndexer(config.workspacePath, graphStore, semanticProcessor);
-  const graphContext = new GraphContext(graphStore);
 
   const knowledgeWatcher = new KnowledgeWatcher(graphIndexer, config.workspacePath);
   knowledgeWatcher.start();
