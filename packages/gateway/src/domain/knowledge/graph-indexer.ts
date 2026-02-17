@@ -277,6 +277,7 @@ export class GraphIndexer {
           source: sourceNode.id,
           target: targetNode.id,
           type: 'references',
+          metadata: { subtype: edgeType },
         });
       }
     }
