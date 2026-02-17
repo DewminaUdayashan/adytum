@@ -7,9 +7,15 @@ import { KnowledgeGraph, GraphNode } from '@adytum/shared';
 import { ModelRouter } from '../../infrastructure/llm/model-router.js';
 import { logger } from '../../logger.js';
 import { readFileSync, existsSync } from 'node:fs';
+import { MemoryStore } from '../../infrastructure/repositories/memory-store.js';
+import { inject, singleton } from 'tsyringe';
 
+@singleton()
 export class SemanticProcessor {
-  constructor(private modelRouter: ModelRouter) {}
+  constructor(
+    @inject(ModelRouter) private modelRouter: ModelRouter,
+    @inject(MemoryStore) private memoryStore: MemoryStore,
+  ) {}
 
   /**
    * Performs deep semantic analysis on a set of nodes.
@@ -17,17 +23,17 @@ export class SemanticProcessor {
    */
   async process(nodes: GraphNode[]): Promise<GraphNode[]> {
     logger.info(`Starting semantic analysis on ${nodes.length} nodes...`);
-    
+
     // Process in small batches to avoid overwhelming the LLM
     const items = [...nodes];
     const results: GraphNode[] = [];
-    
+
     while (items.length > 0) {
       const batch = items.splice(0, 5);
-      const batchResults = await Promise.all(batch.map(node => this.processNode(node)));
+      const batchResults = await Promise.all(batch.map((node) => this.processNode(node)));
       results.push(...batchResults);
     }
-    
+
     return results;
   }
 
@@ -39,6 +45,7 @@ export class SemanticProcessor {
       const content = readFileSync(node.path, 'utf-8');
       if (content.length < 50) return node; // Skip tiny files
 
+      // 1. Generate Summary & Concepts
       const prompt = `
 Analyze the following file content and provide:
 1. A concise 1-2 sentence summary of its purpose.
@@ -55,28 +62,65 @@ Concepts: [comma separated list]
 
       const { message } = await this.modelRouter.chat('fast', [
         { role: 'system', content: 'You are a technical documentation assistant.' },
-        { role: 'user', content: prompt }
+        { role: 'user', content: prompt },
       ]);
 
       if (message.content) {
-          const summaryMatch = message.content.match(/Summary:\s*(.*)/i);
-          const conceptsMatch = message.content.match(/Concepts:\s*(.*)/i);
+        const summaryMatch = message.content.match(/Summary:\s*(.*)/i);
+        const conceptsMatch = message.content.match(/Concepts:\s*(.*)/i);
 
-          if (summaryMatch) {
-              node.description = summaryMatch[1].trim();
-          }
-          if (conceptsMatch) {
-              node.metadata = {
-                  ...node.metadata,
-                  concepts: conceptsMatch[1].split(',').map(c => c.trim())
-              };
-          }
+        if (summaryMatch) {
+          node.description = summaryMatch[1].trim();
+        }
+        if (conceptsMatch) {
+          node.metadata = {
+            ...node.metadata,
+            concepts: conceptsMatch[1].split(',').map((c) => c.trim()),
+          };
+        }
       }
+
+      // 2. Vector Indexing (Chunking)
+      const concepts = Array.isArray(node.metadata?.concepts)
+        ? (node.metadata.concepts as string[])
+        : [];
+      await this.indexDocumentChunks(node.path, content, concepts);
 
       return node;
     } catch (err) {
       logger.error({ err, path: node.path }, 'Failed to process node semantically.');
       return node;
     }
+  }
+
+  private async indexDocumentChunks(path: string, content: string, tags: string[]): Promise<void> {
+    // Simple chunking by paragraph or fixed size
+    const chunks = this.chunkText(content, 1000); // 1000 chars approx
+
+    for (const chunk of chunks) {
+      await this.memoryStore.add(
+        chunk,
+        'file_system',
+        tags,
+        { path },
+        'doc_chunk', // Category for semantic search tool
+      );
+    }
+  }
+
+  private chunkText(text: string, size: number): string[] {
+    const chunks: string[] = [];
+    let current = '';
+    const lines = text.split('\n');
+
+    for (const line of lines) {
+      if (current.length + line.length > size) {
+        chunks.push(current);
+        current = '';
+      }
+      current += line + '\n';
+    }
+    if (current) chunks.push(current);
+    return chunks;
   }
 }

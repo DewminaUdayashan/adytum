@@ -30,6 +30,7 @@ Action: Allow Tier 2 agents to "subscribe" to certain events, effectively waking
 
 Action: Create "Sensor" plugins (File Watcher, Email Monitor, Discord Listener) that publish to the Event Bus.
 Action: Remove the need for manual "Check for tasks" loops in favor of interrupt-driven wakeups.
+
 Phase 3: Collaborative Swarm (Multi-Agent)
 Goal: Enable agents to work together without constant micro-management from the root.
 

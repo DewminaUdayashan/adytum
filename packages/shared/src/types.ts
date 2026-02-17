@@ -451,3 +451,23 @@ export interface AdytumSkill {
   onLoad?: () => Promise<void>;
   onUnload?: () => Promise<void>;
 }
+
+// ─── Planner Types ────────────────────────────────────────────
+
+export const PlanStepSchema = z.object({
+  id: z.string(),
+  description: z.string(),
+  tool: z.string().optional(),
+  args: z.record(z.unknown()).optional(),
+  dependencies: z.array(z.string()).default([]),
+  status: z.enum(['pending', 'running', 'completed', 'failed']).default('pending').optional(),
+  result: z.string().optional(),
+  error: z.string().optional(),
+});
+export type PlanStep = z.infer<typeof PlanStepSchema>;
+
+export const PlanSchema = z.object({
+  goal: z.string(),
+  steps: z.array(PlanStepSchema),
+});
+export type Plan = z.infer<typeof PlanSchema>;

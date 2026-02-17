@@ -21,6 +21,7 @@ import type { MemoryDB } from '../../infrastructure/repositories/memory-db.js';
 import { GraphContext } from '../knowledge/graph-context.js';
 import { GraphStore } from '../knowledge/graph-store.js';
 import { RuntimeRegistry } from '../agents/runtime-registry.js';
+import { ToolErrorHandler } from './tool-error-handler.js';
 
 export interface AgentRuntimeConfig {
   modelRouter: ModelRouter;
@@ -43,6 +44,7 @@ export interface AgentRuntimeConfig {
   ) => Promise<boolean>;
   runtimeRegistry: RuntimeRegistry;
   tier?: 1 | 2 | 3;
+  toolErrorHandler?: ToolErrorHandler;
 }
 
 export interface AgentTurnResult {
@@ -377,6 +379,22 @@ ${knowledge}`,
 
             // Execute the tool
             const result = await this.config.toolRegistry.execute(toolCall);
+
+            // Phase 2.2: Error Recovery
+            if (result.isError && this.config.toolErrorHandler) {
+              const analysis = this.config.toolErrorHandler.analyze(
+                result.result,
+                toolCall.name,
+                1,
+              );
+              // Append analysis to the result so the model sees it
+              if (typeof result.result === 'string') {
+                result.result += this.config.toolErrorHandler.formatErrorForContext(
+                  { message: result.result },
+                  analysis,
+                );
+              }
+            }
 
             auditLogger.logToolResult(traceId, toolCall.name, result.result, result.isError);
             if (this.config.memoryDb) {
@@ -870,6 +888,12 @@ Do NOT use absolute paths unless explicitly asked.
 
 ### File System
 - **file_read**, **file_write**, **file_list**, **file_search**: Use these to manage project files.
+
+### Task Planner
+- **task_and_execute**: Use this for ANY multi-step request or complex goal.
+  - Instead of running multiple separate tool calls yourself, delegate to the planner.
+  - Example: "Research X, then implement Y, and finally test Z." -> Call task_and_execute(goal="Research X, implement Y, test Z").
+  - The planner will break it down and execute it, possibly in parallel.
 
 ## Skill Authoring Standards
 - Skills live in \`skills/<skill-id>/\` and must include: \`adytum.plugin.json\`, \`index.ts\`, and (recommended) \`SKILL.md\`. Use TypeScript, not Python, for new skills.

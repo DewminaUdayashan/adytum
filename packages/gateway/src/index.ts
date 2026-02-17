@@ -55,6 +55,10 @@ import { AgentsController } from './api/controllers/agents.controller.js';
 import { SubAgentSpawner } from './domain/logic/sub-agent.js';
 import { createSpawnAgentTool } from './tools/spawn-agent.js';
 import { RuntimeRegistry } from './domain/agents/runtime-registry.js';
+import { TaskPlanner } from './domain/logic/task-planner.js';
+import { ParallelExecutor } from './domain/logic/parallel-executor.js';
+import { createPlannerTools } from './tools/planner.js';
+import { ToolErrorHandler } from './domain/logic/tool-error-handler.js';
 
 // ─── Direct Execution Detection ─────────────────────────────
 // If this file is run directly (e.g. `node dist/index.js start`),
@@ -164,6 +168,25 @@ export async function startGateway(projectRoot: string): Promise<void> {
     routing: config.routing,
   });
 
+  // ─── Error Recovery (Phase 2.2) ────────────────────────────
+  const toolErrorHandler = new ToolErrorHandler();
+  container.register(ToolErrorHandler, { useValue: toolErrorHandler });
+
+  // ─── Task Planner (Phase 2.1) ──────────────────────────────
+  const taskPlanner = new TaskPlanner(modelRouter);
+  const parallelExecutor = new ParallelExecutor(toolRegistry, toolErrorHandler);
+
+  for (const tool of createPlannerTools(taskPlanner, parallelExecutor)) {
+    toolRegistry.register(tool);
+  }
+
+  // ─── Semantic Search (Phase 2.3) ───────────────────────────
+
+  const { createSemanticTools } = await import('./tools/semantic-search.js');
+  for (const tool of createSemanticTools(memoryStore)) {
+    toolRegistry.register(tool);
+  }
+
   const runtimeRegistry = new RuntimeRegistry();
   container.register(RuntimeRegistry, { useValue: runtimeRegistry });
   // Detect LiteLLM vs direct API mode
@@ -179,7 +202,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
   skillLoader.setSecrets(secretsStore.getAll());
   await skillLoader.init(toolRegistry);
 
-  const semanticProcessor = new SemanticProcessor(modelRouter);
+  const semanticProcessor = new SemanticProcessor(modelRouter, memoryStore);
   const graphIndexer = new GraphIndexer(config.workspacePath, graphStore, semanticProcessor);
   const graphContext = new GraphContext(graphStore);
 
@@ -203,6 +226,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
     graphStore,
     runtimeRegistry,
     tier: 1 as const,
+    toolErrorHandler,
   };
 
   const agent = new AgentRuntime(agentRuntimeConfig);

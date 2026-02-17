@@ -8,6 +8,7 @@
 import { clsx } from 'clsx';
 import { Fragment, type ReactNode } from 'react';
 import { sanitizeLinkUrl, stripTrailingPunctuation } from './markdown-utils';
+import { PlanVisualizer } from './plan-visualizer';
 
 type MarkdownVariant = 'assistant' | 'user';
 
@@ -93,6 +94,16 @@ export function MarkdownRenderer({
         }
 
         if (block.kind === 'code') {
+          if (block.language === 'plan') {
+            try {
+              const plan = JSON.parse(block.code);
+              return <PlanVisualizer key={`plan-${index}`} plan={plan} />;
+            } catch (e) {
+              console.error('Failed to parse plan JSON', e);
+              // Fallback to code block
+            }
+          }
+
           return (
             <div
               key={`code-${index}`}

@@ -14,7 +14,8 @@ export type MemoryCategory =
   | 'monologue'
   | 'curiosity'
   | 'general'
-  | 'user_fact';
+  | 'user_fact'
+  | 'doc_chunk';
 
 export type MemoryRecord = MemoryRow;
 
@@ -131,13 +132,22 @@ export class MemoryStore {
    * Performs hybrid search (Semantic + Keyword).
    * Currently implements a simple re-ranking or combination strategy.
    */
-  async searchHybrid(query: string, topK: number = 5): Promise<MemoryRecord[]> {
+  async searchHybrid(
+    query: string,
+    topK: number = 5,
+    filter?: { category?: string },
+  ): Promise<MemoryRecord[]> {
     // 1. Get query embedding
     const queryVector = await this.embeddingService.embed(query);
 
-    // 2. Fetch recent memories (or all, if dataset is small < 10k)
-    // Optimization: In real prod, use sqlite-vss or pre-filter by time/category
-    const candidates = this.db.listMemories(100);
+    // 2. Fetch candidates
+    let candidates: MemoryRow[];
+    if (filter?.category) {
+      // Fetch more candidates for re-ranking since we are filtering
+      candidates = this.db.getMemoriesFiltered([filter.category], 500);
+    } else {
+      candidates = this.db.listMemories(200);
+    }
 
     // 3. Score candidates
     const scored = candidates.map((mem) => {
@@ -157,9 +167,7 @@ export class MemoryStore {
     // 4. Sort by cosine similarity
     scored.sort((a, b) => b.score - a.score);
 
-    // 5. Fallback/Mix with Keyword Search (optional, for now return top vector matches)
-    // If scores are too low (< 0.2), maybe fall back to FTS?
-    // For now, just return top K vector matches
+    // 5. Return top K
     return scored.slice(0, topK);
   }
 }
