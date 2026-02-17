@@ -40,8 +40,15 @@ export class KnowledgeWatcher {
   private handleFileChange(filename: string): void {
     const fullPath = resolve(this.workspacePath, filename);
 
-    // Ignore common dist/node_modules if they accidentally trigger (fs.watch can be noisy)
-    if (filename.includes('node_modules') || filename.includes('dist')) return;
+    // Ignore common output/dependency directories to prevent infinite loops (e.g. graph updates in /data)
+    if (
+      filename.includes('node_modules') ||
+      filename.includes('dist') ||
+      filename.includes('data') ||
+      filename.startsWith('.')
+    ) {
+      return;
+    }
 
     if (this.debounceTimers.has(filename)) {
       clearTimeout(this.debounceTimers.get(filename)!);

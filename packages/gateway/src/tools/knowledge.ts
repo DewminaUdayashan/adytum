@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { ToolDefinition } from '@adytum/shared';
 import { GraphTraversalService } from '../domain/knowledge/graph-traversal.js';
 import { GraphIndexer } from '../domain/knowledge/graph-indexer.js';
+import { MemoryStore } from '../infrastructure/repositories/memory-store.js';
 
 const KnowledgeWalkSchema = z.object({
   startNodeId: z.string().optional().describe('The ID of the node to start traversal from.'),
@@ -19,6 +20,7 @@ const KnowledgeWalkSchema = z.object({
 export function createKnowledgeTools(
   traversalService: GraphTraversalService,
   indexer: GraphIndexer,
+  memoryStore: MemoryStore,
 ): ToolDefinition[] {
   return [
     {
@@ -33,14 +35,43 @@ export function createKnowledgeTools(
         let startId = startNodeId;
 
         if (!startId && query) {
-          const nodes = traversalService.findNodesByQuery(query, wsId, 1);
-          if (nodes.length === 0) {
+          const semanticResults = await memoryStore.searchHybrid(query, 3, {
+            category: 'doc_chunk',
+          });
+
+          // Filter out low scores (anything below 0.3 is likely noise or orthogonal vectors)
+          const validSemantic = semanticResults.filter((r) => (r as any).score > 0.3);
+
+          if (validSemantic.length > 0) {
+            // Try to map the best result to a graph node
+            for (const res of validSemantic) {
+              const path = (res.metadata as any)?.path;
+              if (path) {
+                const node = traversalService.findNodeByPath(path, wsId);
+                if (node) {
+                  startId = node.id;
+                  break;
+                }
+              }
+            }
+          }
+
+          // 2. Fallback to simple label search if semantic search didn't yield a high-confidence match
+          if (!startId) {
+            const nodes = traversalService.findNodesByQuery(query, wsId, 5);
+            // Filter out root/generic nodes unless they are an exact match
+            const bestMatch = nodes.find((n) => n.id !== '.' && n.id !== 'root');
+            if (bestMatch) {
+              startId = bestMatch.id;
+            }
+          }
+
+          if (!startId) {
             return {
-              result: `Could not find any nodes matching query '${query}'.`,
+              result: `Could not find any nodes matching query '${query}' via semantic or label search.`,
               isError: false,
             };
           }
-          startId = nodes[0].id;
         }
 
         if (!startId) {

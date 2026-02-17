@@ -126,4 +126,17 @@ export class GraphTraversalService {
       )
       .slice(0, limit);
   }
+  /**
+   * Finds a node by its file path (partial or full match).
+   */
+  findNodeByPath(path: string, workspaceId: string): GraphNode | null {
+    const graph = this.graphStore.load(workspaceId);
+    // Try exact match first
+    let node = graph.nodes.find((n) => n.path === path);
+    if (node) return node;
+
+    // Try finding by suffix (e.g. "packages/gateway/src/index.ts" matching "src/index.ts")
+    node = graph.nodes.find((n) => n.path?.endsWith(path));
+    return node || null;
+  }
 }

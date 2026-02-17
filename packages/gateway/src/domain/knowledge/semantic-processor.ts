@@ -53,42 +53,43 @@ export class SemanticProcessor {
       const content = readFileSync(node.path, 'utf-8');
       if (content.length < 50) return node; // Skip tiny files
 
+      // NOTE: We are skipping the semantic analysis for now.
       // 1. Generate Summary & Concepts (only if not skipped)
-      if (!options.skipLLM) {
-        const prompt = `
-Analyze the following file content and provide:
-1. A concise 1-2 sentence summary of its purpose.
-2. A list of 3-5 key technical concepts or entities defined in it.
+      //       if (!options.skipLLM) {
+      //         const prompt = `
+      // Analyze the following file content and provide:
+      // 1. A concise 1-2 sentence summary of its purpose.
+      // 2. A list of 3-5 key technical concepts or entities defined in it.
 
-File: ${node.path}
-Content:
-${content.slice(0, 4000)} // Truncate to avoid context limit
+      // File: ${node.path}
+      // Content:
+      // ${content.slice(0, 4000)} // Truncate to avoid context limit
 
-Format:
-Summary: [text]
-Concepts: [comma separated list]
-`;
+      // Format:
+      // Summary: [text]
+      // Concepts: [comma separated list]
+      // `;
 
-        const { message } = await this.modelRouter.chat('fast', [
-          { role: 'system', content: 'You are a technical documentation assistant.' },
-          { role: 'user', content: prompt },
-        ]);
+      //         const { message } = await this.modelRouter.chat('fast', [
+      //           { role: 'system', content: 'You are a technical documentation assistant.' },
+      //           { role: 'user', content: prompt },
+      //         ]);
 
-        if (message.content) {
-          const summaryMatch = message.content.match(/Summary:\s*(.*)/i);
-          const conceptsMatch = message.content.match(/Concepts:\s*(.*)/i);
+      //         if (message.content) {
+      //           const summaryMatch = message.content.match(/Summary:\s*(.*)/i);
+      //           const conceptsMatch = message.content.match(/Concepts:\s*(.*)/i);
 
-          if (summaryMatch) {
-            node.description = summaryMatch[1].trim();
-          }
-          if (conceptsMatch) {
-            node.metadata = {
-              ...node.metadata,
-              concepts: conceptsMatch[1].split(',').map((c) => c.trim()),
-            };
-          }
-        }
-      }
+      //           if (summaryMatch) {
+      //             node.description = summaryMatch[1].trim();
+      //           }
+      //           if (conceptsMatch) {
+      //             node.metadata = {
+      //               ...node.metadata,
+      //               concepts: conceptsMatch[1].split(',').map((c) => c.trim()),
+      //             };
+      //           }
+      //         }
+      //       }
 
       // 2. Vector Indexing (Chunking)
       const concepts = Array.isArray(node.metadata?.concepts)

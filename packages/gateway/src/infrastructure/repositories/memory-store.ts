@@ -139,32 +139,43 @@ export class MemoryStore {
   ): Promise<MemoryRecord[]> {
     // 1. Get query embedding
     const queryVector = await this.embeddingService.embed(query);
+    const category = filter?.category || 'doc_chunk';
 
-    // 2. Fetch candidates
-    let candidates: MemoryRow[];
-    if (filter?.category) {
-      // Fetch more candidates for re-ranking since we are filtering
-      candidates = this.db.getMemoriesFiltered([filter.category], 500);
-    } else {
-      candidates = this.db.listMemories(200);
-    }
+    // 2. Fetch candidates: Combine Keyword results (BM25) and Recent results
+    // This ensures we get both semantically similar AND keyword-matching candidates
+    const keywordMatches = this.db.searchMemories(query, 100);
+    const recentMatches = this.db.getMemoriesFiltered([category], 1000);
+
+    const candidateMap = new Map<string, MemoryRow>();
+    [...keywordMatches, ...recentMatches].forEach((m) => {
+      if (m.category === category) candidateMap.set(m.id, m);
+    });
+    const candidates = Array.from(candidateMap.values());
+
+    if (candidates.length === 0) return [];
 
     // 3. Score candidates
     const scored = candidates.map((mem) => {
       let score = 0;
       if (mem.embedding) {
-        // Reconstruct Float32Array from Buffer
-        const memVector = new Float32Array(
-          mem.embedding.buffer,
-          mem.embedding.byteOffset,
-          mem.embedding.byteLength / 4,
-        );
-        score = this.embeddingService.cosineSimilarity(queryVector, memVector);
+        try {
+          // Buffer to Float32Array
+          const memVector = new Float32Array(
+            mem.embedding.buffer,
+            mem.embedding.byteOffset,
+            mem.embedding.byteLength / 4,
+          );
+          score = this.embeddingService.cosineSimilarity(queryVector, memVector);
+        } catch (err) {
+          // Unaligned buffer fallback
+          const memVector = new Float32Array(new Uint8Array(mem.embedding).buffer);
+          score = this.embeddingService.cosineSimilarity(queryVector, memVector);
+        }
       }
       return { ...mem, score };
     });
 
-    // 4. Sort by cosine similarity
+    // 4. Sort by score
     scored.sort((a, b) => b.score - a.score);
 
     // 5. Return top K

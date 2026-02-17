@@ -51,6 +51,8 @@ export class GraphIndexer {
     'Release',
     'derivedData',
     '.adytum_extracted',
+    'data',
+    '.gemini',
   ];
 
   constructor(

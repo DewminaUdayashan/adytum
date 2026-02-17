@@ -168,7 +168,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
   const graphIndexer = new GraphIndexer(config.workspacePath, graphStore, semanticProcessor);
   const graphContext = new GraphContext(graphStore);
 
-  for (const kTool of createKnowledgeTools(traversalService, graphIndexer)) {
+  for (const kTool of createKnowledgeTools(traversalService, graphIndexer, memoryStore)) {
     toolRegistry.register(kTool);
   }
 
