@@ -3,6 +3,7 @@
  * @description Defines module behavior for the Adytum workspace.
  */
 
+import 'reflect-metadata';
 import { v4 as uuid } from 'uuid';
 import chalk from 'chalk';
 import { createInterface } from 'node:readline';
@@ -32,6 +33,7 @@ import { tokenTracker } from './domain/logic/token-tracker.js';
 import { autoProvisionStorage } from './storage/provision.js';
 import { MemoryStore } from './infrastructure/repositories/memory-store.js';
 import { MemoryDB } from './infrastructure/repositories/memory-db.js';
+import { EmbeddingService } from './infrastructure/llm/embedding-service.js';
 import { Dreamer } from './application/services/dreamer.js';
 import { InnerMonologue } from './application/services/inner-monologue.js';
 import { HeartbeatManager } from './application/services/heartbeat-manager.js';
@@ -44,6 +46,9 @@ import { ApprovalService } from './domain/logic/approval-service.js';
 import { GraphStore } from './domain/knowledge/graph-store.js';
 import { GraphIndexer } from './domain/knowledge/graph-indexer.js';
 import { GraphContext } from './domain/knowledge/graph-context.js';
+import { GraphTraversalService } from './domain/knowledge/graph-traversal.js';
+import { KnowledgeWatcher } from './domain/knowledge/knowledge-watcher.js';
+import { createKnowledgeTools } from './tools/knowledge.js';
 import { AgentRegistry } from './domain/agents/agent-registry.js';
 import { LogbookService } from './application/services/logbook-service.js';
 import { AgentLogStore } from './domain/agents/agent-log-store.js';
@@ -51,37 +56,35 @@ import { AgentsController } from './api/controllers/agents.controller.js';
 import { SubAgentSpawner } from './domain/logic/sub-agent.js';
 import { createSpawnAgentTool } from './tools/spawn-agent.js';
 import { RuntimeRegistry } from './domain/agents/runtime-registry.js';
+import { TaskPlanner } from './domain/logic/task-planner.js';
+import { ParallelExecutor } from './domain/logic/parallel-executor.js';
+import { createPlannerTools } from './tools/planner.js';
+import { ToolErrorHandler } from './domain/logic/tool-error-handler.js';
+import { EventBusService } from './infrastructure/events/event-bus.js';
+import { SocketIOService } from './infrastructure/events/socket-io-service.js';
 
-// ─── Direct Execution Detection ─────────────────────────────
-// If this file is run directly (e.g. `node dist/index.js start`),
-// delegate to the CLI entry point which uses Commander.
-const __filename = fileURLToPath(import.meta.url);
-const entryFile = process.argv[1] ? resolve(process.argv[1]) : '';
+const defaultProjectRoot = resolve(fileURLToPath(import.meta.url), '../../..');
 
-if (entryFile === __filename) {
-  // Dynamically import the CLI which parses process.argv via Commander
-  import('./cli/index.js').catch((err) => {
-    // We can't import logger here easily since it might not be built/available if things are broken,
-    // but assuming it is:
-    import('./logger.js')
-      .then(({ logger }) => {
-        logger.fatal(err, 'Fatal error starting gateway');
-      })
-      .catch(() => {
-        console.error(chalk.red('\n  ❌ Fatal error:'), err.message || err);
-      });
-    process.exit(1);
-  });
-}
-
-/** Start the full Adytum gateway with terminal CLI. */
-export async function startGateway(projectRoot: string): Promise<void> {
+export const startGateway = async (rootPath?: string) => {
+  const projectRoot = rootPath || defaultProjectRoot;
   const config = loadConfig(projectRoot);
 
   // Initialize DI Container
   setupContainer();
 
+// ... (imports)
+
+  // Initialize DI Container
+  setupContainer();
+
   console.log(chalk.dim(`\n  Starting ${config.agentName}...\n`));
+
+  // ── Event Bus (Phase 2.1) ─────────────────────────────────
+  const eventBus = new EventBusService();
+  container.register(EventBusService, { useValue: eventBus });
+
+  const socketIOService = new SocketIOService(eventBus);
+  container.register(SocketIOService, { useValue: socketIOService });
 
   // ── Storage Auto-Provisioning ─────────────────────────────
   const dbResult = await autoProvisionStorage(config);
@@ -89,7 +92,12 @@ export async function startGateway(projectRoot: string): Promise<void> {
 
   const secretsStore = new SecretsStore(config.dataPath);
   const memoryDb = new MemoryDB(config.dataPath);
-  const memoryStore = new MemoryStore(memoryDb);
+
+  // Vector Embeddings Support
+  const embeddingService = container.resolve(EmbeddingService);
+  
+  const memoryStore = new MemoryStore(memoryDb, embeddingService);
+  memoryStore.setEventBus(eventBus);
   const graphStore = new GraphStore(config.dataPath);
 
   // ── Security Layer ────────────────────────────────────────
@@ -131,6 +139,10 @@ export async function startGateway(projectRoot: string): Promise<void> {
     toolRegistry.register(pTool);
   }
 
+  // ─── Knowledge Graph Tools (Phase 1.2) ─────────────────────
+  const traversalService = new GraphTraversalService(graphStore);
+  container.register(GraphTraversalService, { useValue: traversalService });
+
   // ─── Agent Runtime ─────────────────────────────────────────
   const modelCatalog = container.resolve(ModelCatalog);
 
@@ -142,6 +154,34 @@ export async function startGateway(projectRoot: string): Promise<void> {
     modelCatalog,
     routing: config.routing,
   });
+
+  const semanticProcessor = new SemanticProcessor(modelRouter, memoryStore);
+  const graphIndexer = new GraphIndexer(config.workspacePath, graphStore, semanticProcessor);
+  graphIndexer.setEventBus(eventBus);
+  const graphContext = new GraphContext(graphStore);
+
+  for (const kTool of createKnowledgeTools(traversalService, graphIndexer, memoryStore)) {
+    toolRegistry.register(kTool);
+  }
+
+  // ─── Error Recovery (Phase 2.2) ────────────────────────────
+  const toolErrorHandler = new ToolErrorHandler();
+  container.register(ToolErrorHandler, { useValue: toolErrorHandler });
+
+  // ─── Task Planner (Phase 2.1) ──────────────────────────────
+  const taskPlanner = new TaskPlanner(modelRouter);
+  const parallelExecutor = new ParallelExecutor(toolRegistry, toolErrorHandler);
+
+  for (const tool of createPlannerTools(taskPlanner, parallelExecutor)) {
+    toolRegistry.register(tool);
+  }
+
+  // ─── Semantic Search (Phase 2.3) ───────────────────────────
+
+  const { createSemanticTools } = await import('./tools/semantic-search.js');
+  for (const tool of createSemanticTools(memoryStore)) {
+    toolRegistry.register(tool);
+  }
 
   const runtimeRegistry = new RuntimeRegistry();
   container.register(RuntimeRegistry, { useValue: runtimeRegistry });
@@ -158,9 +198,8 @@ export async function startGateway(projectRoot: string): Promise<void> {
   skillLoader.setSecrets(secretsStore.getAll());
   await skillLoader.init(toolRegistry);
 
-  const semanticProcessor = new SemanticProcessor(modelRouter);
-  const graphIndexer = new GraphIndexer(config.workspacePath, graphStore, semanticProcessor);
-  const graphContext = new GraphContext(graphStore);
+  const knowledgeWatcher = new KnowledgeWatcher(graphIndexer, config.workspacePath);
+  knowledgeWatcher.start();
 
   const agentRuntimeConfig = {
     modelRouter,
@@ -179,6 +218,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
     graphStore,
     runtimeRegistry,
     tier: 1 as const,
+    toolErrorHandler,
   };
 
   const agent = new AgentRuntime(agentRuntimeConfig);
@@ -352,6 +392,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
   container.register(GraphStore, { useValue: graphStore });
   container.register(GraphIndexer, { useValue: graphIndexer });
   container.register(GraphContext, { useValue: graphContext });
+  container.register(KnowledgeWatcher, { useValue: knowledgeWatcher });
 
   // ── Hierarchical Multi-Agent (Birth Protocol) ─────────────────
   const agentRegistry = new AgentRegistry(config.dataPath);
@@ -453,7 +494,10 @@ export async function startGateway(projectRoot: string): Promise<void> {
     },
     modelCatalog,
     modelRouter,
+    socketIOService,
   });
+
+  (global as any).adytumServer = server;
 
   // Route WebSocket messages to agent
   server.on('frame', async ({ sessionId, frame }) => {
@@ -504,6 +548,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
     console.log(chalk.dim(`\n  ${config.agentName} is resting. Goodbye.\n`));
     rl.close();
     permissionManager.stopWatching();
+    knowledgeWatcher.stop();
     await skillLoader.stop();
     await server.stop();
     process.exit(0);
@@ -703,5 +748,15 @@ export async function startGateway(projectRoot: string): Promise<void> {
     await skillLoader.stop();
     await server.stop();
     process.exit(0);
+  });
+}
+
+
+
+// Only auto-start if run directly (node index.js)
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  startGateway().catch((err) => {
+    console.error(err);
+    process.exit(1);
   });
 }

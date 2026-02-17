@@ -3,7 +3,11 @@
  * @description Implements infrastructure adapters and external integrations.
  */
 
+import { inject, singleton } from 'tsyringe';
+import { EmbeddingService } from '../llm/embedding-service.js';
 import type { MemoryDB, MemoryRow } from './memory-db.js';
+import { EventBusService } from '../events/event-bus.js';
+import { MemoryEvents } from '@adytum/shared';
 
 export type MemoryCategory =
   | 'episodic_raw'
@@ -12,9 +16,10 @@ export type MemoryCategory =
   | 'monologue'
   | 'curiosity'
   | 'general'
-  | 'user_fact';
+  | 'user_fact'
+  | 'doc_chunk';
 
-export interface MemoryRecord extends MemoryRow {}
+export type MemoryRecord = MemoryRow;
 
 /**
  * Executes redact secrets.
@@ -24,58 +29,57 @@ export interface MemoryRecord extends MemoryRow {}
 export function redactSecrets(input: string): string {
   if (!input) return input;
 
-  const patterns: Array<{
-    regex: RegExp;
-    replace: string | ((match: string, key?: string) => string);
-  }> = [
-    // Discord token format (current and legacy lengths)
-    {
-      regex: /\b[A-Za-z0-9_\-]{20,40}\.[A-Za-z0-9_\-]{4,10}\.[A-Za-z0-9_\-]{20,120}\b/g,
-      replace: '[REDACTED_DISCORD_TOKEN]',
-    },
-    // Clean up previously partial-redacted token artifacts
-    {
-      regex: /\b[A-Za-z0-9_\-]*\[REDACTED_DISCORD_TOKEN\][A-Za-z0-9_\-]*\b/g,
-      replace: '[REDACTED_DISCORD_TOKEN]',
-    },
-    // OpenAI-style keys
-    { regex: /\bsk-[A-Za-z0-9]{20,}\b/g, replace: '[REDACTED_API_KEY]' },
-    // Google API keys
-    { regex: /\bAIza[0-9A-Za-z\-_]{35}\b/g, replace: '[REDACTED_API_KEY]' },
-    // Common env assignments
-    {
-      regex:
-        /\b(ADYTUM_[A-Z0-9_]*_TOKEN|DISCORD_BOT_TOKEN|OPENAI_API_KEY|ANTHROPIC_API_KEY|GEMINI_API_KEY|COHERE_API_KEY)\b\s*[:=]\s*[`'"]?([^\s`'"]+)[`'"]?/gi,
-      replace: (_match: string, key?: string) => `${key}=[REDACTED]`,
-    },
-    // Discord IDs in env assignment style
-    {
-      regex:
-        /\b(ADYTUM_DISCORD_DEFAULT_CHANNEL_ID|ADYTUM_DISCORD_GUILD_ID|ADYTUM_DISCORD_USER_ID)\b\s*[:=]\s*[`'"]?(\d{17,20})[`'"]?/gi,
-      replace: (_match: string, key?: string) => `${key}=[REDACTED_DISCORD_ID]`,
-    },
-    // Discord channel URLs with IDs
-    {
-      regex: /discord\.com\/channels\/\d{17,20}\/\d{17,20}(?:\/\d{17,20})?/gi,
-      replace:
-        'discord.com/channels/[REDACTED_DISCORD_ID]/[REDACTED_DISCORD_ID]/[REDACTED_DISCORD_ID]',
-    },
-    // Human-written Discord ID lines
-    {
-      regex: /(\bDiscord(?:\s+(?:User|Channel|Guild))?\s+ID\b[^0-9]{0,20})\d{17,20}/gi,
-      replace: '$1[REDACTED_DISCORD_ID]',
-    },
-  ];
-
-  return patterns.reduce((text, { regex, replace }) => text.replace(regex, replace as any), input);
+  return input
+    .replace(/((?:sk|pk)_(?:live|test)_[a-zA-Z0-9]+)/g, '[REDACTED_KEY]')
+    .replace(/(?:ghp|gho)_[a-zA-Z0-9]{36}/g, '[REDACTED_GITHUB_TOKEN]')
+    .replace(/xox[baprs]-[a-zA-Z0-9-]+/g, '[REDACTED_SLACK_TOKEN]')
+    .replace(
+      /\b[A-Za-z0-9_-]{20,40}\.[A-Za-z0-9_-]{4,10}\.[A-Za-z0-9_-]{20,120}\b/g,
+      '[REDACTED_DISCORD_TOKEN]',
+    )
+    .replace(
+      /\b[A-Za-z0-9_-]*\[REDACTED_DISCORD_TOKEN\][A-Za-z0-9_-]*\b/g,
+      '[REDACTED_DISCORD_TOKEN]',
+    )
+    .replace(/\bsk-[A-Za-z0-9]{20,}\b/g, '[REDACTED_API_KEY]')
+    .replace(/\bAIza[0-9A-Za-z\-_]{35}\b/g, '[REDACTED_API_KEY]')
+    .replace(
+      /\b(ADYTUM_[A-Z0-9_]*_TOKEN|DISCORD_BOT_TOKEN|OPENAI_API_KEY|ANTHROPIC_API_KEY|GEMINI_API_KEY|COHERE_API_KEY)\b\s*[:=]\s*[`'"]?([^\s`'"]+)[`'"]?/gi,
+      (_match: string, key?: string) => `${key}=[REDACTED]`,
+    )
+    .replace(
+      /\b(ADYTUM_DISCORD_DEFAULT_CHANNEL_ID|ADYTUM_DISCORD_GUILD_ID|ADYTUM_DISCORD_USER_ID)\b\s*[:=]\s*[`'"]?(\d{17,20})[`'"]?/gi,
+      (_match: string, key?: string) => `${key}=[REDACTED_DISCORD_ID]`,
+    )
+    .replace(
+      /discord\.com\/channels\/\d{17,20}\/\d{17,20}(?:\/\d{17,20})?/gi,
+      'discord.com/channels/[REDACTED_DISCORD_ID]/[REDACTED_DISCORD_ID]/[REDACTED_DISCORD_ID]',
+    )
+    .replace(
+      /(\bDiscord(?:\s+(?:User|Channel|Guild))?\s+ID\b[^0-9]{0,20})\d{17,20}/gi,
+      '$1[REDACTED_DISCORD_ID]',
+    );
 }
 
 /**
  * Encapsulates memory store behavior.
  */
+@singleton()
 export class MemoryStore {
-  constructor(private db: MemoryDB) {
+  private eventBus?: EventBusService;
+
+  constructor(
+    @inject('MemoryDB') private db: MemoryDB,
+    private embeddingService: EmbeddingService,
+  ) {
     this.db.redactSensitiveData(redactSecrets);
+  }
+
+  /**
+   * Sets the event bus instance.
+   */
+  setEventBus(eventBus: EventBusService) {
+    this.eventBus = eventBus;
   }
 
   /**
@@ -87,16 +91,39 @@ export class MemoryStore {
    * @param category - Category.
    * @returns The add result.
    */
-  add(
+  async add(
     content: string,
     source: MemoryRow['source'],
     tags?: string[],
     metadata?: Record<string, unknown>,
     category: MemoryCategory = 'general',
     workspaceId?: string,
-  ): MemoryRecord {
+  ): Promise<MemoryRecord> {
     const sanitized = redactSecrets(content);
-    return this.db.addMemory({ content: sanitized, source, category, tags, metadata, workspaceId });
+    let embedding: Buffer | undefined;
+
+    try {
+      const vector = await this.embeddingService.embed(sanitized);
+      embedding = Buffer.from(vector.buffer);
+    } catch (err) {
+      console.error('[MemoryStore] Failed to generate embedding:', err);
+    }
+
+    const memory = this.db.addMemory({
+      content: sanitized,
+      source,
+      category,
+      tags,
+      metadata,
+      workspaceId,
+      embedding, // Add embedding to DB
+    });
+
+    if (memory && this.eventBus) {
+        this.eventBus.publish(MemoryEvents.CREATED, memory, 'MemoryStore');
+    }
+
+    return memory;
   }
 
   /**
@@ -116,5 +143,59 @@ export class MemoryStore {
    */
   search(query: string, topK: number = 3): MemoryRecord[] {
     return this.db.searchMemories(query, topK);
+  }
+
+  /**
+   * Performs hybrid search (Semantic + Keyword).
+   * Currently implements a simple re-ranking or combination strategy.
+   */
+  async searchHybrid(
+    query: string,
+    topK: number = 5,
+    filter?: { category?: string },
+  ): Promise<MemoryRecord[]> {
+    // 1. Get query embedding
+    const queryVector = await this.embeddingService.embed(query);
+    const category = filter?.category || 'doc_chunk';
+
+    // 2. Fetch candidates: Combine Keyword results (BM25) and Recent results
+    // This ensures we get both semantically similar AND keyword-matching candidates
+    const keywordMatches = this.db.searchMemories(query, 100);
+    const recentMatches = this.db.getMemoriesFiltered([category], 1000);
+
+    const candidateMap = new Map<string, MemoryRow>();
+    [...keywordMatches, ...recentMatches].forEach((m) => {
+      if (m.category === category) candidateMap.set(m.id, m);
+    });
+    const candidates = Array.from(candidateMap.values());
+
+    if (candidates.length === 0) return [];
+
+    // 3. Score candidates
+    const scored = candidates.map((mem) => {
+      let score = 0;
+      if (mem.embedding) {
+        try {
+          // Buffer to Float32Array
+          const memVector = new Float32Array(
+            mem.embedding.buffer,
+            mem.embedding.byteOffset,
+            mem.embedding.byteLength / 4,
+          );
+          score = this.embeddingService.cosineSimilarity(queryVector, memVector);
+        } catch (err) {
+          // Unaligned buffer fallback
+          const memVector = new Float32Array(new Uint8Array(mem.embedding).buffer);
+          score = this.embeddingService.cosineSimilarity(queryVector, memVector);
+        }
+      }
+      return { ...mem, score };
+    });
+
+    // 4. Sort by score
+    scored.sort((a, b) => b.score - a.score);
+
+    // 5. Return top K
+    return scored.slice(0, topK);
   }
 }

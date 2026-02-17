@@ -2,11 +2,12 @@
 
 /**
  * @file packages/dashboard/src/hooks/use-gateway-socket.ts
- * @description Provides reusable React hooks for dashboard behavior.
+ * @description Provides reusable React hooks for dashboard behavior using Socket.IO.
  */
 
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { getWebSocketUrl } from '@/lib/api';
+import { io, Socket } from 'socket.io-client';
+import { getSocketIOUrl } from '@/lib/api';
 
 export interface StreamEvent {
   type: string;
@@ -19,12 +20,12 @@ export interface StreamEvent {
 }
 
 export function useGatewaySocket() {
-  const socketRef = useRef<WebSocket | null>(null);
+  const socketRef = useRef<Socket | null>(null);
   const [connected, setConnected] = useState(false);
   const [events, setEvents] = useState<StreamEvent[]>([]);
   const sessionIdRef = useRef<string>(crypto.randomUUID());
-  const [wsSessionId, setWsSessionId] = useState<string>(sessionIdRef.current);
-  const reconnectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Helper to ensure we don't start multiple connections strictly in strict mode
+  const connectingRef = useRef(false);
   const hasRestoredRef = useRef(false);
 
   // Restore events from sessionStorage
@@ -49,47 +50,74 @@ export function useGatewaySocket() {
     window.sessionStorage.setItem('adytum.console.events', JSON.stringify(events));
   }, [events]);
 
-  const connect = useCallback(() => {
-    if (socketRef.current?.readyState === WebSocket.OPEN) return;
-
-    const ws = new WebSocket(getWebSocketUrl());
-    socketRef.current = ws;
-
-    ws.onopen = () => {
-      setConnected(true);
-      // Send connect frame
-      ws.send(
-        JSON.stringify({
-          type: 'connect',
-          channel: 'dashboard',
-          sessionId: sessionIdRef.current,
-        }),
-      );
-    };
-
-    ws.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data) as StreamEvent;
-        if (data.type === 'connect' && data.sessionId) {
-          sessionIdRef.current = data.sessionId;
-          setWsSessionId(data.sessionId);
-        }
-        setEvents((prev) => [...prev.slice(-500), data]); // Keep last 500
-      } catch {
-        // Ignore malformed messages
-      }
-    };
-
-    ws.onclose = () => {
-      setConnected(false);
-      // Auto-reconnect after 3s
-      reconnectTimer.current = setTimeout(connect, 3000);
-    };
-
-    ws.onerror = () => {
-      ws.close();
-    };
+  const handleIncomingData = useCallback((data: any) => {
+    // If it's a connect ack
+    if (data && data.type === 'connect' && data.sessionId) {
+        sessionIdRef.current = data.sessionId;
+    }
+    
+    // Normalize data to StreamEvent
+    const event = data as StreamEvent;
+    
+    setEvents((prev) => {
+        // Deduplicate if needed? For now just append.
+        return [...prev.slice(-500), event];
+    });
   }, []);
+
+  const connect = useCallback(() => {
+    if (socketRef.current?.connected || connectingRef.current) return;
+    connectingRef.current = true;
+
+    const socketUrl = getSocketIOUrl();
+    console.log('Connecting to Socket.IO:', socketUrl);
+
+    const socket = io(socketUrl, {
+      path: '/socket.io',
+      transports: ['websocket', 'polling'],
+      forceNew: true,
+      reconnectionDelay: 1000,
+      reconnectionDelayMax: 5000,
+    });
+    
+    socketRef.current = socket;
+
+    socket.on('connect', () => {
+      console.log('Socket.IO Connected:', socket.id);
+      setConnected(true);
+      connectingRef.current = false;
+      
+      // Send handshake/identify message
+      socket.emit('message', {
+        type: 'connect',
+        channel: 'dashboard',
+        sessionId: sessionIdRef.current,
+      });
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.log('Socket.IO Disconnected:', reason);
+      setConnected(false);
+      connectingRef.current = false;
+    });
+
+    socket.on('connect_error', (err) => {
+        console.error('Socket.IO Connection Error:', err);
+        connectingRef.current = false;
+    });
+
+    // Handle standard messages (chat, stream frames)
+    socket.on('message', (data: any) => {
+      handleIncomingData(data);
+    });
+
+    // Handle generic Event Bus events
+    socket.on('event', (data: any) => {
+       // Tag them so UI can distinguish if needed
+       handleIncomingData({ ...data, source: 'eventLoop' });
+    });
+
+  }, [handleIncomingData]);
 
   const sendMessage = useCallback(
     (content: string, sessionId: string, options?: { 
@@ -98,23 +126,21 @@ export function useGatewaySocket() {
       workspaceId?: string;
       attachments?: Array<{ type: 'image' | 'file' | 'audio' | 'video'; data: string; name?: string }>;
     }) => {
-      if (socketRef.current?.readyState === WebSocket.OPEN) {
-        socketRef.current.send(
-          JSON.stringify({
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('message', {
             type: 'message',
             sessionId,
             content,
             ...options,
-          }),
-        );
+        });
       }
     },
     [],
   );
 
   const sendFrame = useCallback((frame: Record<string, unknown>) => {
-    if (socketRef.current?.readyState === WebSocket.OPEN) {
-      socketRef.current.send(JSON.stringify(frame));
+    if (socketRef.current?.connected) {
+      socketRef.current.emit('message', frame);
     }
   }, []);
 
@@ -123,8 +149,11 @@ export function useGatewaySocket() {
   useEffect(() => {
     connect();
     return () => {
-      if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-      socketRef.current?.close();
+      if (socketRef.current) {
+          socketRef.current.disconnect();
+          socketRef.current = null;
+      }
+      connectingRef.current = false;
     };
   }, [connect]);
 
@@ -134,6 +163,6 @@ export function useGatewaySocket() {
     sendMessage,
     sendFrame,
     clearEvents,
-    sessionId: wsSessionId || sessionIdRef.current,
+    sessionId: sessionIdRef.current,
   };
 }

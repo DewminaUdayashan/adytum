@@ -15,35 +15,43 @@ import { ToolRegistry } from '../../tools/registry.js';
 import { tokenTracker } from './token-tracker.js';
 import { auditLogger } from '../../security/audit-logger.js';
 import { EventEmitter } from 'node:events';
-import type { MemoryStore } from '../../infrastructure/repositories/memory-store.js';
-import type { MemoryDB } from '../../infrastructure/repositories/memory-db.js';
-
+import { EventBusService } from '../../infrastructure/events/event-bus.js';
+import { AgentEvents } from '@adytum/shared';
 import { GraphContext } from '../knowledge/graph-context.js';
+import { MemoryStore } from '../../infrastructure/repositories/memory-store.js';
+import { MemoryDB } from '../../infrastructure/repositories/memory-db.js';
 import { GraphStore } from '../knowledge/graph-store.js';
 import { RuntimeRegistry } from '../agents/runtime-registry.js';
+import { ToolErrorHandler } from './tool-error-handler.js';
+
+// ...
 
 export interface AgentRuntimeConfig {
   modelRouter: ModelRouter;
   toolRegistry: ToolRegistry;
   soulEngine: SoulEngine;
   skillLoader: SkillLoader;
-  graphContext?: GraphContext;
-  contextSoftLimit: number;
+  graphContext: GraphContext;
+  contextSoftLimit?: number;
   maxIterations: number;
   defaultModelRole: ModelRole;
   agentName: string;
-  workspacePath?: string;
+  workspacePath: string;
   memoryStore?: MemoryStore;
   memoryTopK?: number;
   memoryDb?: MemoryDB;
   graphStore?: GraphStore;
+  runtimeRegistry: RuntimeRegistry;
+  tier?: number;
+  toolErrorHandler?: ToolErrorHandler;
+  eventBus?: EventBusService;
   onApprovalRequired?: (
     description: string,
-    context: { sessionId: string; workspaceId?: string },
+    context?: { sessionId?: string; workspaceId?: string },
   ) => Promise<boolean>;
-  runtimeRegistry: RuntimeRegistry;
-  tier?: 1 | 2 | 3;
 }
+
+
 
 export interface AgentTurnResult {
   response: string;
@@ -216,7 +224,7 @@ ${knowledge}`,
     // Auto-extract simple user memory facts (e.g., nickname) and store persistently
     const extracted = this.extractUserMemory(userMessage);
     if (extracted && this.config.memoryStore) {
-      this.config.memoryStore.add(
+      await this.config.memoryStore.add(
         extracted,
         'user',
         ['auto'],
@@ -227,7 +235,7 @@ ${knowledge}`,
     }
 
     // Prepare memory context for this turn
-    const memoryContext = this.buildMemoryContext(userMessage);
+    const memoryContext = await this.buildMemoryContext(userMessage);
 
     const allToolCalls: ToolCall[] = [];
     let finalResponse = '';
@@ -294,6 +302,15 @@ ${knowledge}`,
         if (signal.aborted) throw new Error('Session aborted.');
         lastMessage = message;
 
+        // Publish Thought Event
+        if (message.content && this.config.eventBus) {
+             this.config.eventBus.publish(AgentEvents.THOUGHT, {
+                 sessionId,
+                 content: message.content,
+                 traceId
+             }, 'AgentRuntime');
+        }
+
         // Track tokens
         this.trackTokenUsage(usage, sessionId);
         auditLogger.logModelResponse(traceId, usage.model, usage);
@@ -336,6 +353,15 @@ ${knowledge}`,
 
             allToolCalls.push(toolCall);
 
+            if (this.config.eventBus) {
+                this.config.eventBus.publish(AgentEvents.TOOL_CALL, {
+                    sessionId,
+                    tool: toolCall.name,
+                    args: toolCall.arguments,
+                    traceId
+                }, 'AgentRuntime');
+            }
+
             // Emit tool call event for live console
             this.emit('stream', {
               traceId,
@@ -377,6 +403,41 @@ ${knowledge}`,
 
             // Execute the tool
             const result = await this.config.toolRegistry.execute(toolCall);
+
+            // Phase 2.2: Error Recovery
+            if (result.isError && this.config.toolErrorHandler) {
+              const analysis = this.config.toolErrorHandler.analyze(
+                result.result,
+                toolCall.name,
+                1,
+              );
+              // Append analysis to the result so the model sees it
+              if (typeof result.result === 'string') {
+                const recoveryMsg = this.config.toolErrorHandler.formatErrorForContext(
+                  { message: result.result },
+                  analysis,
+                );
+                result.result += recoveryMsg;
+
+                // Emit recovery event for dashboard
+                this.emit('stream', {
+                  traceId,
+                  sessionId,
+                  streamType: 'recovery',
+                  delta: `Self-Correction: ${analysis.strategy.replace('_', ' ')} suggested.`,
+                });
+              }
+            }
+
+            if (this.config.eventBus) {
+                this.config.eventBus.publish(AgentEvents.TOOL_RESULT, {
+                    sessionId,
+                    tool: toolCall.name,
+                    result: result.result,
+                    isError: result.isError,
+                    traceId
+                }, 'AgentRuntime');
+            }
 
             auditLogger.logToolResult(traceId, toolCall.name, result.result, result.isError);
             if (this.config.memoryDb) {
@@ -595,7 +656,7 @@ ${knowledge}`,
     if (message.content) {
       context.applyCompaction(message.content);
       if (this.config.memoryStore) {
-        this.config.memoryStore.add(
+        await this.config.memoryStore.add(
           message.content,
           'compaction',
           ['summary'],
@@ -614,10 +675,10 @@ ${knowledge}`,
    * @param query - Query.
    * @returns The build memory context result.
    */
-  private buildMemoryContext(query: string): string | null {
+  private async buildMemoryContext(query: string): Promise<string | null> {
     if (!this.config.memoryStore) return null;
     const topK = this.config.memoryTopK ?? 3;
-    const memories = this.config.memoryStore.search(query, topK);
+    const memories = await this.config.memoryStore.searchHybrid(query, topK);
     if (memories.length === 0) return null;
 
     const lines = memories.map((m) => `- ${m.content}`);
@@ -870,6 +931,12 @@ Do NOT use absolute paths unless explicitly asked.
 
 ### File System
 - **file_read**, **file_write**, **file_list**, **file_search**: Use these to manage project files.
+
+### Task Planner
+- **task_and_execute**: Use this for ANY multi-step request or complex goal.
+  - Instead of running multiple separate tool calls yourself, delegate to the planner.
+  - Example: "Research X, then implement Y, and finally test Z." -> Call task_and_execute(goal="Research X, implement Y, test Z").
+  - The planner will break it down and execute it, possibly in parallel.
 
 ## Skill Authoring Standards
 - Skills live in \`skills/<skill-id>/\` and must include: \`adytum.plugin.json\`, \`index.ts\`, and (recommended) \`SKILL.md\`. Use TypeScript, not Python, for new skills.

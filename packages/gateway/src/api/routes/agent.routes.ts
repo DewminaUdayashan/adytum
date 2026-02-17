@@ -14,8 +14,7 @@ import { AgentController } from '../controllers/agent.controller.js';
 export async function agentRoutes(app: FastifyInstance) {
   const controller = container.resolve(AgentController);
 
-  // WebSocket route
-  app.get('/ws', { websocket: true }, (connection, req) => controller.handleWebSocket(connection, req));
+
 
   // REST routes
   app.get('/api/memories', (req, reply) => controller.getMemories(req, reply));

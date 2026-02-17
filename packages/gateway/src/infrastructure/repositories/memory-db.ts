@@ -24,6 +24,7 @@ export type MemoryRow = {
   source: string;
   category: string;
   tags?: string[];
+  embedding?: Buffer; // Vector embedding (Float32Array as Buffer)
   metadata?: Record<string, unknown>;
   createdAt: number;
 };
@@ -118,6 +119,7 @@ export class MemoryDB {
         category TEXT NOT NULL,
         tags TEXT,
         metadata TEXT,
+        embedding BLOB,
         created_at INTEGER NOT NULL
       );
 
@@ -173,10 +175,19 @@ export class MemoryDB {
     // Migration for workspace isolation
     try {
       this.db.exec('ALTER TABLE messages ADD COLUMN workspace_id TEXT;');
-    } catch { /* already exists */ }
+    } catch {
+      /* already exists */
+    }
     try {
       this.db.exec('ALTER TABLE memories ADD COLUMN workspace_id TEXT;');
-    } catch { /* already exists */ }
+    } catch {
+      /* already exists */
+    }
+    try {
+      this.db.exec('ALTER TABLE memories ADD COLUMN embedding BLOB;');
+    } catch {
+      /* already exists */
+    }
 
     try {
       this.db.exec(`
@@ -206,8 +217,12 @@ export class MemoryDB {
    * @param limit - Limit.
    * @returns The resulting collection of values.
    */
-  getRecentMessages(limit: number = 40, filters?: { sessionId?: string; workspaceId?: string }): MessageRow[] {
-    let query = 'SELECT id, session_id as sessionId, workspace_id as workspaceId, role, content, created_at as createdAt FROM messages';
+  getRecentMessages(
+    limit: number = 40,
+    filters?: { sessionId?: string; workspaceId?: string },
+  ): MessageRow[] {
+    let query =
+      'SELECT id, session_id as sessionId, workspace_id as workspaceId, role, content, created_at as createdAt FROM messages';
     const clauses: string[] = [];
     const params: any[] = [];
 
@@ -243,7 +258,7 @@ export class MemoryDB {
     const id = crypto.randomUUID();
     const createdAt = Date.now();
     const stmt = this.db.prepare(
-      'INSERT INTO memories (id, workspace_id, content, source, category, tags, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+      'INSERT INTO memories (id, workspace_id, content, source, category, tags, metadata, embedding, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
     );
     stmt.run(
       id,
@@ -253,6 +268,7 @@ export class MemoryDB {
       record.category,
       record.tags ? JSON.stringify(record.tags) : null,
       record.metadata ? JSON.stringify(record.metadata) : null,
+      record.embedding || null,
       createdAt,
     );
 
@@ -274,7 +290,7 @@ export class MemoryDB {
    */
   listMemories(limit: number = 50): MemoryRow[] {
     const stmt = this.db.prepare(
-      'SELECT id, content, source, category, tags, metadata, created_at as createdAt FROM memories ORDER BY created_at DESC LIMIT ?',
+      'SELECT id, content, source, category, tags, metadata, embedding, created_at as createdAt FROM memories ORDER BY created_at DESC LIMIT ?',
     );
     const rows = stmt.all(limit) as Array<
       Omit<MemoryRow, 'tags' | 'metadata'> & { tags?: string; metadata?: string }
@@ -295,7 +311,7 @@ export class MemoryDB {
   searchMemories(query: string, topK: number = 3): MemoryRow[] {
     try {
       const stmt = this.db.prepare(
-        `SELECT m.id, m.content, m.source, m.category, m.tags, m.metadata, m.created_at as createdAt
+        `SELECT m.id, m.content, m.source, m.category, m.tags, m.metadata, m.embedding, m.created_at as createdAt
          FROM memories_fts f
          JOIN memories m ON m.id = f.memory_id
          WHERE memories_fts MATCH ?
@@ -312,7 +328,7 @@ export class MemoryDB {
       }));
     } catch {
       const stmt = this.db.prepare(
-        `SELECT id, content, source, category, tags, metadata, created_at as createdAt
+        `SELECT id, content, source, category, tags, metadata, embedding, created_at as createdAt
          FROM memories
          WHERE content LIKE ?
          ORDER BY created_at DESC
@@ -715,7 +731,7 @@ export class MemoryDB {
     }
     const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
     const stmt = this.db.prepare(
-      `SELECT id, content, source, category, tags, metadata, created_at as createdAt
+      `SELECT id, content, source, category, tags, metadata, embedding, created_at as createdAt
        FROM memories
        ${where}
        ORDER BY created_at DESC

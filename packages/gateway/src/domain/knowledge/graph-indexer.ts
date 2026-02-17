@@ -11,53 +11,26 @@ import { GraphStore } from './graph-store.js';
 import { logger } from '../../logger.js';
 import { SemanticProcessor } from './semantic-processor.js';
 
+import { EventBusService } from '../../infrastructure/events/event-bus.js';
+import { GraphEvents } from '@adytum/shared';
+
+// ...
+
 export class GraphIndexer {
-  private supportedExtensions = [
-    '.ts',
-    '.js',
-    '.tsx',
-    '.jsx',
-    '.py',
-    '.go',
-    '.md',
-    '.yaml',
-    '.yml',
-    '.dart',
-    '.pdf',
-    '.zip',
-    '.png',
-    '.jpg',
-    '.jpeg',
-    '.txt',
-    '.json',
-  ];
-  private ignoredDirs = [
-    'node_modules',
-    '.git',
-    'dist',
-    'build',
-    '.dart_tool',
-    'ios',
-    'android',
-    'macos',
-    'windows',
-    'linux',
-    '.fvm',
-    '.symlinks',
-    '.cxx',
-    'Pods',
-    'Carthage',
-    'Debug',
-    'Release',
-    'derivedData',
-    '.adytum_extracted',
-  ];
+  // ... (properties)
+  private eventBus?: EventBusService;
+  private ignoredDirs = ['node_modules', '.git', 'dist', 'coverage', '.next', 'out', 'build'];
+  private supportedExtensions = ['.ts', '.tsx', '.js', '.jsx', '.md', '.json', '.txt'];
 
   constructor(
     private workspacePath: string,
     private store: GraphStore,
     private semanticProcessor?: SemanticProcessor,
   ) {}
+
+  setEventBus(eventBus: EventBusService) {
+    this.eventBus = eventBus;
+  }
 
   /**
    * Performs an incremental update of the knowledge graph.
@@ -66,9 +39,17 @@ export class GraphIndexer {
   async update(
     customPath?: string,
     workspaceId?: string,
-    options: { mode?: 'fast' | 'deep' } = { mode: 'fast' },
+    options: { mode: 'fast' | 'deep'; skipLLM?: boolean } = { mode: 'fast', skipLLM: true },
   ): Promise<KnowledgeGraph> {
     const path = customPath || this.workspacePath;
+
+    // Safety Net: Force skipLLM to true if undefined, to prevent accidental costs.
+    if (options.skipLLM === undefined) options.skipLLM = true;
+    
+    if (this.eventBus) {
+        this.eventBus.publish(GraphEvents.INDEXING_STARTED, { path, mode: options.mode }, 'GraphIndexer');
+    }
+
     const graph = this.store.load(workspaceId);
     const existingNodeMap = new Map<string, GraphNode>(graph.nodes.map((n) => [n.path || n.id, n]));
 
@@ -78,12 +59,13 @@ export class GraphIndexer {
 
     // 0. Ensure root node exists
     if (!existingNodeMap.has('.')) {
-      updatedNodes.push({
+      const rootNode = {
         id: '.',
-        type: 'directory',
+        type: 'directory' as const,
         label: basename(path) || 'Project Root',
         path: '.',
-      });
+      };
+      updatedNodes.push(rootNode);
     }
 
     const updatedEdges: GraphEdge[] = []; // Re-extract all edges for simplicity/consistency
@@ -101,6 +83,10 @@ export class GraphIndexer {
         if (!existingNode || existingNode.metadata?.hash !== hash) {
           logger.debug(`Processing changed file: ${relPath}`);
           currentNode = this.createFileNode(relPath, filePath, hash);
+          
+          if (this.eventBus) {
+             this.eventBus.publish(GraphEvents.NODE_UPDATED, currentNode, 'GraphIndexer');
+          }
         } else {
           currentNode = existingNode;
         }
@@ -121,7 +107,11 @@ export class GraphIndexer {
     for (const node of updatedNodes) {
       if (node.type === 'file' || node.type === 'doc') {
         const fullPath = join(path, node.path!);
-        this.extractCodeRelationships(fullPath, node, graph, path);
+        if (extname(fullPath) === '.md') {
+          this.extractMarkdownRelationships(fullPath, node, graph, path);
+        } else {
+          this.extractCodeRelationships(fullPath, node, graph, path);
+        }
       }
     }
 
@@ -129,16 +119,42 @@ export class GraphIndexer {
 
     // 4. Handle Deep Indexing (Semantic Analysis)
     if (options.mode === 'deep' && this.semanticProcessor) {
-      logger.info('Performing deep semantic analysis...');
-      const nodesToProcess = graph.nodes.filter((n) => n.type === 'file' || n.type === 'doc');
-      await this.semanticProcessor.process(nodesToProcess);
+      logger.info(`Performing deep semantic analysis (skipLLM: ${options.skipLLM === true})...`);
+
+      // Only process nodes that were updated or are missing semantic metadata
+      const nodesToProcess = graph.nodes.filter((n) => {
+        if (n.type !== 'file' && n.type !== 'doc') return false;
+
+        const existing = existingNodeMap.get(n.path || n.id);
+        const isChanged = !existing || existing.metadata?.hash !== n.metadata?.hash;
+        const reflectsNeeds = !n.description || !n.metadata?.lastProcessed;
+
+        return isChanged || reflectsNeeds;
+      });
+
+      if (nodesToProcess.length > 0) {
+        logger.info(`Processing ${nodesToProcess.length} pending/changed nodes...`);
+        await this.semanticProcessor.process(nodesToProcess, { skipLLM: options.skipLLM });
+      } else {
+        logger.info('All nodes are already up to date semantically.');
+      }
     }
 
     this.store.save(graph, workspaceId);
 
+    const duration = Date.now() - startTime;
     logger.info(
-      `Scan [${options.mode}] completed in ${Date.now() - startTime}ms. Total nodes: ${graph.nodes.length}, Edges: ${graph.edges.length}`,
+      `Scan [${options.mode}] completed in ${duration}ms. Total nodes: ${graph.nodes.length}, Edges: ${graph.edges.length}`,
     );
+
+    if (this.eventBus) {
+        this.eventBus.publish(GraphEvents.INDEXING_COMPLETED, { 
+            nodes: graph.nodes.length, 
+            edges: graph.edges.length,
+            duration 
+        }, 'GraphIndexer');
+    }
+
     return graph;
   }
 
@@ -202,6 +218,80 @@ export class GraphIndexer {
         target: fileId,
         type: 'contains',
       });
+    }
+  }
+
+  private extractMarkdownRelationships(
+    filePath: string,
+    node: GraphNode,
+    graph: KnowledgeGraph,
+    workspacePath: string,
+  ): void {
+    try {
+      const content = readFileSync(filePath, 'utf-8');
+
+      // 1. Wikilinks [[Link]] or [[Link|Label]]
+      const wikiRegex = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g;
+      let match;
+      while ((match = wikiRegex.exec(content)) !== null) {
+        const target = match[1].trim();
+        this.addMarkdownEdge(node, target, graph, filePath, workspacePath, 'wikilink');
+      }
+
+      // 2. Standard links [Label](path)
+      const stdRegex = /\[[^\]]+\]\(([^)]+)\)/g;
+      while ((match = stdRegex.exec(content)) !== null) {
+        const target = match[1].trim();
+        if (target.startsWith('http')) continue;
+        this.addMarkdownEdge(node, target, graph, filePath, workspacePath, 'link');
+      }
+    } catch (err) {
+      logger.warn(`Failed to extract markdown relationships from ${filePath}: ${err}`);
+    }
+  }
+
+  private addMarkdownEdge(
+    sourceNode: GraphNode,
+    target: string,
+    graph: KnowledgeGraph,
+    sourceFullPath: string,
+    workspacePath: string,
+    edgeType: string,
+  ): void {
+    let resolvedTarget = target;
+
+    // Try resolving as relative path first
+    if (target.startsWith('.')) {
+      const sourceDir = join(sourceFullPath, '..');
+      const absoluteTarget = resolve(sourceDir, target);
+      resolvedTarget = relative(workspacePath, absoluteTarget);
+    }
+
+    // Find node by path or id or label (for wikilinks)
+    let targetNode = graph.nodes.find((n) => n.id === resolvedTarget || n.path === resolvedTarget);
+
+    if (!targetNode && !target.includes('/')) {
+      // Try finding by label (ignoring case/extension)
+      targetNode = graph.nodes.find(
+        (n) =>
+          n.label.toLowerCase() === target.toLowerCase() ||
+          basename(n.path || '')
+            .replace(/\.md$/i, '')
+            .toLowerCase() === target.toLowerCase(),
+      );
+    }
+
+    if (targetNode && targetNode.id !== sourceNode.id) {
+      const edgeId = `md:${sourceNode.id}->${targetNode.id}`;
+      if (!graph.edges.find((e) => e.id === edgeId)) {
+        graph.edges.push({
+          id: edgeId,
+          source: sourceNode.id,
+          target: targetNode.id,
+          type: 'references',
+          metadata: { subtype: edgeType },
+        });
+      }
     }
   }
 
