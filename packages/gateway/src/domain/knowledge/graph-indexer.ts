@@ -121,7 +121,11 @@ export class GraphIndexer {
     for (const node of updatedNodes) {
       if (node.type === 'file' || node.type === 'doc') {
         const fullPath = join(path, node.path!);
-        this.extractCodeRelationships(fullPath, node, graph, path);
+        if (extname(fullPath) === '.md') {
+          this.extractMarkdownRelationships(fullPath, node, graph, path);
+        } else {
+          this.extractCodeRelationships(fullPath, node, graph, path);
+        }
       }
     }
 
@@ -202,6 +206,79 @@ export class GraphIndexer {
         target: fileId,
         type: 'contains',
       });
+    }
+  }
+
+  private extractMarkdownRelationships(
+    filePath: string,
+    node: GraphNode,
+    graph: KnowledgeGraph,
+    workspacePath: string,
+  ): void {
+    try {
+      const content = readFileSync(filePath, 'utf-8');
+
+      // 1. Wikilinks [[Link]] or [[Link|Label]]
+      const wikiRegex = /\[\[([^\]|]+)(?:\|[^\]]+)?\]\]/g;
+      let match;
+      while ((match = wikiRegex.exec(content)) !== null) {
+        const target = match[1].trim();
+        this.addMarkdownEdge(node, target, graph, filePath, workspacePath, 'wikilink');
+      }
+
+      // 2. Standard links [Label](path)
+      const stdRegex = /\[[^\]]+\]\(([^)]+)\)/g;
+      while ((match = stdRegex.exec(content)) !== null) {
+        const target = match[1].trim();
+        if (target.startsWith('http')) continue;
+        this.addMarkdownEdge(node, target, graph, filePath, workspacePath, 'link');
+      }
+    } catch (err) {
+      logger.warn(`Failed to extract markdown relationships from ${filePath}: ${err}`);
+    }
+  }
+
+  private addMarkdownEdge(
+    sourceNode: GraphNode,
+    target: string,
+    graph: KnowledgeGraph,
+    sourceFullPath: string,
+    workspacePath: string,
+    edgeType: string,
+  ): void {
+    let resolvedTarget = target;
+
+    // Try resolving as relative path first
+    if (target.startsWith('.')) {
+      const sourceDir = join(sourceFullPath, '..');
+      const absoluteTarget = resolve(sourceDir, target);
+      resolvedTarget = relative(workspacePath, absoluteTarget);
+    }
+
+    // Find node by path or id or label (for wikilinks)
+    let targetNode = graph.nodes.find((n) => n.id === resolvedTarget || n.path === resolvedTarget);
+
+    if (!targetNode && !target.includes('/')) {
+      // Try finding by label (ignoring case/extension)
+      targetNode = graph.nodes.find(
+        (n) =>
+          n.label.toLowerCase() === target.toLowerCase() ||
+          basename(n.path || '')
+            .replace(/\.md$/i, '')
+            .toLowerCase() === target.toLowerCase(),
+      );
+    }
+
+    if (targetNode && targetNode.id !== sourceNode.id) {
+      const edgeId = `md:${sourceNode.id}->${targetNode.id}`;
+      if (!graph.edges.find((e) => e.id === edgeId)) {
+        graph.edges.push({
+          id: edgeId,
+          source: sourceNode.id,
+          target: targetNode.id,
+          type: 'references',
+        });
+      }
     }
   }
 

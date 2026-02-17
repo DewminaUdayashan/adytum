@@ -46,6 +46,7 @@ import { GraphStore } from './domain/knowledge/graph-store.js';
 import { GraphIndexer } from './domain/knowledge/graph-indexer.js';
 import { GraphContext } from './domain/knowledge/graph-context.js';
 import { GraphTraversalService } from './domain/knowledge/graph-traversal.js';
+import { KnowledgeWatcher } from './domain/knowledge/knowledge-watcher.js';
 import { createKnowledgeTools } from './tools/knowledge.js';
 import { AgentRegistry } from './domain/agents/agent-registry.js';
 import { LogbookService } from './application/services/logbook-service.js';
@@ -181,6 +182,9 @@ export async function startGateway(projectRoot: string): Promise<void> {
   const semanticProcessor = new SemanticProcessor(modelRouter);
   const graphIndexer = new GraphIndexer(config.workspacePath, graphStore, semanticProcessor);
   const graphContext = new GraphContext(graphStore);
+
+  const knowledgeWatcher = new KnowledgeWatcher(graphIndexer, config.workspacePath);
+  knowledgeWatcher.start();
 
   const agentRuntimeConfig = {
     modelRouter,
@@ -372,6 +376,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
   container.register(GraphStore, { useValue: graphStore });
   container.register(GraphIndexer, { useValue: graphIndexer });
   container.register(GraphContext, { useValue: graphContext });
+  container.register(KnowledgeWatcher, { useValue: knowledgeWatcher });
 
   // ── Hierarchical Multi-Agent (Birth Protocol) ─────────────────
   const agentRegistry = new AgentRegistry(config.dataPath);
@@ -524,6 +529,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
     console.log(chalk.dim(`\n  ${config.agentName} is resting. Goodbye.\n`));
     rl.close();
     permissionManager.stopWatching();
+    knowledgeWatcher.stop();
     await skillLoader.stop();
     await server.stop();
     process.exit(0);
