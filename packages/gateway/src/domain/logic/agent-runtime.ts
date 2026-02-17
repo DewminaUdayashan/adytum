@@ -216,7 +216,7 @@ ${knowledge}`,
     // Auto-extract simple user memory facts (e.g., nickname) and store persistently
     const extracted = this.extractUserMemory(userMessage);
     if (extracted && this.config.memoryStore) {
-      this.config.memoryStore.add(
+      await this.config.memoryStore.add(
         extracted,
         'user',
         ['auto'],
@@ -227,7 +227,7 @@ ${knowledge}`,
     }
 
     // Prepare memory context for this turn
-    const memoryContext = this.buildMemoryContext(userMessage);
+    const memoryContext = await this.buildMemoryContext(userMessage);
 
     const allToolCalls: ToolCall[] = [];
     let finalResponse = '';
@@ -595,7 +595,7 @@ ${knowledge}`,
     if (message.content) {
       context.applyCompaction(message.content);
       if (this.config.memoryStore) {
-        this.config.memoryStore.add(
+        await this.config.memoryStore.add(
           message.content,
           'compaction',
           ['summary'],
@@ -614,10 +614,10 @@ ${knowledge}`,
    * @param query - Query.
    * @returns The build memory context result.
    */
-  private buildMemoryContext(query: string): string | null {
+  private async buildMemoryContext(query: string): Promise<string | null> {
     if (!this.config.memoryStore) return null;
     const topK = this.config.memoryTopK ?? 3;
-    const memories = this.config.memoryStore.search(query, topK);
+    const memories = await this.config.memoryStore.searchHybrid(query, topK);
     if (memories.length === 0) return null;
 
     const lines = memories.map((m) => `- ${m.content}`);

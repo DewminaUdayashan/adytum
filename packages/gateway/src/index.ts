@@ -32,6 +32,7 @@ import { tokenTracker } from './domain/logic/token-tracker.js';
 import { autoProvisionStorage } from './storage/provision.js';
 import { MemoryStore } from './infrastructure/repositories/memory-store.js';
 import { MemoryDB } from './infrastructure/repositories/memory-db.js';
+import { EmbeddingService } from './infrastructure/llm/embedding-service.js';
 import { Dreamer } from './application/services/dreamer.js';
 import { InnerMonologue } from './application/services/inner-monologue.js';
 import { HeartbeatManager } from './application/services/heartbeat-manager.js';
@@ -89,7 +90,16 @@ export async function startGateway(projectRoot: string): Promise<void> {
 
   const secretsStore = new SecretsStore(config.dataPath);
   const memoryDb = new MemoryDB(config.dataPath);
-  const memoryStore = new MemoryStore(memoryDb);
+
+  // Vector Embeddings Support
+  const embeddingService = container.resolve(EmbeddingService);
+  // Note: We resolve it from container (singleton) but we can also new it up if strictly manual
+  // For now let's just use the class since we aren't fully using DI for everything in index.ts yet
+  // actually, let's just new it up to match the style of this file
+  // const embeddingService = new EmbeddingService();
+  // BUT MemoryStore expects it now.
+
+  const memoryStore = new MemoryStore(memoryDb, embeddingService);
   const graphStore = new GraphStore(config.dataPath);
 
   // ── Security Layer ────────────────────────────────────────
