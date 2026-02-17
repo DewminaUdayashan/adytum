@@ -14,16 +14,20 @@ import {
   MessageCircle,
   Coins,
   Shield,
+  Layers,
   Brain,
   Clock,
   Puzzle,
   History,
   Cpu,
+  GitBranch,
 } from 'lucide-react';
 
 const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: Brain, group: 'main' },
   { href: '/chat', label: 'Chat Interface', icon: MessageCircle, group: 'main' },
+  { href: '/agents', label: 'Agent Management', icon: GitBranch, group: 'main' },
+  { href: '/workspaces', label: 'Workspaces', icon: Layers, group: 'main' },
   { href: '/tasks', label: 'Scheduled Tasks', icon: Clock, group: 'main' },
   { href: '/console', label: 'Console Stream', icon: Terminal, group: 'tools' },
   { href: '/memories', label: 'Logs & Memories', icon: History, group: 'tools' },
@@ -54,15 +58,12 @@ export function Sidebar() {
       {/* ── Brand ── */}
       <div className="flex-none px-6 py-6 border-b border-border-primary/40 bg-bg-tertiary/20">
         <div className="flex items-center gap-3.5">
-          <div className="relative flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-tr from-accent-primary to-violet-600 text-white shadow-lg shadow-accent-primary/20 ring-1 ring-white/10">
-            <span className="font-bold text-lg">⚡</span>
+          <div className="relative flex h-10 w-10 items-center justify-center rounded-xl overflow-hidden shadow-lg shadow-accent-primary/20 ring-1 ring-white/10">
+            <img src="/avatars/prometheus.png" alt="Prometheus" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.src = 'https://ui-avatars.com/api/?name=Prometheus&background=0D1117&color=38bdf8')} />
           </div>
           <div className="flex flex-col">
-            <span className="text-[15px] font-bold text-text-primary tracking-tight leading-none">
-              ADYTUM
-            </span>
-            <span className="mt-1 text-[10px] font-medium text-accent-primary uppercase tracking-widest">
-              Agent OS
+            <span className="text-[17px] font-bold text-text-primary tracking-tight leading-none">
+              Adytum
             </span>
           </div>
         </div>
@@ -112,18 +113,7 @@ export function Sidebar() {
         )}
       </nav>
 
-      {/* ── Footer ── */}
-      <div className="flex-none p-4 mt-auto border-t border-border-primary/40">
-        <div className="rounded-xl border border-border-primary/50 bg-bg-primary/50 p-3 shadow-inner">
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-500 shadow-md"></div>
-            <div className="flex flex-col">
-              <span className="text-[12px] font-medium text-text-primary">Admin User</span>
-              <span className="text-[10px] text-text-muted">Pro Plan</span>
-            </div>
-          </div>
-        </div>
-      </div>
+
     </aside>
   );
 }

@@ -22,10 +22,11 @@ const nextConfig = {
     return config;
   },
   async rewrites() {
+    // Use localhost to avoid EADDRNOTAVAIL on macOS when proxy connects to gateway (127.0.0.1 can fail in some network configs).
     return [
       {
         source: '/api/:path*',
-        destination: 'http://127.0.0.1:3001/api/:path*',
+        destination: 'http://localhost:3001/api/:path*',
       },
     ];
   },

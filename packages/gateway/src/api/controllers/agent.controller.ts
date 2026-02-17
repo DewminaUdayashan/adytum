@@ -106,7 +106,7 @@ export class AgentController {
           }
 
           if (frame.type === 'message') {
-            const { content, sessionId = 'default' } = frame as any;
+            const { content, sessionId = 'default', workspaceId } = frame as any;
             const runtime = this.agentService.getRuntime();
             
             /**
@@ -122,6 +122,7 @@ export class AgentController {
                       sessionId: event.sessionId,
                       delta: event.delta || '',
                       streamType: event.streamType || 'response',
+                      workspaceId,
                       metadata: event.metadata
                     }));
                   }
@@ -132,7 +133,8 @@ export class AgentController {
             try {
                const result = await runtime.run(content, sessionId, {
                  modelId: (frame as any).modelId,
-                 modelRole: (frame as any).modelRole
+                 modelRole: (frame as any).modelRole,
+                 workspaceId: workspaceId
                });
                
                if (socket.readyState === 1) {
@@ -140,7 +142,8 @@ export class AgentController {
                    type: 'message',
                    sessionId: sessionId === 'default' ? randomUUID() : sessionId, // Ensure UUID if default
                    content: result.response,
-                   modelRole: 'assistant'
+                   modelRole: 'assistant',
+                   workspaceId: workspaceId
                  }));
                }
             } finally {

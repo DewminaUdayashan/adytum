@@ -27,9 +27,11 @@ const INLINE_TOKEN_REGEX =
 export function MarkdownRenderer({
   content,
   variant = 'assistant',
+  className,
 }: {
   content: string;
   variant?: MarkdownVariant;
+  className?: string;
 }) {
   const blocks = parseMarkdownBlocks(content);
   const textTone = variant === 'user' ? 'text-white' : 'text-text-primary';
@@ -38,7 +40,7 @@ export function MarkdownRenderer({
   const codeTone = variant === 'user' ? 'bg-white/10' : 'bg-bg-primary/60';
 
   return (
-    <div className={clsx('space-y-2.5 text-sm leading-relaxed', textTone)}>
+    <div className={clsx('space-y-2.5 text-sm leading-relaxed', textTone, className)}>
       {blocks.map((block, index) => {
         if (block.kind === 'heading') {
           const headingClass = getHeadingClass(block.level);
@@ -252,15 +254,22 @@ function renderInlineToken(
     if (!href) return token;
     const label = imageMatch[1].trim() || 'image';
     return (
-      <a
-        key={key}
-        href={href}
-        target="_blank"
-        rel="noreferrer"
-        className={getLinkClassName(variant)}
-      >
-        [image: {label}]
-      </a>
+      <div key={key} className="my-2 space-y-1">
+        <img
+          src={href}
+          alt={label}
+          className="max-h-[300px] w-auto max-w-full rounded-lg border border-border-primary/50 shadow-sm"
+          loading="lazy"
+        />
+        <a
+          href={href}
+          target="_blank"
+          rel="noreferrer"
+          className={clsx(getLinkClassName(variant), 'text-[11px] opacity-70')}
+        >
+          View original: {label}
+        </a>
+      </div>
     );
   }
 

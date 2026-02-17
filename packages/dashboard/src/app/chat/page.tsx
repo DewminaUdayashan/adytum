@@ -7,7 +7,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useGatewaySocket, type StreamEvent } from '@/hooks/use-gateway-socket';
-import { Send, Bot, User, Zap, Sparkles } from 'lucide-react';
+import { Send, Bot, User, Zap, Sparkles, Paperclip, File, X, Layers } from 'lucide-react';
 import { clsx } from 'clsx';
 import { MarkdownRenderer } from '@/components/chat/markdown-renderer';
 import { LinkPreviewList } from '@/components/chat/link-previews';
@@ -16,6 +16,9 @@ import {
   type ThinkingActivityEntry,
 } from '@/components/chat/thinking-indicator';
 import { ChatModelSelector } from '@/components/chat/model-selector';
+import { api } from '@/lib/api';
+import { Select } from '@/components/ui';
+import type { Workspace } from '@adytum/shared';
 
 interface ChatMessage {
   id: string;
@@ -50,6 +53,23 @@ export default function ChatPage() {
 
   const [selectedRole, setSelectedRole] = useState('thinking');
   const [selectedModelId, setSelectedModelId] = useState('');
+  const [attachments, setAttachments] = useState<Array<{ type: 'image' | 'file' | 'audio' | 'video'; data: string; name: string; file: File }>>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('');
+
+  useEffect(() => {
+    const fetchWorkspaces = async () => {
+      try {
+        const data = await api.get('/api/workspaces');
+        setWorkspaces(data.workspaces || []);
+      } catch (error) {
+        console.error('Failed to fetch workspaces:', error);
+      }
+    };
+    fetchWorkspaces();
+  }, []);
 
   // Restore chat history from localStorage
   useEffect(() => {
@@ -71,6 +91,13 @@ export default function ChatPage() {
     }
     setHasRestored(true);
   }, []);
+
+  // Auto-scroll to bottom
+  useEffect(() => {
+    if (scrollRef.current) {
+      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }
+  }, [messages, isThinking, activityFeed]);
 
   // Persist chat history
   useEffect(() => {
@@ -297,6 +324,31 @@ export default function ChatPage() {
     [sendFrame],
   );
 
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    files.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const type = file.type.startsWith('image/') ? 'image' : 'file';
+        setAttachments((prev) => [
+          ...prev,
+          {
+            type: type as any,
+            data: reader.result as string,
+            name: file.name,
+            file,
+          },
+        ]);
+      };
+      reader.readAsDataURL(file);
+    });
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  };
+
   const handleSend = useCallback(() => {
     const text = input.trim();
     if (!text || !connected) return;
@@ -312,8 +364,11 @@ export default function ChatPage() {
     sendMessage(text, sessionId, {
       modelRole: selectedRole,
       modelId: selectedModelId || undefined,
+      workspaceId: selectedWorkspaceId || undefined,
+      attachments: attachments.map(a => ({ type: a.type, data: a.data, name: a.name })),
     });
     setInput('');
+    setAttachments([]);
     pendingToolsRef.current = [];
     setPendingTools([]);
     setActivityFeed([
@@ -340,18 +395,34 @@ export default function ChatPage() {
             </p>
             <h1 className="text-2xl font-semibold text-text-primary tracking-tight mt-1">Chat</h1>
           </div>
-          <div className="flex items-center gap-2 text-xs font-medium">
-            <span className="relative flex h-2 w-2">
-              <span
-                className={`absolute inline-flex h-full w-full rounded-full ${connected ? 'bg-success animate-ping' : 'bg-text-muted'} opacity-75`}
-              />
-              <span
-                className={`relative inline-flex h-2 w-2 rounded-full ${connected ? 'bg-success' : 'bg-text-muted'}`}
-              />
-            </span>
-            <span className={connected ? 'text-success' : 'text-text-muted'}>
-              {connected ? 'Connected' : 'Offline'}
-            </span>
+          <div className="flex items-center gap-4">
+            {workspaces.length > 0 && (
+              <div className="flex items-center gap-2 bg-bg-secondary border border-border-primary rounded-xl px-3 py-1.5 shadow-sm">
+                 <Layers className="h-4 w-4 text-text-muted" />
+                 <Select 
+                   value={selectedWorkspaceId}
+                   onChange={setSelectedWorkspaceId}
+                   options={[
+                     { value: '', label: 'No context' },
+                     ...workspaces.map(ws => ({ value: ws.id, label: ws.name }))
+                   ]}
+                   className="min-w-[140px]"
+                 />
+              </div>
+            )}
+            <div className="flex items-center gap-2 text-xs font-medium">
+              <span className="relative flex h-2 w-2">
+                <span
+                  className={`absolute inline-flex h-full w-full rounded-full ${connected ? 'bg-success animate-ping' : 'bg-text-muted'} opacity-75`}
+                />
+                <span
+                  className={`relative inline-flex h-2 w-2 rounded-full ${connected ? 'bg-success' : 'bg-text-muted'}`}
+                />
+              </span>
+              <span className={connected ? 'text-success' : 'text-text-muted'}>
+                {connected ? 'Connected' : 'Offline'}
+              </span>
+            </div>
           </div>
         </div>
       </div>
@@ -401,7 +472,37 @@ export default function ChatPage() {
             onModelChange={setSelectedModelId}
           />
         </div>
+        {attachments.length > 0 && (
+          <div className="flex flex-wrap gap-2 mb-3">
+            {attachments.map((a, i) => (
+              <div key={i} className="relative group flex items-center gap-2 bg-bg-tertiary px-3 py-1.5 rounded-lg border border-border-primary text-xs text-text-secondary">
+                <File className="h-3 w-3 text-accent-primary" />
+                <span className="max-w-[120px] truncate">{a.name}</span>
+                <button 
+                  onClick={() => removeAttachment(i)} 
+                  className="p-0.5 hover:bg-bg-hover rounded-full text-text-tertiary hover:text-error transition-colors"
+                >
+                  <X className="h-3 w-3" />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
         <div className="flex items-center gap-3">
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            onChange={handleFileSelect}
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            disabled={!connected}
+            className="flex h-10 w-10 items-center justify-center rounded-xl bg-bg-secondary border border-border-primary text-text-tertiary transition-all hover:text-text-primary hover:bg-bg-hover disabled:opacity-30 disabled:pointer-events-none"
+          >
+            <Paperclip className="h-4 w-4" />
+          </button>
           <div className="flex-1 flex items-center rounded-xl bg-bg-secondary border border-border-primary px-4 py-2.5 focus-within:border-accent-primary/50 transition-colors duration-150">
             <input
               ref={inputRef}
@@ -416,7 +517,7 @@ export default function ChatPage() {
           </div>
           <button
             onClick={handleSend}
-            disabled={!input.trim() || !connected}
+            disabled={(!input.trim() && attachments.length === 0) || !connected}
             className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent-primary text-white transition-all hover:bg-accent-primary/80 disabled:opacity-30 disabled:pointer-events-none"
           >
             <Send className="h-4 w-4" />

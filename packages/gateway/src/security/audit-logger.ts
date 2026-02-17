@@ -170,6 +170,20 @@ export class AuditLogger extends EventEmitter {
     });
   }
 
+  /**
+   * Executes log system event (e.g. cancellation).
+   */
+  logSystemEvent(event: string, payload: Record<string, unknown>): LogEntry {
+    // Generate a transient trace ID for system events if not part of a larger flow
+    const traceId = uuid();
+    return this.log({
+      traceId,
+      actionType: 'system_event',
+      payload: { event, ...payload },
+      status: 'success',
+    });
+  }
+
   /** Flush buffer and return entries for DB persistence. */
   flush(): { logs: LogEntry[]; security: SecurityEvent[] } {
     const logs = [...this.buffer];

@@ -16,6 +16,7 @@ export async function systemRoutes(app: FastifyInstance) {
 
   app.get('/api/tokens', (req, reply) => controller.getTokens(req));
   app.get('/api/logs', (req, reply) => controller.getLogs(req));
-  app.get('/api/activity', (req, reply) => controller.getActivity(req));
   app.get('/api/link-preview', (req, reply) => controller.getLinkPreview(req, reply));
+  app.get('/api/system/browse', (req, reply) => controller.browse(req));
+  app.get('/api/system/files/*', (req, reply) => controller.serveFile(req, reply));
 }

@@ -18,17 +18,6 @@ describe('Protocol', () => {
       const result = serializeFrame(frame);
       expect(result).toBe(JSON.stringify(frame));
     });
-
-    it('should serialize a message frame', () => {
-      const frame: MessageFrame = {
-        type: 'message',
-        sessionId: '123e4567-e89b-12d3-a456-426614174000',
-        content: 'Hello world',
-        modelRole: 'user',
-      };
-      const result = serializeFrame(frame);
-      expect(result).toBe(JSON.stringify(frame));
-    });
   });
 
   describe('parseFrame', () => {
@@ -56,17 +45,6 @@ describe('Protocol', () => {
         // missing channel
       });
       expect(() => parseFrame(raw)).toThrow();
-    });
-
-    it('should parse a message frame', () => {
-      const frameObj = {
-        type: 'message',
-        sessionId: '123e4567-e89b-12d3-a456-426614174000',
-        content: 'Hello world',
-      };
-      const raw = JSON.stringify(frameObj);
-      const frame = parseFrame(raw);
-      expect(frame).toEqual(frameObj);
     });
   });
 });

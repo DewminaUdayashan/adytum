@@ -5,10 +5,15 @@
 
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { singleton, inject } from 'tsyringe';
+import { promises as fs } from 'fs';
+import * as path from 'path';
+import * as os from 'os';
 import { Logger } from '../../logger.js';
 import { auditLogger } from '../../security/audit-logger.js';
 import { AppError } from '../../domain/errors/app-error.js';
 import { MemoryDB } from '../../infrastructure/repositories/memory-db.js';
+import { ConfigService } from '../../infrastructure/config/config-service.js';
+import { createReadStream, existsSync } from 'node:fs';
 
 /**
  * Encapsulates system controller behavior.
@@ -18,6 +23,7 @@ export class SystemController {
   constructor(
     @inject(Logger) private logger: Logger,
     @inject('MemoryDB') private memoryDb: MemoryDB,
+    @inject(ConfigService) private configService: ConfigService,
   ) {}
 
   /**
@@ -125,9 +131,98 @@ export class SystemController {
       throw new AppError('Invalid URL', 400);
     }
 
-    // Logic from server.ts (simplified for now or call helper)
-    // For now I'll just keep it as a placeholder or copy the core logic
     return { url: target.toString(), title: target.hostname };
+  }
+
+  /**
+   * Serves a file from the workspace.
+   */
+  public async serveFile(request: FastifyRequest, reply: FastifyReply) {
+    const rawPath = (request.params as any)['*'];
+    if (!rawPath) {
+      throw new AppError('File path is required', 400);
+    }
+
+    const config = this.configService.getFullConfig();
+    const workspacePath = path.resolve(config.workspacePath);
+    const targetPath = path.normalize(path.join(workspacePath, rawPath));
+
+    // Security check: ensure the path is within the workspace
+    if (!targetPath.startsWith(workspacePath)) {
+      this.logger.warn(`Security alert: Attempted unauthorized file access: ${targetPath}`);
+      throw new AppError('Access denied', 403);
+    }
+
+    if (!existsSync(targetPath)) {
+      throw new AppError('File not found', 404);
+    }
+
+    const stats = await fs.stat(targetPath);
+    if (!stats.isFile()) {
+      throw new AppError('Requested path is not a file', 400);
+    }
+
+    // Determine content type (basic)
+    const ext = path.extname(targetPath).toLowerCase();
+    const contentTypes: Record<string, string> = {
+      '.png': 'image/png',
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.gif': 'image/gif',
+      '.webp': 'image/webp',
+      '.pdf': 'application/pdf',
+      '.txt': 'text/plain',
+      '.md': 'text/markdown',
+    };
+
+    const contentType = contentTypes[ext] || 'application/octet-stream';
+    reply.header('Content-Type', contentType);
+    reply.header('Content-Length', stats.size);
+    
+    // Cache for 1 hour for images
+    if (contentType.startsWith('image/')) {
+        reply.header('Cache-Control', 'public, max-age=3600');
+    }
+
+    return reply.send(createReadStream(targetPath));
+  }
+
+  /**
+   * Browses local directories.
+   * @param request - Request.
+   */
+  public async browse(request: FastifyRequest) {
+    const { p } = request.query as { p?: string };
+    const targetPath = p || os.homedir();
+
+    try {
+      const stats = await fs.stat(targetPath);
+      if (!stats.isDirectory()) {
+        throw new AppError('Path is not a directory', 400);
+      }
+
+      const entries = await fs.readdir(targetPath, { withFileTypes: true });
+      const items = entries
+        .map((entry) => ({
+          name: entry.name,
+          path: path.join(targetPath, entry.name),
+          type: entry.isDirectory() ? ('directory' as const) : ('file' as const),
+        }))
+        .filter((item) => !item.name.startsWith('.'))
+        .sort((a, b) => {
+          if (a.type !== b.type) return a.type === 'directory' ? -1 : 1;
+          return a.name.localeCompare(b.name);
+        });
+
+      return {
+        currentPath: targetPath,
+        parentPath: path.dirname(targetPath),
+        items,
+      };
+    } catch (err: any) {
+      this.logger.error(`Browse failed for ${targetPath}: ${err.message}`);
+      throw new AppError(`Failed to browse path: ${err.message}`, 500);
+    }
   }
 
   /**

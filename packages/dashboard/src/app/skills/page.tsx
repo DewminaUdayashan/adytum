@@ -7,7 +7,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { gatewayFetch } from '@/lib/api';
-import { Badge, Button, Card, EmptyState, Spinner } from '@/components/ui';
+import { Badge, Button, Card, Checkbox, EmptyState, Spinner } from '@/components/ui';
 import { Puzzle, Save, RefreshCw, Wrench, ShieldCheck } from 'lucide-react';
 
 type SkillUiHint = {
@@ -227,7 +227,7 @@ function FieldRenderer(props: {
     const containerTitle = path.length === 0 ? null : title;
 
     return (
-      <div className="space-y-3" key={fieldKey || 'root-object'}>
+      <div className="space-y-4" key={fieldKey || 'root-object'}>
         {containerTitle && (
           <div className="rounded-lg border border-border-primary/60 bg-bg-tertiary/30 p-3">
             <p className="text-xs font-semibold text-text-primary">{containerTitle}</p>
@@ -248,16 +248,18 @@ function FieldRenderer(props: {
         )}
 
         {!containerTitle &&
-          entries.map(([key, childSchema]) => (
-            <FieldRenderer
-              key={key}
-              schema={childSchema}
-              path={[...path, key]}
-              config={config}
-              onChange={onChange}
-              uiHints={uiHints}
-            />
-          ))}
+          entries
+            .filter(([key]) => key !== 'enabled')
+            .map(([key, childSchema]) => (
+              <FieldRenderer
+                key={key}
+                schema={childSchema}
+                path={[...path, key]}
+                config={config}
+                onChange={onChange}
+                uiHints={uiHints}
+              />
+            ))}
       </div>
     );
   }
@@ -273,11 +275,10 @@ function FieldRenderer(props: {
           <p className="text-sm font-medium text-text-primary">{title}</p>
           {help && <p className="mt-1 text-[11px] text-text-muted">{help}</p>}
         </div>
-        <input
-          type="checkbox"
+        <Checkbox
+          id={fieldKey}
           checked={checked}
           onChange={(e) => onChange(path, e.target.checked)}
-          className="mt-1 h-4 w-4 rounded border-border-primary bg-bg-primary text-accent-primary focus:ring-accent-primary/50"
         />
       </label>
     );
@@ -922,43 +923,55 @@ export default function SkillsPage() {
                           </div>
                         </div>
 
-                        <label
-                          className={`inline-flex items-center gap-2 rounded-lg border border-border-primary bg-bg-tertiary/20 px-3 py-2 text-sm ${skill.readonly ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                          <span className="text-text-secondary">Enabled</span>
-                          <input
-                            type="checkbox"
-                            checked={Boolean(draftEnabled[skill.id])}
-                            disabled={skill.readonly}
-                            onChange={(e) =>
-                              setDraftEnabled((prev) => ({
-                                ...prev,
-                                [skill.id]: e.target.checked,
-                              }))
-                            }
-                            className="h-4 w-4 rounded border-border-primary bg-bg-primary text-accent-primary focus:ring-accent-primary/50"
-                          />
-                        </label>
-                        <label
-                          className={`inline-flex items-center gap-2 rounded-lg border border-border-primary bg-bg-tertiary/20 px-3 py-2 text-sm ${skill.readonly ? 'opacity-50 cursor-not-allowed' : ''}`}
-                        >
-                          <span className="text-text-secondary">Install</span>
-                          <select
-                            className="rounded-md border border-border-primary bg-bg-tertiary px-2 py-1 text-sm text-text-primary focus:border-accent-primary/50 focus:outline-none disabled:cursor-not-allowed"
-                            value={draftInstallPerm[skill.id] || 'ask'}
-                            disabled={skill.readonly}
-                            onChange={(e) =>
-                              setDraftInstallPerm((prev) => ({
-                                ...prev,
-                                [skill.id]: e.target.value as 'auto' | 'ask' | 'deny',
-                              }))
-                            }
+                        <div className="flex items-center gap-2">
+                          <label
+                            className={`inline-flex items-center gap-2 rounded-lg border border-border-primary bg-bg-tertiary/20 px-3 py-2 text-sm ${skill.readonly ? 'opacity-50 cursor-not-allowed' : ''}`}
                           >
-                            <option value="auto">Auto</option>
-                            <option value="ask">Ask</option>
-                            <option value="deny">Deny</option>
-                          </select>
-                        </label>
+                            <span className="text-text-secondary">Enabled</span>
+                            <Checkbox
+                              checked={Boolean(draftEnabled[skill.id])}
+                              disabled={skill.readonly}
+                              onChange={(e) =>
+                                setDraftEnabled((prev) => ({
+                                  ...prev,
+                                  [skill.id]: e.target.checked,
+                                }))
+                              }
+                            />
+                          </label>
+
+                          {hasSkillChanges(skill.id) && !skill.readonly && (
+                            <div className="flex items-center gap-2 ml-2">
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => {
+                                  setDraftConfig((prev) => ({
+                                    ...prev,
+                                    [skill.id]: originalConfig[skill.id] || {},
+                                  }));
+                                  setDraftEnabled((prev) => ({
+                                    ...prev,
+                                    [skill.id]: originalEnabled[skill.id],
+                                  }));
+                                }}
+                                disabled={savingSkillId === skill.id}
+                              >
+                                Reset
+                              </Button>
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                isLoading={savingSkillId === skill.id}
+                                onClick={() => saveSkill(skill.id)}
+                              >
+                                <Save className="h-3.5 w-3.5" />
+                                Save
+                              </Button>
+                            </div>
+                          )}
+                        </div>
+
                       </div>
 
                       {requiredEnv.length > 0 && (
@@ -1107,22 +1120,7 @@ export default function SkillsPage() {
                       {canRenderConfig ? (
                         <div className="space-y-3 rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4">
                           <h3 className="text-sm font-semibold text-text-primary">Configuration</h3>
-                          <div className="flex justify-end">
-                            <label className="text-xs text-text-muted inline-flex items-center gap-2">
-                              <input
-                                type="checkbox"
-                                checked={Boolean(showAdvancedBySkill[skill.id])}
-                                onChange={(e) =>
-                                  setShowAdvancedBySkill((prev) => ({
-                                    ...prev,
-                                    [skill.id]: e.target.checked,
-                                  }))
-                                }
-                                className="h-3.5 w-3.5 rounded border-border-primary"
-                              />
-                              Show advanced fields
-                            </label>
-                          </div>
+
                           <FieldRenderer
                             schema={schema}
                             path={[]}
@@ -1137,7 +1135,7 @@ export default function SkillsPage() {
                               });
                             }}
                             uiHints={uiHints}
-                            showAdvanced={Boolean(showAdvancedBySkill[skill.id])}
+                            showAdvanced={true}
                           />
                         </div>
                       ) : (
@@ -1284,51 +1282,7 @@ export default function SkillsPage() {
                         )}
                       </div>
 
-                      {/* Global Save/Reset for skill config and enabled state */}
-                      {hasSkillChanges(skill.id) && (
-                        <div className="flex items-center justify-end gap-3 pt-4 border-t border-border-primary/40">
-                          {hasSkillChanges(skill.id) && (
-                            <span className="text-xs text-warning animate-pulse">
-                              You have unsaved changes
-                            </span>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => {
-                              setDraftConfig((prev) => ({
-                                ...prev,
-                                [skill.id]: originalConfig[skill.id] || {},
-                              }));
-                              setDraftEnabled((prev) => ({
-                                ...prev,
-                                [skill.id]: originalEnabled[skill.id],
-                              }));
-                            }}
-                            disabled={
-                              !hasSkillChanges(skill.id) ||
-                              savingSkillId === skill.id ||
-                              skill.readonly
-                            }
-                          >
-                            Reset
-                          </Button>
-                          <Button
-                            variant="primary"
-                            size="sm"
-                            isLoading={savingSkillId === skill.id}
-                            onClick={() => saveSkill(skill.id)}
-                            disabled={
-                              !hasSkillChanges(skill.id) ||
-                              savingSkillId === skill.id ||
-                              skill.readonly
-                            }
-                          >
-                            <Save className="h-3.5 w-3.5" />
-                            Save Skill
-                          </Button>
-                        </div>
-                      )}
+
                     </div>
                   </Card>
                 );

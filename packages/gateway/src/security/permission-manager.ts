@@ -8,6 +8,7 @@ import { resolve, dirname } from 'node:path';
 import type { PermissionEntry, AccessMode } from '@adytum/shared';
 import { PathValidator } from './path-validator.js';
 import { auditLogger } from './audit-logger.js';
+import type { GraphStore } from '../domain/knowledge/graph-store.js';
 
 /**
  * Manages dynamic file system permissions.
@@ -20,14 +21,27 @@ export class PermissionManager {
   constructor(
     private workspacePath: string,
     private dataPath: string,
+    private graphStore?: GraphStore,
   ) {
     this.validator = new PathValidator(workspacePath, dataPath);
   }
 
+  /**
+   * Resolves the absolute path for a workspace.
+   */
+  resolveWorkspacePath(workspaceId?: string): string {
+    if (workspaceId && this.graphStore) {
+      const ws = this.graphStore.getWorkspace(workspaceId);
+      if (ws?.path) return ws.path;
+    }
+    return this.workspacePath;
+  }
+
   /** Validate a path for access. Returns resolved path or throws. */
-  validatePath(targetPath: string, operation: 'read' | 'write' = 'read'): string {
+  validatePath(targetPath: string, operation: 'read' | 'write' = 'read', workspaceId?: string): string {
     try {
-      return this.validator.validate(targetPath, operation);
+      const overrideRoot = workspaceId ? this.resolveWorkspacePath(workspaceId) : undefined;
+      return this.validator.validate(targetPath, operation, overrideRoot);
     } catch (error: any) {
       // Log the security event
       auditLogger.logSecurityEvent({

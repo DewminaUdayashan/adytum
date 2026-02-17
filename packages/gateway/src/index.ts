@@ -18,6 +18,7 @@ import { ModelCatalog } from './infrastructure/llm/model-catalog.js';
 
 import { setupContainer, container } from './container.js';
 import { SoulEngine } from './domain/logic/soul-engine.js';
+import { SemanticProcessor } from './domain/knowledge/semantic-processor.js';
 import { SkillLoader } from './application/services/skill-loader.js';
 import { ToolRegistry } from './tools/registry.js';
 import { createShellTool, createShellToolWithApproval } from './tools/shell.js';
@@ -40,6 +41,16 @@ import cron from 'node-cron';
 import { AgentService } from './application/services/agent-service.js';
 import { SkillService } from './application/services/skill-service.js';
 import { ApprovalService } from './domain/logic/approval-service.js';
+import { GraphStore } from './domain/knowledge/graph-store.js';
+import { GraphIndexer } from './domain/knowledge/graph-indexer.js';
+import { GraphContext } from './domain/knowledge/graph-context.js';
+import { AgentRegistry } from './domain/agents/agent-registry.js';
+import { LogbookService } from './application/services/logbook-service.js';
+import { AgentLogStore } from './domain/agents/agent-log-store.js';
+import { AgentsController } from './api/controllers/agents.controller.js';
+import { SubAgentSpawner } from './domain/logic/sub-agent.js';
+import { createSpawnAgentTool } from './tools/spawn-agent.js';
+import { RuntimeRegistry } from './domain/agents/runtime-registry.js';
 
 // ─── Direct Execution Detection ─────────────────────────────
 // If this file is run directly (e.g. `node dist/index.js start`),
@@ -76,32 +87,45 @@ export async function startGateway(projectRoot: string): Promise<void> {
   const dbResult = await autoProvisionStorage(config);
   console.log(chalk.green('  ✓ ') + chalk.white(`Storage: ${dbResult.type}`));
 
-  // ── Security Layer ────────────────────────────────────────
-  const permissionManager = new PermissionManager(config.workspacePath, config.dataPath);
-  permissionManager.startWatching();
   const secretsStore = new SecretsStore(config.dataPath);
+  const memoryDb = new MemoryDB(config.dataPath);
+  const memoryStore = new MemoryStore(memoryDb);
+  const graphStore = new GraphStore(config.dataPath);
+
+  // ── Security Layer ────────────────────────────────────────
+  const permissionManager = new PermissionManager(
+    config.workspacePath,
+    config.dataPath,
+    graphStore,
+  );
+  permissionManager.startWatching();
 
   // ── Tool Registry ─────────────────────────────────────────
   const toolRegistry = new ToolRegistry();
 
-  const shellTool = createShellTool(async (_command) => {
-    // Placeholder — will be re-wired after REPL is created
-    return { approved: false, reason: 'bootstrap', mode: 'ask' };
-  });
-  toolRegistry.register(shellTool);
-
+  // ─── Native Tools ──────────────────────────────────────────
   for (const fsTool of createFileSystemTools(permissionManager)) {
     toolRegistry.register(fsTool);
   }
 
-  toolRegistry.register(createWebFetchTool());
+  // Shell tool with approval logic (re-wired later if needed, but set up here)
+  const shellTool = createShellTool(async (command, context) => {
+    // Note: 'server' will be defined later, so we use a wrapper that references it
+    return await (global as any).adytumServer.requestApproval({
+      kind: 'shell_execute',
+      description: `Execute: ${command}`,
+      meta: { command },
+      sessionId: context?.sessionId,
+      workspaceId: context?.workspaceId,
+    });
+  }, permissionManager.resolveWorkspacePath.bind(permissionManager));
+  toolRegistry.register(shellTool);
 
-  // ── Memory Store & Tools ───────────────────────────────────
-  const memoryDb = new MemoryDB(config.dataPath);
-  const memoryStore = new MemoryStore(memoryDb);
-  for (const memTool of createMemoryTools(memoryStore)) {
-    toolRegistry.register(memTool);
+  for (const mTool of createMemoryTools(memoryStore)) {
+    toolRegistry.register(mTool);
   }
+
+  toolRegistry.register(createWebFetchTool());
 
   for (const pTool of createPersonalityTools(memoryDb)) {
     toolRegistry.register(pTool);
@@ -119,6 +143,8 @@ export async function startGateway(projectRoot: string): Promise<void> {
     routing: config.routing,
   });
 
+  const runtimeRegistry = new RuntimeRegistry();
+  container.register(RuntimeRegistry, { useValue: runtimeRegistry });
   // Detect LiteLLM vs direct API mode
   const llmStatus = await modelRouter.initialize();
   console.log(chalk.green('  ✓ ') + chalk.white(`LLM: ${llmStatus}`));
@@ -132,20 +158,30 @@ export async function startGateway(projectRoot: string): Promise<void> {
   skillLoader.setSecrets(secretsStore.getAll());
   await skillLoader.init(toolRegistry);
 
-  const agent = new AgentRuntime({
+  const semanticProcessor = new SemanticProcessor(modelRouter);
+  const graphIndexer = new GraphIndexer(config.workspacePath, graphStore, semanticProcessor);
+  const graphContext = new GraphContext(graphStore);
+
+  const agentRuntimeConfig = {
     modelRouter,
     toolRegistry,
     soulEngine,
     skillLoader,
+    graphContext,
     contextSoftLimit: config.contextSoftLimit,
     maxIterations: 20,
-    defaultModelRole: 'thinking',
+    defaultModelRole: 'thinking' as const,
     agentName: config.agentName,
     workspacePath: config.workspacePath,
     memoryStore,
     memoryTopK: 3,
     memoryDb,
-  });
+    graphStore,
+    runtimeRegistry,
+    tier: 1 as const,
+  };
+
+  const agent = new AgentRuntime(agentRuntimeConfig);
 
   // Seed context with recent persisted messages to restore short-term memory
   const recentMessages = memoryDb
@@ -279,7 +315,8 @@ export async function startGateway(projectRoot: string): Promise<void> {
   scheduleDreamer(config.dreamerIntervalMinutes);
   scheduleMonologue(config.monologueIntervalMinutes);
 
-  const cronManager = new CronManager(agent, config.dataPath);
+  const logbookService = new LogbookService(config.workspacePath);
+  const cronManager = new CronManager(agent, config.dataPath, runtimeRegistry, logbookService);
 
   // Register Cron Tools (needs agent instance)
   for (const tool of createCronTools(cronManager)) {
@@ -300,6 +337,9 @@ export async function startGateway(projectRoot: string): Promise<void> {
   // so that Controllers can resolve them.
 
   container.register(AgentRuntime, { useValue: agent });
+  container.register(ModelRouter, { useValue: modelRouter });
+  container.register('RuntimeConfig', { useValue: config });
+  container.register('RouterConfig', { useValue: config });
   container.register(SkillLoader, { useValue: skillLoader });
   container.register(CronManager, { useValue: cronManager });
   container.register(ModelCatalog, { useValue: modelCatalog });
@@ -309,6 +349,80 @@ export async function startGateway(projectRoot: string): Promise<void> {
   container.register('MemoryRepository', { useValue: memoryDb });
   container.register(PermissionManager, { useValue: permissionManager });
   container.register(SecretsStore, { useValue: secretsStore });
+  container.register(GraphStore, { useValue: graphStore });
+  container.register(GraphIndexer, { useValue: graphIndexer });
+  container.register(GraphContext, { useValue: graphContext });
+
+  // ── Hierarchical Multi-Agent (Birth Protocol) ─────────────────
+  const agentRegistry = new AgentRegistry(config.dataPath);
+  const agentLogStore = new AgentLogStore(config.dataPath);
+  container.register('AgentRegistry', { useValue: agentRegistry });
+  container.register('LogbookService', { useValue: logbookService });
+  container.register('AgentLogStore', { useValue: agentLogStore });
+  container.registerSingleton(AgentsController);
+  // Ensure Prometheus (Tier 1) exists in registry
+  const prometheusAvatarUrl = '/avatars/prometheus.png'; // Dashboard public asset
+  let tier1 = agentRegistry.getActive().filter((a) => a.tier === 1);
+  if (tier1.length === 0) {
+    agentRegistry.birth({
+      name: config.agentName,
+      tier: 1,
+      parentId: null,
+      avatarUrl: prometheusAvatarUrl,
+    });
+    logbookService.append({
+      timestamp: Date.now(),
+      agentName: config.agentName,
+      tier: 1,
+      event: 'birth',
+      detail: 'Prometheus (Tier 1) initialized',
+    });
+    tier1 = agentRegistry.getActive().filter((a) => a.tier === 1);
+  } else if (!tier1[0]!.avatar) {
+    agentRegistry.setAvatar(tier1[0]!.id, prometheusAvatarUrl);
+  }
+  const prometheusAgentId = tier1[0]!.id;
+
+  // Tool: Prometheus (and Tier 2) can spawn Tier 2/3 sub-agents during a run
+  const hierarchyConfig = (config as { hierarchy?: { avatarGenerationEnabled?: boolean } })
+    .hierarchy;
+  const avatarEnabled = hierarchyConfig?.avatarGenerationEnabled !== false;
+  const generateAvatar = async (name: string, _tier: number): Promise<string | null> => {
+    const seed = encodeURIComponent(name || 'agent');
+    return `https://api.dicebear.com/9.x/adventurer/svg?seed=${seed}`;
+  };
+
+  const subAgentSpawner = new SubAgentSpawner(
+    agentRuntimeConfig,
+    runtimeRegistry,
+    agentRegistry,
+    logbookService,
+    agentLogStore,
+    { generateAvatar, avatarEnabled },
+  );
+  const spawnAgentTool = createSpawnAgentTool(
+    agentRegistry,
+    logbookService,
+    agentLogStore,
+    subAgentSpawner,
+    prometheusAgentId,
+    { generateAvatar, avatarEnabled },
+  );
+  toolRegistry.register(spawnAgentTool);
+  agent.refreshSystemPrompt();
+
+  // Emergency stop: log critical model failure to LOGBOOK
+  modelRouter.on('critical_failure', (payload: { roleOrTask: string; errors: string[] }) => {
+    logbookService.append({
+      timestamp: Date.now(),
+      event: 'critical_failure',
+      detail: `All models failed for "${payload.roleOrTask}". Errors: ${payload.errors.slice(0, 3).join('; ')}`,
+    });
+    logger.warn(
+      { roleOrTask: payload.roleOrTask, errors: payload.errors },
+      'Critical task failure — pipeline emergency stop',
+    );
+  });
 
   // Wire up SkillService reload callback
   const skillService = container.resolve(SkillService);
@@ -317,7 +431,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
   // ── Gateway Server ────────────────────────────────────────
   const server = new GatewayServer({
     port: config.gatewayPort,
-    host: '127.0.0.1',
+    host: '0.0.0.0', // Listen on all interfaces so dashboard proxy (localhost or 127.0.0.1) can connect; avoids EADDRNOTAVAIL on macOS.
     permissionManager,
     workspacePath: config.workspacePath,
     heartbeatManager,
@@ -347,6 +461,7 @@ export async function startGateway(projectRoot: string): Promise<void> {
       const result = await agent.run(frame.content, sessionId, {
         modelRole: frame.modelRole,
         modelId: frame.modelId,
+        workspaceId: frame.workspaceId,
       });
       server.sendToSession(sessionId, {
         type: 'message',
@@ -424,62 +539,72 @@ export async function startGateway(projectRoot: string): Promise<void> {
   };
 
   // Re-wire the shell tool's approval callback to respect execution permissions and dashboard approvals
-  toolRegistry.get('shell_execute')!.execute = createShellToolWithApproval(async (command) => {
-    const latestConfig = loadConfig(projectRoot);
-    const mode = latestConfig.execution?.shell || 'ask';
-    const defaultChannel = latestConfig.execution?.defaultChannel;
-    const defaultCommSkillId = latestConfig.execution?.defaultCommSkillId;
+  toolRegistry.get('shell_execute')!.execute = createShellToolWithApproval(
+    async (command, context) => {
+      const latestConfig = loadConfig(projectRoot);
+      const mode = latestConfig.execution?.shell || 'ask';
+      const defaultChannel = latestConfig.execution?.defaultChannel;
+      const defaultCommSkillId = latestConfig.execution?.defaultCommSkillId;
 
-    if (mode === 'deny') {
-      return { approved: false, mode, reason: 'policy_denied', defaultChannel, defaultCommSkillId };
-    }
+      if (mode === 'deny') {
+        return {
+          approved: false,
+          mode,
+          reason: 'policy_denied',
+          defaultChannel,
+          defaultCommSkillId,
+        };
+      }
 
-    if (mode === 'auto') {
-      return { approved: true, mode, defaultChannel, defaultCommSkillId };
-    }
+      if (mode === 'auto') {
+        return { approved: true, mode, defaultChannel, defaultCommSkillId };
+      }
 
-    // mode === 'ask'
-    console.log(chalk.yellow(`  ⚠ shell approval required: ${command}`));
-    const approved = await server.requestApproval({
-      kind: 'shell',
-      description: `shell_execute wants to run: ${command}`,
-      meta: { command, defaultChannel, defaultCommSkillId },
-    });
+      // mode === 'ask'
+      console.log(chalk.yellow(`  ⚠ shell approval required: ${command}`));
+      const approved = await server.requestApproval({
+        kind: 'shell',
+        description: `shell_execute wants to run: ${command}`,
+        meta: { command, defaultChannel, defaultCommSkillId },
+        sessionId: context?.sessionId,
+        workspaceId: context?.workspaceId,
+      });
 
-    if (approved !== undefined) {
+      if (approved !== undefined) {
+        return {
+          approved,
+          mode,
+          reason: approved ? undefined : 'user_denied',
+          defaultChannel,
+          defaultCommSkillId,
+        };
+      }
+
+      if (process.stdin.isTTY) {
+        const ttyApproved = await promptApproval(
+          chalk.yellow(
+            `\n  ⚠  Tool "shell_execute" wants to execute: ${chalk.bold(JSON.stringify({ command }))}\n  Approve? [y/N]: `,
+          ),
+        );
+        return {
+          approved: ttyApproved,
+          mode,
+          reason: ttyApproved ? undefined : 'user_denied',
+          defaultChannel,
+          defaultCommSkillId,
+        };
+      }
+
       return {
-        approved,
+        approved: false,
         mode,
-        reason: approved ? undefined : 'user_denied',
+        reason: 'approval_required',
         defaultChannel,
         defaultCommSkillId,
+        message: 'Command cancelled by user request. You may try again if necessary.',
       };
-    }
-
-    if (process.stdin.isTTY) {
-      const ttyApproved = await promptApproval(
-        chalk.yellow(
-          `\n  ⚠  Tool "shell_execute" wants to execute: ${chalk.bold(JSON.stringify({ command }))}\n  Approve? [y/N]: `,
-        ),
-      );
-      return {
-        approved: ttyApproved,
-        mode,
-        reason: ttyApproved ? undefined : 'user_denied',
-        defaultChannel,
-        defaultCommSkillId,
-      };
-    }
-
-    return {
-      approved: false,
-      mode,
-      reason: 'approval_required',
-      defaultChannel,
-      defaultCommSkillId,
-      message: 'Command cancelled by user request. You may try again if necessary.',
-    };
-  });
+    },
+  );
 
   // Re-wire the agent's approval callback too (used by tools marked requiresApproval)
   agent.setApprovalHandler(async (description) => {

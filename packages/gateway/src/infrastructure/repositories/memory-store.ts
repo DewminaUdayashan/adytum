@@ -93,9 +93,10 @@ export class MemoryStore {
     tags?: string[],
     metadata?: Record<string, unknown>,
     category: MemoryCategory = 'general',
+    workspaceId?: string,
   ): MemoryRecord {
     const sanitized = redactSecrets(content);
-    return this.db.addMemory({ content: sanitized, source, category, tags, metadata });
+    return this.db.addMemory({ content: sanitized, source, category, tags, metadata, workspaceId });
   }
 
   /**

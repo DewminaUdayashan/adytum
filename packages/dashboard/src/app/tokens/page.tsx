@@ -207,14 +207,19 @@ export default function TokensPage() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-[300px_1fr] gap-4 items-start">
-              <DateRangePicker
-                start={dateFrom}
-                end={dateTo}
-                onChange={(start, end) => {
-                  setDateFrom(start);
-                  setDateTo(end);
-                }}
-              />
+              <div className="flex flex-col gap-1">
+                <label className="mb-0 block text-[11px] font-semibold uppercase tracking-wider text-text-muted">
+                  Date Range
+                </label>
+                <DateRangePicker
+                  start={dateFrom}
+                  end={dateTo}
+                  onChange={(start, end) => {
+                    setDateFrom(start);
+                    setDateTo(end);
+                  }}
+                />
+              </div>
 
               <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                 <div>
@@ -259,7 +264,7 @@ export default function TokensPage() {
                 <div className="flex items-end gap-2">
                   <Button
                     variant="ghost"
-                    size="sm"
+                    size="md"
                     onClick={() => {
                       setDateFrom('');
                       setDateTo('');
@@ -269,7 +274,7 @@ export default function TokensPage() {
                   >
                     Clear Filters
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={refresh}>
+                  <Button variant="ghost" size="md" onClick={refresh}>
                     <RefreshCcw size={14} /> Refresh
                   </Button>
                 </div>
@@ -696,12 +701,9 @@ function DateRangePicker({
 
   return (
     <div className="relative" ref={popoverRef}>
-      <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wider text-text-muted">
-        Date Range
-      </label>
       <Button
         variant="outline"
-        size="sm"
+        size="md"
         className="w-full justify-between"
         onClick={() => setOpen((prev) => !prev)}
       >

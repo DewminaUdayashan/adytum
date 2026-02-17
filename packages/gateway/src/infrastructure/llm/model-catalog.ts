@@ -57,6 +57,11 @@ export class ModelCatalog implements ModelRepository {
         const providerModels = pi.getModels(providerId);
         for (const m of providerModels) {
           const id = `${m.provider}/${m.id}`;
+          // pi-ai provides pricing in cost/1k or cost/1M?
+          // Looking at pi-ai types (inferred), it might have .pricing object
+          // For now, we'll try to extract if present, or leave undefined to fall back to router defaults
+          // @ts-ignore
+          const cost = m.cost; 
           this.models.set(id, {
             id,
             name: m.name || m.id,
@@ -65,6 +70,10 @@ export class ModelCatalog implements ModelRepository {
             contextWindow: m.contextWindow,
             reasoning: m.reasoning,
             input: m.input,
+            // @ts-ignore
+            inputCost: cost?.input, // Ensure these map correctly if pi-ai uses different structure
+            // @ts-ignore
+            outputCost: cost?.output,
             source: 'default',
             baseUrl: m.baseUrl,
           });

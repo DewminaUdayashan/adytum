@@ -34,9 +34,10 @@ export class PathValidator {
    * Validate that a path is accessible under current permissions.
    * Returns the resolved absolute path if valid, throws if blocked.
    */
-  validate(targetPath: string, operation: 'read' | 'write' = 'read'): string {
-    // 1. Resolve relative paths against workspace root
-    let resolved = resolve(this.workspaceRoot, targetPath);
+  validate(targetPath: string, operation: 'read' | 'write' = 'read', overrideRoot?: string): string {
+    // 1. Resolve relative paths against workspace root (or overrideRoot)
+    const root = overrideRoot || this.workspaceRoot;
+    let resolved = resolve(root, targetPath);
 
     // 2. Resolve Symlinks (REALPATH check)
     // We try to get the real path. If file doesn't exist, we resolve the parent's real path.
@@ -85,7 +86,7 @@ export class PathValidator {
 
     // 5. Workspace Sandbox Check
     // Must be INSIDE the workspace root (not just starting with it string-wise, though resolve handles that)
-    if (resolved.startsWith(this.workspaceRoot + sep) || resolved === this.workspaceRoot) {
+    if (resolved.startsWith(root + sep) || resolved === root) {
       return resolved;
     }
 

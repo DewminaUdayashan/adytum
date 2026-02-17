@@ -3,6 +3,7 @@
  * @description Contains domain logic and core business behavior.
  */
 
+import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AgentRuntime } from './agent-runtime.js';
 import { ModelRouter } from '../../infrastructure/llm/model-router.js';
@@ -56,8 +57,8 @@ describe('AgentRuntime Integration', () => {
 
   it('should initialize and build system prompt', () => {
     expect(mockSoulEngine.getSoulPrompt).toHaveBeenCalled();
-    // Accessing private context to check if prompt is set (via casting to any for testing)
-    const context: ContextManager = (runtime as any).context;
+    // Access private helper to inspect the generated system prompt in a live context
+    const context: ContextManager = (runtime as any).getOrCreateContext('bootstrap');
     const msgs = context.getMessages();
     expect(msgs[0].role).toBe('system');
     expect(msgs[0].content).toContain('You are a helpful assistant.');

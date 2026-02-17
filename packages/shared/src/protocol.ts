@@ -28,7 +28,7 @@ export type FrameType = z.infer<typeof FrameTypeSchema>;
 export const ConnectFrameSchema = z.object({
   type: z.literal('connect'),
   channel: z.string(),
-  sessionId: z.string().uuid().optional(),
+  sessionId: z.string().optional(),
   clientVersion: z.string().optional(),
 });
 export type ConnectFrame = z.infer<typeof ConnectFrameSchema>;
@@ -37,10 +37,11 @@ export type ConnectFrame = z.infer<typeof ConnectFrameSchema>;
 
 export const MessageFrameSchema = z.object({
   type: z.literal('message'),
-  sessionId: z.string().uuid(),
+  sessionId: z.string(),
   content: z.string(),
   modelRole: z.string().optional(),
   modelId: z.string().optional(),
+  workspaceId: z.string().optional(),
   attachments: z
     .array(
       z.object({
@@ -57,7 +58,7 @@ export type MessageFrame = z.infer<typeof MessageFrameSchema>;
 
 export const StreamFrameSchema = z.object({
   type: z.literal('stream'),
-  sessionId: z.string().uuid(),
+  sessionId: z.string(),
   traceId: z.string().uuid(),
   delta: z.string(),
   streamType: z.enum([
@@ -67,6 +68,7 @@ export const StreamFrameSchema = z.object({
     'tool_result', // Tool execution result
     'status', // Status update
   ]),
+  workspaceId: z.string().optional(),
   metadata: z.record(z.unknown()).optional(),
 });
 export type StreamFrame = z.infer<typeof StreamFrameSchema>;
@@ -75,7 +77,7 @@ export type StreamFrame = z.infer<typeof StreamFrameSchema>;
 
 export const ControlFrameSchema = z.object({
   type: z.literal('control'),
-  sessionId: z.string().uuid(),
+  sessionId: z.string(),
   action: z.enum(['approve', 'reject', 'cancel', 'pause', 'resume']),
   traceId: z.string().uuid().optional(),
   reason: z.string().optional(),
@@ -86,7 +88,7 @@ export type ControlFrame = z.infer<typeof ControlFrameSchema>;
 
 export const FeedbackFrameSchema = z.object({
   type: z.literal('feedback'),
-  sessionId: z.string().uuid(),
+  sessionId: z.string(),
   traceId: z.string().uuid(),
   rating: z.enum(['up', 'down']),
   reasonCode: z.string().optional(),
@@ -98,7 +100,7 @@ export type FeedbackFrame = z.infer<typeof FeedbackFrameSchema>;
 
 export const TokenUpdateFrameSchema = z.object({
   type: z.literal('token_update'),
-  sessionId: z.string().uuid(),
+  sessionId: z.string(),
   model: z.string(),
   role: z.string(),
   promptTokens: z.number(),
@@ -116,7 +118,7 @@ export const ErrorFrameSchema = z.object({
   type: z.literal('error'),
   code: z.string(),
   message: z.string(),
-  sessionId: z.string().uuid().optional(),
+  sessionId: z.string().optional(),
 });
 export type ErrorFrame = z.infer<typeof ErrorFrameSchema>;
 
@@ -130,7 +132,7 @@ export const WebSocketFrameSchema = z.discriminatedUnion('type', [
   FeedbackFrameSchema,
   TokenUpdateFrameSchema,
   ErrorFrameSchema,
-  z.object({ type: z.literal('disconnect'), sessionId: z.string().uuid() }),
+  z.object({ type: z.literal('disconnect'), sessionId: z.string() }),
   z.object({ type: z.literal('heartbeat_ping') }),
   z.object({ type: z.literal('heartbeat_pong') }),
   z.object({

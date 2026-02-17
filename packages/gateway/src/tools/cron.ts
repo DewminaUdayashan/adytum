@@ -10,7 +10,11 @@ import cron from 'node-cron';
 
 const CronScheduleSchema = z.object({
   schedule: z.string().describe('Cron expression (e.g. "0 5 * * *" for daily at 5am)'),
-  taskDescription: z.string().describe('Description of what to do (e.g. "Search for AI news")'),
+  taskDescription: z
+    .string()
+    .describe(
+      'Full execution instruction for when the job runs (e.g. "Run daily report pipeline: spawn Tier 2 to aggregate and write report" or "Check monitoring and send alert if needed")',
+    ),
   name: z.string().describe('Unique name for this job'),
 });
 
@@ -28,7 +32,8 @@ export function createCronTools(cronManager: CronManager): ToolDefinition[] {
   return [
     {
       name: 'cron_schedule',
-      description: 'Schedule a recurring task. Persists across restarts.',
+      description:
+        'Schedule a recurring task. Persists across restarts. PRE-REQUISITES: 1. If a delivery channel is specified (e.g. "Discord"), VERIFY the skill/config exists first. 2. If NO delivery channel is specified for a notification task, ASK the user for their preference before scheduling.',
       parameters: CronScheduleSchema,
       execute: async (args: unknown) => {
         const { schedule, taskDescription, name } = CronScheduleSchema.parse(args);
@@ -80,6 +85,30 @@ export function createCronTools(cronManager: CronManager): ToolDefinition[] {
 
         cronManager.removeJob(job.id);
         return `Job "${job.name}" removed.`;
+      },
+    },
+    {
+      name: 'cron_trigger',
+      description: 'Manually trigger a scheduled cron job immediately.',
+      parameters: CronRemoveSchema, // Reusing schema since it asks for name_or_id
+      execute: async (args: unknown) => {
+        const { name_or_id } = CronRemoveSchema.parse(args);
+
+        let job = cronManager.getJob(name_or_id);
+        if (!job) {
+          // Try searching by name
+          job = cronManager.getAllJobs().find((j) => j.name === name_or_id);
+        }
+
+        if (!job) return `Job "${name_or_id}" not found.`;
+
+        // Run async (don't await full completion if long running, but here we await to catch immediate errors)
+        try {
+          const summary = await cronManager.triggerJob(job.id);
+          return `Job "${job.name}" triggered successfully.\nSummary: ${summary}`;
+        } catch (e: any) {
+          return `Job "${job.name}" failed: ${e.message}`;
+        }
       },
     },
   ];

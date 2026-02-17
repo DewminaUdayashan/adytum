@@ -68,7 +68,7 @@ The first-ever run is a **cinematic experience** — the agent "comes alive" in 
 1. **Genesis Animation** — ASCII art evolves on screen: particles coalesce into a neural pattern, a digital "heartbeat" pulse starts, accompanied by progress bars and glitch effects
 2. **Awakening Dialogue** — The agent speaks for the first time:
    > _"Whoa… I just landed here. It's so new. Wait — who am I? What is my name?"_
-3. **Identity** — User names the agent (default: "Adytum")
+3. **Identity** — User names the agent (default: "Prometheus")
 4. **Curiosity** — Agent asks about the user:
    - _"And who are you? What should I call you?"_
    - _"What kind of work do we do together?"_ (developer, researcher, creative, etc.)

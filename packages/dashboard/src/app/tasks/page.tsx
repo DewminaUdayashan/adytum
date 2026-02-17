@@ -193,7 +193,7 @@ export default function TasksPage() {
                     <code className="text-xs text-primary font-mono mt-1 block">
                       {job.schedule}
                     </code>
-                    <p className="text-sm text-text-muted mt-2 line-clamp-1">{job.task}</p>
+                    <p className="text-sm text-text-muted mt-2 whitespace-pre-wrap">{job.task}</p>
                   </div>
                 </div>
 

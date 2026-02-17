@@ -169,7 +169,7 @@ export function loadConfig(projectRoot?: string): AdytumConfig {
     },
     litellmPort: Number(fileConfig.litellmPort || process.env.LITELLM_PORT || 4000),
     gatewayPort: Number(fileConfig.gatewayPort || process.env.GATEWAY_PORT || 3001),
-    dashboardPort: Number(fileConfig.dashboardPort || process.env.DASHBOARD_PORT || 3000),
+    dashboardPort: Number(fileConfig.dashboardPort || process.env.DASHBOARD_PORT || 3002),
     contextSoftLimit: Number(fileConfig.contextSoftLimit || 40000),
     heartbeatIntervalMinutes: Number(fileConfig.heartbeatIntervalMinutes || 30),
     dreamerIntervalMinutes: Number(fileConfig.dreamerIntervalMinutes || 30),

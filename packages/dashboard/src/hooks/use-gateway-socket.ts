@@ -92,7 +92,12 @@ export function useGatewaySocket() {
   }, []);
 
   const sendMessage = useCallback(
-    (content: string, sessionId: string, options?: { modelRole?: string; modelId?: string }) => {
+    (content: string, sessionId: string, options?: { 
+      modelRole?: string; 
+      modelId?: string;
+      workspaceId?: string;
+      attachments?: Array<{ type: 'image' | 'file' | 'audio' | 'video'; data: string; name?: string }>;
+    }) => {
       if (socketRef.current?.readyState === WebSocket.OPEN) {
         socketRef.current.send(
           JSON.stringify({

@@ -319,7 +319,7 @@ export class SkillLoader {
         models: [],
         litellmPort: 4000,
         gatewayPort: 3001,
-        dashboardPort: 3000,
+        dashboardPort: 3002,
         contextSoftLimit: 40000,
         heartbeatIntervalMinutes: 30,
         dreamerIntervalMinutes: 30,
@@ -484,8 +484,15 @@ export class SkillLoader {
         registration.started = true;
         registration.logger.info(`service started (${registration.service.id})`);
       } catch (err: any) {
+        const msg = err?.message || String(err);
+        const details =
+          err?.name === 'AggregateError' && Array.isArray(err?.errors)
+            ? err.errors.map((e: any) => e?.message || String(e)).join('; ')
+            : '';
         registration.logger.error(
-          `service start failed (${registration.service.id}): ${err?.message || err}`,
+          details
+            ? `service start failed (${registration.service.id}): ${msg} [${details}]`
+            : `service start failed (${registration.service.id}): ${msg}`,
         );
       }
     }

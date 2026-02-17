@@ -182,7 +182,7 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
   // ── Stage 3: Identity ───────────────────────────────────
   const agentName = await input({
     message: chalk.cyan('Give me a name:'),
-    default: 'Ady',
+    default: 'Prometheus',
   });
 
   console.log();
@@ -415,7 +415,7 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
     `ADYTUM_USER_ROLE=${userRole}`,
     `GATEWAY_PORT=3001`,
     `LITELLM_PORT=4000`,
-    `DASHBOARD_PORT=3000`,
+    `DASHBOARD_PORT=3002`,
     '',
   ];
 
@@ -449,7 +449,7 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
     }, { thinking: [], fast: [], local: [] }),
     litellmPort: 4000,
     gatewayPort: 3001,
-    dashboardPort: 3000,
+    dashboardPort: 3002,
     contextSoftLimit: 40000,
     heartbeatIntervalMinutes: 30,
     skills: {

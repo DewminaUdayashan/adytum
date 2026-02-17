@@ -1,0 +1,13 @@
+{
+  "id": "media-engine",
+  "name": "Media Engine",
+  "description": "On-demand archive extraction and media analysis tools.",
+  "version": "1.0.0",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "extractionDir": { "type": "string", "default": ".adytum_extracted" }
+    }
+  },
+  "always": true
+}
