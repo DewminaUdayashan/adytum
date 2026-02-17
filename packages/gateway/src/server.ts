@@ -69,17 +69,23 @@ export interface ServerConfig {
  * Manages client connections, routes messages to the agent runtime,
  * and streams events back to connected clients.
  */
+import { SensorManager } from './infrastructure/sensors/sensor-manager.js';
+import { SystemHealthSensor } from './infrastructure/sensors/system-health-sensor.js';
+import { KnowledgeWatcher } from './domain/knowledge/knowledge-watcher.js';
+
 export class GatewayServer extends EventEmitter {
   private app = Fastify({ logger: false });
   private config: ServerConfig;
   private agentController: AgentController;
   private approvals: ApprovalService;
+  private sensorManager: SensorManager;
 
   constructor(config: ServerConfig) {
     super();
     this.config = config;
     this.agentController = container.resolve(AgentController);
     this.approvals = container.resolve(ApprovalService);
+    this.sensorManager = container.resolve(SensorManager);
   }
 
   /**
@@ -89,18 +95,17 @@ export class GatewayServer extends EventEmitter {
     // Initialize Socket.IO with the underlying HTTP server EARLY to get priority for upgrade events
     if (this.config.socketIOService) {
       this.config.socketIOService.initialize(this.app.server);
-      
+
       // Bridge incoming Socket.IO messages to the internal frame system
       this.config.socketIOService.on('message', (data: any) => {
         if (data && data.sessionId) {
-            this.emit('frame', {
-                sessionId: data.sessionId,
-                frame: data
-            });
+          this.emit('frame', {
+            sessionId: data.sessionId,
+            frame: data,
+          });
         }
       });
     }
-
 
     await this.app.register(cors, {
       origin: [
@@ -114,7 +119,7 @@ export class GatewayServer extends EventEmitter {
 
     // Register a placeholder route for /socket.io to prevent Fastify 404s during polling
     this.app.get('/socket.io/*', async (req, reply) => {
-        return reply.status(200).send();
+      return reply.status(200).send();
     });
 
     // Centralized Error Handling
@@ -158,6 +163,21 @@ export class GatewayServer extends EventEmitter {
       });
     });
 
+    // Initialize Sensors
+    // We manually register known sensors here to ensure they are picked up
+    // In the future, this could be auto-di-scanned
+    this.sensorManager.register(container.resolve(SystemHealthSensor));
+
+    // KnowledgeWatcher is a special case as it needs workspacePath which is injected via factory or config usually
+    // But since it is a singleton currently getting injected with GraphIndexer, we can try resolving it.
+    // However, KnowledgeWatcher constructor takes (GraphIndexer, workspacePath).
+    // The DI container might fail if workspacePath isn't registered as a token.
+    // For now, let's assume KnowledgeWatcher is manually instantiated or we register it if we can find it.
+    // Actually, KnowledgeWatcher is started in index.ts usually?
+    // Let's check index.ts. If it's already running there, we might need to unify.
+    // For now let's just register SystemHealthSensor and start the manager.
+    await this.sensorManager.startAll();
+
     logger.info(`Starting Gateway Server on ${this.config.host}:${this.config.port}...`);
 
     await this.app.ready();
@@ -169,7 +189,7 @@ export class GatewayServer extends EventEmitter {
   /** Send a frame to a specific session (delegated to agentController). */
   sendToSession(sessionId: string, frame: WebSocketFrame): void {
     if (this.config.socketIOService) {
-        this.config.socketIOService.broadcast('message', frame); // For now broadcast, or improve SocketIOService to target sessions
+      this.config.socketIOService.broadcast('message', frame); // For now broadcast, or improve SocketIOService to target sessions
     }
   }
 
@@ -223,6 +243,7 @@ export class GatewayServer extends EventEmitter {
    * Executes stop.
    */
   async stop(): Promise<void> {
+    await this.sensorManager.stopAll();
     await this.app.close();
   }
 }

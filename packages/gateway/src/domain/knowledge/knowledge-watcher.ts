@@ -3,17 +3,29 @@ import { resolve, join, extname } from 'node:path';
 import { singleton, inject } from 'tsyringe';
 import { GraphIndexer } from './graph-indexer.js';
 import { logger } from '../../logger.js';
+import type { Sensor, SensorStatus } from '../../infrastructure/sensors/sensor.interface.js';
+import { EventBusService } from '../../infrastructure/events/event-bus.js';
+import { FileEvents } from '@adytum/shared';
 
 @singleton()
-export class KnowledgeWatcher {
+export class KnowledgeWatcher implements Sensor {
+  public readonly id = 'knowledge-watcher';
+  public readonly name = 'File System Watcher';
+
   private watcher: any = null;
+  private status: SensorStatus = 'inactive';
 
   constructor(
     @inject(GraphIndexer) private indexer: GraphIndexer,
+    @inject(EventBusService) private eventBus: EventBusService,
     private workspacePath: string,
   ) {}
 
-  start(): void {
+  getStatus(): SensorStatus {
+    return this.status;
+  }
+
+  async start(): Promise<void> {
     if (this.watcher) return;
 
     logger.info(`Starting KnowledgeWatcher on ${this.workspacePath}`);
@@ -28,16 +40,18 @@ export class KnowledgeWatcher {
         if (!supported.includes(ext)) return;
 
         // Debounce and trigger re-index
-        this.handleFileChange(filename);
+        this.handleFileChange(filename, event);
       });
+      this.status = 'active';
     } catch (err) {
       logger.error({ err }, 'Failed to start KnowledgeWatcher');
+      this.status = 'error';
     }
   }
 
   private debounceTimers = new Map<string, NodeJS.Timeout>();
 
-  private handleFileChange(filename: string): void {
+  private handleFileChange(filename: string, eventType: string): void {
     const fullPath = resolve(this.workspacePath, filename);
 
     // Ignore common output/dependency directories to prevent infinite loops (e.g. graph updates in /data)
@@ -57,11 +71,30 @@ export class KnowledgeWatcher {
     const timer = setTimeout(async () => {
       try {
         logger.debug(`Re-indexing changed file: ${filename}`);
+
+        // Emit event to bus
+        // We use 'rename' event from fs.watch for creation/deletion, 'change' for modification
+        // But node:fs.watch is tricky. For now, we assume modification if file exists.
+        const exists = existsSync(fullPath);
+        const type = exists ? FileEvents.MODIFIED : FileEvents.DELETED;
+
+        this.eventBus.publish(
+          type,
+          {
+            path: filename,
+            fullPath,
+            workspaceId: 'default',
+          },
+          'knowledge-watcher',
+        );
+
         // We call update() on the indexer.
         // In a more optimized version we could add a method to index a single file.
         // For now, indexer.update() handles incremental logic via hashing.
         // CRITICAL: Ensure we skip LLM summaries to avoid costs during auto-indexing.
-        await this.indexer.update(undefined, undefined, { mode: 'fast', skipLLM: true });
+        if (exists) {
+          await this.indexer.update(undefined, undefined, { mode: 'fast', skipLLM: true });
+        }
       } catch (err) {
         logger.error({ err, filename }, 'Failed to re-index file');
       } finally {
@@ -72,7 +105,7 @@ export class KnowledgeWatcher {
     this.debounceTimers.set(filename, timer);
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
     if (this.watcher) {
       this.watcher.close();
       this.watcher = null;
@@ -81,5 +114,6 @@ export class KnowledgeWatcher {
       clearTimeout(timer);
     }
     this.debounceTimers.clear();
+    this.status = 'inactive';
   }
 }
