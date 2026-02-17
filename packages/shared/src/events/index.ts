@@ -40,10 +40,20 @@ export const AgentEvents = {
 export const SystemEvents = {
   READY: 'system:ready',
   CONFIG_UPDATED: 'system:config_updated',
+  HEALTH_WARNING: 'system:health_warning',
+  RESOURCE_USAGE: 'system:resource_usage',
 } as const;
 
-export type EventType = 
-  | typeof MemoryEvents[keyof typeof MemoryEvents]
-  | typeof GraphEvents[keyof typeof GraphEvents]
-  | typeof AgentEvents[keyof typeof AgentEvents]
-  | typeof SystemEvents[keyof typeof SystemEvents];
+// File System Events
+export const FileEvents = {
+  CREATED: 'file:created',
+  MODIFIED: 'file:modified',
+  DELETED: 'file:deleted',
+} as const;
+
+export type EventType =
+  | (typeof MemoryEvents)[keyof typeof MemoryEvents]
+  | (typeof GraphEvents)[keyof typeof GraphEvents]
+  | (typeof AgentEvents)[keyof typeof AgentEvents]
+  | (typeof FileEvents)[keyof typeof FileEvents]
+  | (typeof SystemEvents)[keyof typeof SystemEvents];

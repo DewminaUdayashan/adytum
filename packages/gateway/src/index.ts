@@ -72,7 +72,7 @@ export const startGateway = async (rootPath?: string) => {
   // Initialize DI Container
   setupContainer();
 
-// ... (imports)
+  // ... (imports)
 
   // Initialize DI Container
   setupContainer();
@@ -95,7 +95,7 @@ export const startGateway = async (rootPath?: string) => {
 
   // Vector Embeddings Support
   const embeddingService = container.resolve(EmbeddingService);
-  
+
   const memoryStore = new MemoryStore(memoryDb, embeddingService);
   memoryStore.setEventBus(eventBus);
   const graphStore = new GraphStore(config.dataPath);
@@ -198,8 +198,27 @@ export const startGateway = async (rootPath?: string) => {
   skillLoader.setSecrets(secretsStore.getAll());
   await skillLoader.init(toolRegistry);
 
-  const knowledgeWatcher = new KnowledgeWatcher(graphIndexer, config.workspacePath);
-  knowledgeWatcher.start();
+  /*
+   * KnowledgeWatcher is now a Sensor and integrated via SensorManager in GatewayServer generally.
+   * However, index.ts (CLI entry point) instantiates it manually for the standalone runtime loop.
+   * We need to update this to inject EventBusService.
+   */
+  const knowledgeWatcher = new KnowledgeWatcher(graphIndexer, eventBus, config.workspacePath);
+  // knowledgeWatcher.start(); // Covered by SensorManager in GatewayServer usually, but here maybe standalone?
+  // Actually, index.ts starts GatewayServer later.
+  // If GatewayServer owns SensorManager and starts all sensors, we shouldn't start it here manually
+  // UNLESS we want it running even before gateway starts (which is fine).
+  // But wait, GatewayServer creates its OWN SensorManager via DI.
+  // Code in server.ts: this.sensorManager.register(container.resolve(SystemHealthSensor));
+  // It doesn't register KnowledgeWatcher yet.
+
+  // Let's register this instance with the container so GatewayServer picks it up?
+  // Or just let GatewayServer resolve a new one?
+  // KnowledgeWatcher is @singleton.
+  // If we resolve it here, the container holds it.
+
+  // Let's just update the constructor for now to fix the build.
+  await knowledgeWatcher.start();
 
   const agentRuntimeConfig = {
     modelRouter,
@@ -548,7 +567,7 @@ export const startGateway = async (rootPath?: string) => {
     console.log(chalk.dim(`\n  ${config.agentName} is resting. Goodbye.\n`));
     rl.close();
     permissionManager.stopWatching();
-    knowledgeWatcher.stop();
+    await knowledgeWatcher.stop();
     await skillLoader.stop();
     await server.stop();
     process.exit(0);
@@ -749,9 +768,7 @@ export const startGateway = async (rootPath?: string) => {
     await server.stop();
     process.exit(0);
   });
-}
-
-
+};
 
 // Only auto-start if run directly (node index.js)
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

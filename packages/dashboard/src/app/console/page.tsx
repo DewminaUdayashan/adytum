@@ -22,6 +22,14 @@ const TYPE_COLORS: Record<string, string> = {
   connect: 'text-success',
   message: 'text-text-primary',
   approval_request: 'text-warning',
+  'file:created': 'text-accent-primary',
+  'file:modified': 'text-accent-primary',
+  'file:deleted': 'text-error',
+  'graph:indexing_started': 'text-warning',
+  'graph:indexing_completed': 'text-success',
+  'graph:node_updated': 'text-success',
+  'system:resource_usage': 'text-text-muted',
+  'system:health_warning': 'text-warning',
 };
 
 const TYPE_PREFIXES: Record<string, string> = {
@@ -35,6 +43,14 @@ const TYPE_PREFIXES: Record<string, string> = {
   connect: '🔗 CONN',
   message: '💬 MSG',
   approval_request: '✅ APPROVE',
+  'file:created': '📁 CREATE',
+  'file:modified': '📝 MODIFY',
+  'file:deleted': '🗑️ DELETE',
+  'graph:indexing_started': '🔍 INDEX',
+  'graph:indexing_completed': '✅ DONE',
+  'graph:node_updated': '🌿 GRAPH',
+  'system:resource_usage': '📊 SYSTEM',
+  'system:health_warning': '⚠️ HEALTH',
 };
 
 export default function ConsolePage() {
@@ -154,7 +170,7 @@ function ConsoleEntry({
   return (
     <div className="flex gap-3 hover:bg-bg-secondary/40 px-3 py-1 rounded-md transition-colors items-start">
       <span className="text-text-muted shrink-0">{time}</span>
-      <span className={clsx('shrink-0 font-semibold w-20', color)}>[{prefix}]</span>
+      <span className={clsx('shrink-0 font-bold w-28', color)}>[{prefix}]</span>
       <div className="flex-1">
         <span className="text-text-secondary break-all">{content}</span>
         {isApproval && (
