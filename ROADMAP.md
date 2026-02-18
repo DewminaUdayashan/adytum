@@ -28,13 +28,20 @@ Action: Allow the agent to edit these files directly to "learn" new facts perman
 - [x] **Semantic Search**: Vector-based knowledge retrieval.
 - [x] **Dashboard Phase 2**: Visualizers for plans, search results, and recovery actions.
 
-## Phase 3: Collaborative Ecosystem (UPCOMING)
+## Phase 3: Advanced Memory & Reflection (IN PROGRESS)
+
+- [x] **Incremental Dreamer**: Fact extraction from conversation deltas.
+- [x] **Semantic Search Integration**: local embeddings using Xenova.
+- [x] **Hybrid Context Retrieval**: BM25 + Vector search for Agent context.
+- [ ] **Topic-Based Compaction**: Merging redundant memories into canonical facts.
+
+## Phase 4: Collaborative Ecosystem (UPCOMING)
 
 - [ ] **Multi-Agent Swarms**: Dynamic spawning and delegation.
 - [ ] **Cross-Workspace Knowledge**: Federated indexing across projects.
 - [ ] **Real-time Collaboration**: Shared agent sessions and history.
 - [ ] **Advanced Skill Evolution**: Self-generating tools and connectors.
-      Phase 3: Collaborative Swarm (Multi-Agent)
+      Phase 4: Collaborative Swarm (Multi-Agent)
       Goal: Enable agents to work together without constant micro-management from the root.
 
   3.1 Peer-to-Peer Messaging

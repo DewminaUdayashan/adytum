@@ -23,6 +23,7 @@ export interface LLMChatOptions {
   tools?: OpenAI.ChatCompletionTool[];
   temperature?: number;
   maxTokens?: number;
+  response_format?: { type: 'text' | 'json_object' };
 }
 
 export interface LLMChatResult {
@@ -98,6 +99,7 @@ export class LLMClient {
       apiKey,
       maxTokens: options.maxTokens,
       temperature: options.temperature,
+      response_format: options.response_format,
     };
 
     // Tools mapping

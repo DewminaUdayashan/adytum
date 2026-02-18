@@ -120,10 +120,60 @@ export class MemoryStore {
     });
 
     if (memory && this.eventBus) {
-        this.eventBus.publish(MemoryEvents.CREATED, memory, 'MemoryStore');
+      this.eventBus.publish(MemoryEvents.CREATED, memory, 'MemoryStore');
     }
 
     return memory;
+  }
+
+  /**
+   * Executes add batch.
+   * @param items - Items to add.
+   */
+  async addBatch(
+    items: Array<{
+      content: string;
+      source: MemoryRow['source'];
+      tags?: string[];
+      metadata?: Record<string, unknown>;
+      category?: MemoryCategory;
+      workspaceId?: string;
+    }>,
+  ): Promise<void> {
+    const enriched = await Promise.all(
+      items.map(async (item) => {
+        const sanitized = redactSecrets(item.content);
+        let embedding: Buffer | undefined;
+        try {
+          const vector = await this.embeddingService.embed(sanitized);
+          embedding = Buffer.from(vector.buffer);
+        } catch (err) {
+          console.error('[MemoryStore] Failed to generate embedding:', err);
+        }
+        return {
+          content: sanitized,
+          source: item.source,
+          category: item.category || 'general',
+          tags: item.tags,
+          metadata: item.metadata,
+          workspaceId: item.workspaceId,
+          embedding,
+        };
+      }),
+    );
+
+    this.db.storeStructuredMemories(enriched);
+
+    if (this.eventBus) {
+      enriched.forEach((m) => {
+        // We construct a mock MemoryRow for event (id/created_at missing but usually fine for simple notification)
+        // Ideally DB returns the inserted rows, but storeStructuredMemories is void.
+        // We can skip event or fire generic batch event.
+        // For now, let's fire created event with partial data if needed, or skip.
+        // Skipping individual events for batch to avoid spam.
+      });
+      // Optionally fire a batch event if EventBus supports it
+    }
   }
 
   /**

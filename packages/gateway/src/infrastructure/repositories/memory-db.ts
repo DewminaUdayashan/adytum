@@ -284,6 +284,51 @@ export class MemoryDB {
   }
 
   /**
+   * Stores multiple structured memories in a batch transaction.
+   * @param memories - Array of memory objects to store.
+   */
+  storeStructuredMemories(
+    memories: Array<{
+      content: string;
+      category: string;
+      tags?: string[];
+      source?: string;
+      metadata?: Record<string, unknown>;
+    }>,
+  ): void {
+    const insert = this.db.prepare(
+      'INSERT INTO memories (id, workspace_id, content, source, category, tags, metadata, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+    );
+    const insertFts = this.db.prepare(
+      'INSERT INTO memories_fts (content, memory_id) VALUES (?, ?)',
+    );
+
+    const transaction = this.db.transaction((items) => {
+      for (const item of items) {
+        const id = crypto.randomUUID();
+        const createdAt = Date.now();
+        insert.run(
+          id,
+          null, // workspace_id (global for now)
+          item.content,
+          item.source || 'dreamer',
+          item.category,
+          item.tags ? JSON.stringify(item.tags) : null,
+          item.metadata ? JSON.stringify(item.metadata) : null,
+          createdAt,
+        );
+        try {
+          insertFts.run(item.content, id);
+        } catch {
+          // ignore fts error
+        }
+      }
+    });
+
+    transaction(memories);
+  }
+
+  /**
    * Executes list memories.
    * @param limit - Limit.
    * @returns The resulting collection of values.
