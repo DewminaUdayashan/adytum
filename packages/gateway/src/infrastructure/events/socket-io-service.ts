@@ -58,4 +58,17 @@ export class SocketIOService extends EventEmitter {
       this.io.emit(event, payload);
     }
   }
+
+  async stop() {
+    if (this.io) {
+      logger.info('Stopping Socket.IO Service...');
+      return new Promise<void>((resolve) => {
+        this.io!.close(() => {
+          logger.info('Socket.IO Service stopped.');
+          this.io = null;
+          resolve();
+        });
+      });
+    }
+  }
 }

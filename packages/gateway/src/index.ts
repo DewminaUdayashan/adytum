@@ -62,6 +62,11 @@ import { createPlannerTools } from './tools/planner.js';
 import { ToolErrorHandler } from './domain/logic/tool-error-handler.js';
 import { EventBusService } from './infrastructure/events/event-bus.js';
 import { SocketIOService } from './infrastructure/events/socket-io-service.js';
+import { DirectMessagingService } from './application/services/direct-messaging-service.js';
+import { createCommunicationTools } from './tools/communication.js';
+import { UserInteractionService } from './application/services/user-interaction-service.js';
+import { createInteractionTools } from './tools/interaction.js';
+import { createEventTools } from './tools/events.js';
 
 const defaultProjectRoot = resolve(fileURLToPath(import.meta.url), '../../..');
 
@@ -452,12 +457,33 @@ export const startGateway = async (rootPath?: string) => {
     return `https://api.dicebear.com/9.x/adventurer/svg?seed=${seed}`;
   };
 
+  // ─── Messaging Service (Phase 1.1) ────────────────────────
+  const messagingService = new DirectMessagingService(agentRegistry, runtimeRegistry, logbookService);
+  container.register(DirectMessagingService, { useValue: messagingService });
+
+  // ─── Interaction Service (Phase 1.1) ──────────────────────
+  // Note: server is instantiated later, but we need it here.
+  
+  // Resolution: Use a proxy for GatewayServer
+  const interactionService = new UserInteractionService({
+    requestInput: async (...args: any[]) => {
+      // @ts-ignore
+      if (!global.adytumServer) throw new Error("GatewayServer not yet initialized");
+      // @ts-ignore
+      return global.adytumServer.requestInput(...args);
+    }
+  } as any, logbookService);
+  container.register(UserInteractionService, { useValue: interactionService });
+
   const subAgentSpawner = new SubAgentSpawner(
     agentRuntimeConfig,
     runtimeRegistry,
     agentRegistry,
     logbookService,
     agentLogStore,
+    messagingService,
+    interactionService, // <--- Correctly Injected
+    eventBus, // <--- Added
     { generateAvatar, avatarEnabled },
   );
   const spawnAgentTool = createSpawnAgentTool(
@@ -469,6 +495,19 @@ export const startGateway = async (rootPath?: string) => {
     { generateAvatar, avatarEnabled },
   );
   toolRegistry.register(spawnAgentTool);
+
+  // Register Communication Tools for Root Agent
+  const commTools = createCommunicationTools(messagingService, prometheusAgentId);
+  commTools.forEach((t) => toolRegistry.register(t));
+
+  // Register Interaction Tools for Root Agent
+  const interactTools = createInteractionTools(interactionService, prometheusAgentId, { workspaceId: config.workspacePath });
+  interactTools.forEach((t) => toolRegistry.register(t));
+
+  // Register Event Tools for Root Agent (Phase 2)
+  const eventTools = createEventTools(eventBus, prometheusAgentId);
+  eventTools.forEach((t) => toolRegistry.register(t));
+
   agent.refreshSystemPrompt();
 
   // Emergency stop: log critical model failure to LOGBOOK
@@ -563,18 +602,34 @@ export const startGateway = async (rootPath?: string) => {
   /**
    * Executes shutdown.
    */
+  let isShuttingDown = false;
+  /**
+   * Executes shutdown.
+   */
   const shutdown = async () => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+
     console.log(chalk.dim(`\n  ${config.agentName} is resting. Goodbye.\n`));
+    
+    // Stop interactive loop
     rl.close();
-    permissionManager.stopWatching();
-    await knowledgeWatcher.stop();
-    await skillLoader.stop();
-    await server.stop();
-    process.exit(0);
+    
+    try {
+      permissionManager.stopWatching();
+      await knowledgeWatcher.stop();
+      await skillLoader.stop();
+      await server.stop();
+      logger.info('Shutdown complete.');
+      process.exit(0);
+    } catch (err) {
+      logger.error({ err }, 'Error during shutdown');
+      process.exit(1);
+    }
   };
 
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', () => shutdown());
+  process.on('SIGTERM', () => shutdown());
 
   // Shared approval prompt that pauses/resumes the main REPL
   // to prevent double character echo
@@ -601,6 +656,36 @@ export const startGateway = async (rootPath?: string) => {
       });
     });
   };
+
+  /**
+   * Prompts for text input in the CLI.
+   */
+  const promptInput = async (promptText: string): Promise<string> => {
+    rl.pause();
+    process.stdin.setRawMode?.(false);
+
+    return new Promise((resolve) => {
+      const inputRl = createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        terminal: true,
+      });
+      inputRl.question(promptText, (answer) => {
+        inputRl.close();
+        rl.resume();
+        resolve(answer.trim());
+      });
+    });
+  };
+
+  // Handle local input requests from GatewayServer (for ask_user tool)
+  server.on('input_request', async (payload: { id: string; description: string }) => {
+    if (process.stdin.isTTY) {
+      console.log(chalk.yellow(`\n  ❓ Input Requested: ${payload.description}`));
+      const answer = await promptInput(chalk.cyan('  > '));
+      server.resolveInput(payload.id, answer);
+    }
+  });
 
   // Re-wire the shell tool's approval callback to respect execution permissions and dashboard approvals
   toolRegistry.get('shell_execute')!.execute = createShellToolWithApproval(
@@ -762,12 +847,7 @@ export const startGateway = async (rootPath?: string) => {
     rl.prompt();
   });
 
-  rl.on('close', async () => {
-    permissionManager.stopWatching();
-    await skillLoader.stop();
-    await server.stop();
-    process.exit(0);
-  });
+  rl.on('close', () => shutdown());
 };
 
 // Only auto-start if run directly (node index.js)

@@ -57,7 +57,10 @@ async function runTest() {
     registry,
     {} as any,
     {} as any,
-    {} as any,
+    {} as any, // AgentLogStore
+    {} as any, // DirectMessagingService
+    {} as any, // UserInteractionService
+    {} as any, // EventBusService
   );
 
   console.log(`[Setup] Parent Session: ${parentSessionId}`);

@@ -143,6 +143,11 @@ export class AgentRegistry {
     return this.getAll().filter((a) => a.parentId === parentId);
   }
 
+  /** Get active session ID for an agent (if running). */
+  getActiveSessionId(agentId: string): string | undefined {
+    return this.agents.get(agentId)?.activeSessionId;
+  }
+
   /** Compute uptime in seconds (0 if deactivated). */
   getUptimeSeconds(agentId: string): number {
     const r = this.agents.get(agentId);

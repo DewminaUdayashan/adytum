@@ -82,4 +82,11 @@ export class RuntimeRegistry {
   isSessionActive(sessionId: string): boolean {
     return this.sessions.has(sessionId);
   }
+
+  /**
+   * Retrieves the runtime instance for a session.
+   */
+  getRuntime(sessionId: string): AgentRuntime | undefined {
+    return this.sessions.get(sessionId);
+  }
 }

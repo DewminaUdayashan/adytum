@@ -14,6 +14,12 @@ import type { LogbookService } from '../../application/services/logbook-service.
 import type { AgentLogStore } from '../agents/agent-log-store.js';
 import { createSpawnAgentTool, type GenerateAvatarFn } from '../../tools/spawn-agent.js';
 import { ToolRegistry } from '../../tools/registry.js';
+import { DirectMessagingService } from '../../application/services/direct-messaging-service.js';
+import { createCommunicationTools } from '../../tools/communication.js';
+import { UserInteractionService } from '../../application/services/user-interaction-service.js';
+import { createInteractionTools } from '../../tools/interaction.js';
+import { createEventTools } from '../../tools/events.js';
+import type { EventBusService } from '../../infrastructure/events/event-bus.js';
 
 export interface SubAgentConfig extends AgentRuntimeConfig {
   parentTraceId: string;
@@ -33,6 +39,9 @@ export class SubAgentSpawner extends EventEmitter {
   private logbookService: LogbookService;
   private agentLogStore: AgentLogStore;
   private avatarOptions?: { generateAvatar?: GenerateAvatarFn; avatarEnabled?: boolean };
+  private messagingService: DirectMessagingService;
+  private interactionService: UserInteractionService;
+  private eventBus: EventBusService;
 
   constructor(
     config: AgentRuntimeConfig,
@@ -40,6 +49,9 @@ export class SubAgentSpawner extends EventEmitter {
     agentRegistry: AgentRegistry,
     logbookService: LogbookService,
     agentLogStore: AgentLogStore,
+    messagingService: DirectMessagingService,
+    interactionService: UserInteractionService,
+    eventBus: EventBusService,
     avatarOptions?: { generateAvatar?: GenerateAvatarFn; avatarEnabled?: boolean },
   ) {
     super();
@@ -48,6 +60,9 @@ export class SubAgentSpawner extends EventEmitter {
     this.agentRegistry = agentRegistry;
     this.logbookService = logbookService;
     this.agentLogStore = agentLogStore;
+    this.messagingService = messagingService;
+    this.interactionService = interactionService;
+    this.eventBus = eventBus;
     this.avatarOptions = avatarOptions;
   }
 
@@ -102,6 +117,24 @@ export class SubAgentSpawner extends EventEmitter {
         this.avatarOptions, // <--- FIX: Pass avatar options to specialized tool
       );
       childToolRegistry.register(specializedSpawnTool);
+
+      // Register Communication Tools for the child agent (so they can message others)
+      const commTools = createCommunicationTools(this.messagingService, childAgentId);
+      commTools.forEach(t => childToolRegistry.register(t));
+
+      // Register Interaction Tools (so they can ask user)
+      // Note: Child agents via spawn() have a session ID and maybe parent context.
+      // We pass childSessionId so the interaction request metadata is correct.
+      const interactTools = createInteractionTools(
+        this.interactionService, 
+        childAgentId, 
+        { sessionId: childSessionId, workspaceId: this.config.workspacePath } // Assuming workspacePath is ID here
+      ); 
+      interactTools.forEach(t => childToolRegistry.register(t));
+
+      // Register Event Tools (Phase 2)
+      const eventTools = createEventTools(this.eventBus, childAgentId);
+      eventTools.forEach(t => childToolRegistry.register(t));
     }
 
     // Create a new runtime for the sub-agent

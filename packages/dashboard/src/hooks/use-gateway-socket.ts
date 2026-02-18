@@ -59,6 +59,11 @@ export function useGatewaySocket() {
     // Normalize data to StreamEvent
     const event = data as StreamEvent;
     
+    // DEBUG: Log incoming event to console
+    if (event.type === 'input_request' || event.type === 'input_response') {
+        console.log('[Dashboard] Received event:', event);
+    }
+
     setEvents((prev) => {
         // Deduplicate if needed? For now just append.
         return [...prev.slice(-500), event];
@@ -164,5 +169,15 @@ export function useGatewaySocket() {
     sendFrame,
     clearEvents,
     sessionId: sessionIdRef.current,
+    sendInputResponse: useCallback((id: string, response: string) => {
+      if (socketRef.current?.connected) {
+        socketRef.current.emit('message', {
+          type: 'input_response',
+          id,
+          response,
+          sessionId: sessionIdRef.current,
+        });
+      }
+    }, []),
   };
 }

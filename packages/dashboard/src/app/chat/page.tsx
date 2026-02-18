@@ -7,7 +7,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useGatewaySocket, type StreamEvent } from '@/hooks/use-gateway-socket';
-import { Send, Bot, User, Zap, Sparkles, Paperclip, File, X, Layers } from 'lucide-react';
+import { Send, Bot, User, Zap, Sparkles, Paperclip, File, X, Layers, HelpCircle } from 'lucide-react';
 import { clsx } from 'clsx';
 import { MarkdownRenderer } from '@/components/chat/markdown-renderer';
 import { LinkPreviewList } from '@/components/chat/link-previews';
@@ -32,10 +32,16 @@ interface ChatMessage {
     kind: string;
     status?: 'pending' | 'approved' | 'denied';
   }>;
+  inputRequest?: {
+    id: string;
+    description: string;
+    tool?: string;
+    status?: 'pending' | 'resolved';
+  };
 }
 
 export default function ChatPage() {
-  const { connected, events, sendMessage, sendFrame, sessionId } = useGatewaySocket();
+  const { connected, events, sendMessage, sendFrame, sessionId, sendInputResponse } = useGatewaySocket();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
@@ -58,6 +64,9 @@ export default function ChatPage() {
 
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('');
+  
+  const [activeInputRequest, setActiveInputRequest] = useState<{ id: string; description: string } | null>(null);
+  const processedInputsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
     const fetchWorkspaces = async () => {
@@ -222,6 +231,56 @@ export default function ChatPage() {
         continue;
       }
 
+      if (event.type === 'input_request') {
+        const id = String(event.id);
+        if (processedInputsRef.current.has(id)) continue;
+        
+        processedInputsRef.current.add(id);
+        const description = String(event.description || 'Input Requested');
+        const tool = (event.metadata as any)?.tool || 'ask_user';
+        
+        setActiveInputRequest({ id, description });
+        
+        const tools = pendingToolsRef.current.length > 0 ? [...pendingToolsRef.current] : undefined;
+
+        setMessages((prev) => {
+          const lastMsg = prev[prev.length - 1];
+          const inputReq = {
+            id,
+            description,
+            tool,
+            status: 'pending' as const,
+          };
+
+          if (lastMsg && lastMsg.role === 'assistant') {
+            return [
+              ...prev.slice(0, -1),
+              {
+                ...lastMsg,
+                inputRequest: inputReq,
+                toolCalls: tools || lastMsg.toolCalls,
+              },
+            ];
+          }
+          return [
+            ...prev,
+            {
+              id: crypto.randomUUID(),
+              role: 'assistant',
+              content: '',
+              timestamp: Date.now(),
+              inputRequest: inputReq,
+              toolCalls: tools,
+            },
+          ];
+        });
+        
+        setIsThinking(false);
+        setThinkingStartedAt(null);
+        pushActivity('tool_call', `Waiting for user input: ${description}`);
+        continue;
+      }
+
       if (event.type !== 'stream' || event.sessionId !== sessionId) {
         continue;
       }
@@ -353,6 +412,48 @@ export default function ChatPage() {
     const text = input.trim();
     if (!text || !connected) return;
 
+    // HIJACK: If there is an active input request, fulfill it instead of sending a new message
+    if (activeInputRequest) {
+        sendInputResponse(activeInputRequest.id, text);
+        
+        // Add user response to chat history
+        const msg: ChatMessage = {
+            id: crypto.randomUUID(),
+            role: 'user',
+            content: text,
+            timestamp: Date.now(),
+        };
+        setMessages((prev) => [...prev, msg]);
+        
+        // Update message status
+        setMessages((prev) => {
+            return prev.map((msg) => {
+                if (msg.inputRequest?.id === activeInputRequest.id) {
+                    return {
+                        ...msg,
+                        inputRequest: { ...msg.inputRequest, status: 'resolved' },
+                    };
+                }
+                return msg;
+            });
+        });
+
+        setInput('');
+        setActiveInputRequest(null);
+        setActivityFeed((prev) => [
+            ...prev,
+            {
+                id: crypto.randomUUID(),
+                type: 'response',
+                text: 'Input provided.',
+                timestamp: Date.now(),
+            }
+        ]);
+        setThinkingStartedAt(Date.now());
+        setIsThinking(true);
+        return;
+    }
+
     const msg: ChatMessage = {
       id: crypto.randomUUID(),
       role: 'user',
@@ -382,7 +483,7 @@ export default function ChatPage() {
     setThinkingStartedAt(Date.now());
     setIsThinking(true);
     setActiveApprovals([]); // Reset for new turn
-  }, [input, connected, sendMessage, sessionId]);
+  }, [input, connected, sendMessage, sessionId, activeInputRequest, sendInputResponse]);
 
   return (
     <div className="flex flex-col h-full animate-fade-in">
@@ -510,7 +611,13 @@ export default function ChatPage() {
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
-              placeholder={connected ? 'Message your agent…' : 'Connecting…'}
+              placeholder={
+                !connected 
+                  ? 'Connecting…' 
+                  : activeInputRequest 
+                    ? `Replying to: ${activeInputRequest.description}` 
+                    : 'Message your agent…'
+              }
               disabled={!connected}
               className="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-muted focus:outline-none disabled:opacity-40"
             />
@@ -631,6 +738,57 @@ function MessageBubble({
                   )}
                 </div>
               ))}
+            </div>
+          )}
+          
+          {/* Inline Input Request */}
+          {!isUser && message.inputRequest && (
+            <div className="mt-4 pt-3 border-t border-border-primary/30">
+              <div
+                className={clsx(
+                  "rounded-lg px-3 py-3 flex flex-col gap-2 transition-colors",
+                  message.inputRequest.status === 'pending'
+                    ? "bg-accent-primary/10 border border-accent-primary/20 shadow-sm"
+                    : "bg-bg-tertiary/40 border border-transparent"
+                )}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex gap-3 items-start">
+                    <div className={clsx(
+                      "mt-0.5 p-1.5 rounded-lg shrink-0",
+                      message.inputRequest.status === 'pending' 
+                        ? "bg-accent-primary text-white" 
+                        : "bg-bg-quaternary text-text-muted"
+                    )}>
+                      <HelpCircle className="h-4 w-4" />
+                    </div>
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-3">
+                        <p className={clsx(
+                          "text-[10px] font-bold uppercase tracking-[0.05em]",
+                          message.inputRequest.status === 'pending' ? "text-accent-primary" : "text-text-muted"
+                        )}>
+                          Question for you
+                        </p>
+                        {message.inputRequest.tool && (
+                          <span className="text-[9px] font-mono text-text-tertiary/70 bg-bg-tertiary/50 px-1.5 py-0.5 rounded flex items-center gap-1">
+                            via {message.inputRequest.tool}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-[13px] text-text-primary leading-snug font-medium">
+                        {message.inputRequest.description}
+                      </p>
+                    </div>
+                  </div>
+                  {message.inputRequest.status === 'resolved' && (
+                    <div className="flex items-center gap-1.5 px-2 py-1 rounded bg-success/15 text-success shrink-0 scale-90 origin-right">
+                      <Zap className="h-2.5 w-2.5 fill-current" />
+                      <span className="text-[9px] font-black uppercase tracking-tighter">Done</span>
+                    </div>
+                  )}
+                </div>
+              </div>
             </div>
           )}
         </div>

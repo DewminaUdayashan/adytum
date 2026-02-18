@@ -99,10 +99,16 @@ export class GatewayServer extends EventEmitter {
       // Bridge incoming Socket.IO messages to the internal frame system
       this.config.socketIOService.on('message', (data: any) => {
         if (data && data.sessionId) {
-          this.emit('frame', {
-            sessionId: data.sessionId,
-            frame: data,
-          });
+          if (data.type === 'input_response' && data.id && data.response) {
+            logger.info(`Received input response for ${data.id}`);
+            const resolved = this.resolveInput(data.id, data.response);
+            logger.info(`Input ${data.id} resolved: ${resolved}`);
+          } else {
+            this.emit('frame', {
+              sessionId: data.sessionId,
+              frame: data,
+            });
+          }
         }
       });
     }
@@ -244,6 +250,46 @@ export class GatewayServer extends EventEmitter {
    */
   async stop(): Promise<void> {
     await this.sensorManager.stopAll();
+    if (this.config.socketIOService) {
+      await this.config.socketIOService.stop();
+    }
     await this.app.close();
+  }
+
+  // ─── Input Requests ──────────────────────────────────────
+
+  /**
+   * Resolve a pending input request.
+   */
+  resolveInput(id: string, value: string): boolean {
+    return this.approvals.resolveInput(id, value);
+  }
+
+  /**
+   * Request text input from the user.
+   */
+  async requestInput(description: string, metadata?: { sessionId?: string; workspaceId?: string }): Promise<string> {
+    const id = crypto.randomUUID();
+    const promise = this.approvals.requestInput(id, description);
+
+    // Broadcast input request to frontend
+    this.broadcast({
+      type: 'input_request',
+      id,
+      description,
+      sessionId: metadata?.sessionId,
+      workspaceId: metadata?.workspaceId,
+      expiresAt: Date.now() + 300_000,
+    } as any);
+
+    // Emit local event for CLI handling
+    this.emit('input_request', {
+      id,
+      description,
+      sessionId: metadata?.sessionId,
+      workspaceId: metadata?.workspaceId,
+    });
+
+    return promise;
   }
 }
