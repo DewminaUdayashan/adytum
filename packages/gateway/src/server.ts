@@ -44,6 +44,8 @@ import type { ModelCatalog } from './infrastructure/llm/model-catalog.js';
 import type { ModelRouter } from './infrastructure/llm/model-router.js';
 import type { SocketIOService } from './infrastructure/events/socket-io-service.js';
 
+import { AgentsController } from './api/controllers/agents.controller.js';
+
 export interface ServerConfig {
   port: number;
   host: string;
@@ -62,6 +64,7 @@ export interface ServerConfig {
   onChainsUpdate?: (chains: Record<string, string[]>) => void;
   onRoutingUpdate?: (routing: AdytumConfig['routing']) => void;
   socketIOService?: SocketIOService;
+  agentsController?: AgentsController;
 }
 
 /**
@@ -77,6 +80,7 @@ export class GatewayServer extends EventEmitter {
   private app = Fastify({ logger: false });
   private config: ServerConfig;
   private agentController: AgentController;
+  private agentsController?: AgentsController; // Add this
   private approvals: ApprovalService;
   private sensorManager: SensorManager;
 
@@ -84,6 +88,7 @@ export class GatewayServer extends EventEmitter {
     super();
     this.config = config;
     this.agentController = container.resolve(AgentController);
+    this.agentsController = config.agentsController; // Inject
     this.approvals = container.resolve(ApprovalService);
     this.sensorManager = container.resolve(SensorManager);
   }
@@ -98,7 +103,19 @@ export class GatewayServer extends EventEmitter {
 
       // Bridge incoming Socket.IO messages to the internal frame system
       this.config.socketIOService.on('message', (data: any) => {
-        if (data && data.sessionId) {
+        if (!data) return;
+
+        // Handle responses first (they might not always have a sessionId)
+        if (data.type === 'input_response' && data.id && data.response) {
+          logger.info(`Received input response for ${data.id}`);
+          const resolved = this.resolveInput(data.id, data.response);
+          logger.info(`Input ${data.id} resolved: ${resolved}`);
+        } else if (data.type === 'approval_response' && data.id) {
+          logger.info(`Received approval response for ${data.id}: ${data.approved}`);
+          const resolved = this.resolveApproval(data.id, Boolean(data.approved));
+          logger.info(`Approval ${data.id} resolved: ${resolved}`);
+        } else if (data.sessionId) {
+          // Standard frames require a sessionId for routing
           this.emit('frame', {
             sessionId: data.sessionId,
             frame: data,
@@ -134,7 +151,7 @@ export class GatewayServer extends EventEmitter {
     await this.app.register(systemRoutes);
     await this.app.register(taskRoutes);
     await this.app.register(knowledgeRoutes);
-    await this.app.register(agentsRoutes);
+    await this.app.register(agentsRoutes); // This route file needs to use agentsController
 
     this.app.get('/api/models/runtime-status', async () => {
       return {
@@ -213,7 +230,7 @@ export class GatewayServer extends EventEmitter {
     const id = crypto.randomUUID();
     const promise = this.approvals.requestManual(id, payload);
 
-    this.agentController.broadcast({
+    this.broadcast({
       type: 'approval_request',
       id,
       kind: payload.kind,
@@ -244,6 +261,49 @@ export class GatewayServer extends EventEmitter {
    */
   async stop(): Promise<void> {
     await this.sensorManager.stopAll();
+    if (this.config.socketIOService) {
+      await this.config.socketIOService.stop();
+    }
     await this.app.close();
+  }
+
+  // ─── Input Requests ──────────────────────────────────────
+
+  /**
+   * Resolve a pending input request.
+   */
+  resolveInput(id: string, value: string): boolean {
+    return this.approvals.resolveInput(id, value);
+  }
+
+  /**
+   * Request text input from the user.
+   */
+  async requestInput(
+    description: string,
+    metadata?: { sessionId?: string; workspaceId?: string },
+  ): Promise<string> {
+    const id = crypto.randomUUID();
+    const promise = this.approvals.requestInput(id, description);
+
+    // Broadcast input request to frontend
+    this.broadcast({
+      type: 'input_request',
+      id,
+      description,
+      sessionId: metadata?.sessionId,
+      workspaceId: metadata?.workspaceId,
+      expiresAt: Date.now() + 300_000,
+    } as any);
+
+    // Emit local event for CLI handling
+    this.emit('input_request', {
+      id,
+      description,
+      sessionId: metadata?.sessionId,
+      workspaceId: metadata?.workspaceId,
+    });
+
+    return promise;
   }
 }

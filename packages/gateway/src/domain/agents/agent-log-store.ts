@@ -10,7 +10,7 @@ import type { AgentLogEntry } from '@adytum/shared';
 
 const LOGS_DIR = 'agent-logs';
 
-export type AgentLogType = 'thought' | 'action' | 'interaction';
+export type AgentLogType = AgentLogEntry['type'];
 
 /**
  * In-memory store of per-agent log entries, with optional file persistence.
@@ -60,15 +60,21 @@ export class AgentLogStore {
     writeFileSync(this.agentFile(agentId), JSON.stringify(entries, null, 2), 'utf-8');
   }
 
-  append(agentId: string, type: AgentLogType, content: string, payload?: Record<string, unknown>): AgentLogEntry {
+  append(
+    agentId: string,
+    type: AgentLogType,
+    content: string,
+    payload?: Record<string, unknown>,
+  ): AgentLogEntry {
     const entry: AgentLogEntry = {
       id: uuid(),
       agentId,
       timestamp: Date.now(),
       type,
       content,
-      model: payload?.model as string | undefined, // Track model used
-      payload,
+      // model: payload?.model as string | undefined, // Removed as it's not in AgentLogEntry interface currently
+      // payload, // Removed as it's not in AgentLogEntry interface currently or needs strict typing
+      metadata: payload, // Map payload to metadata
     };
     let list = this.byAgent.get(agentId);
     if (!list) {
@@ -96,10 +102,10 @@ export class AgentLogStore {
   }
 
   getActions(agentId: string): AgentLogEntry[] {
-    return this.getByAgentAndType(agentId, 'action');
+    return this.getByAgentAndType(agentId, 'tool_call');
   }
 
   getInteractions(agentId: string): AgentLogEntry[] {
-    return this.getByAgentAndType(agentId, 'interaction');
+    return this.getByAgentAndType(agentId, 'message');
   }
 }

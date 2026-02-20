@@ -8,17 +8,16 @@ import { container } from 'tsyringe';
 import { GraphStore } from '../../domain/knowledge/graph-store.js';
 import { GraphIndexer } from '../../domain/knowledge/graph-indexer.js';
 import { GraphContext } from '../../domain/knowledge/graph-context.js';
-import { ConfigService } from '../../infrastructure/config/config-service.js';
+import { loadConfig } from '../../config.js';
 import { Workspace, WorkspaceType } from '@adytum/shared';
 import { v4 as uuid } from 'uuid';
-import { basename } from 'node:path';
+import { basename } from 'path';
 
 export async function knowledgeRoutes(app: FastifyInstance) {
   const store = container.resolve(GraphStore);
   const indexer = container.resolve(GraphIndexer);
   const context = container.resolve(GraphContext);
-  const configService = container.resolve(ConfigService);
-  const config = configService.load();
+  const config = loadConfig();
 
   /**
    * GET /api/workspaces
@@ -35,7 +34,7 @@ export async function knowledgeRoutes(app: FastifyInstance) {
         nodeCount: 0,
         edgeCount: 0,
         lastIndexed: 0,
-        indexingMode: 'fast'
+        indexingMode: 'fast',
       };
       store.saveWorkspaces([defaultWS]);
       workspaces = [defaultWS];
@@ -48,10 +47,14 @@ export async function knowledgeRoutes(app: FastifyInstance) {
    * Create a new workspace.
    */
   app.post('/api/workspaces', async (request) => {
-    const { path, name, type } = request.body as { path: string; name?: string; type?: WorkspaceType };
+    const { path, name, type } = request.body as {
+      path: string;
+      name?: string;
+      type?: WorkspaceType;
+    };
     const id = uuid();
     const wsName = name || basename(path);
-    
+
     const newWS: Workspace = {
       id,
       name: wsName,
@@ -60,18 +63,18 @@ export async function knowledgeRoutes(app: FastifyInstance) {
       nodeCount: 0,
       edgeCount: 0,
       lastIndexed: 0,
-      indexingMode: 'fast'
+      indexingMode: 'fast',
     };
 
     const workspaces = store.listWorkspaces();
     workspaces.push(newWS);
     store.saveWorkspaces(workspaces);
-    
+
     // Trigger initial index
-    indexer.update(path, id).catch(err => {
-        app.log.error(err, 'Initial indexing failed');
+    indexer.update(path, id).catch((err) => {
+      app.log.error(err, 'Initial indexing failed');
     });
-    
+
     return newWS;
   });
 
@@ -99,7 +102,7 @@ export async function knowledgeRoutes(app: FastifyInstance) {
     const { workspaceId } = request.body as { workspaceId?: string };
     const ws = workspaceId ? store.getWorkspace(workspaceId) : null;
     const path = ws ? ws.path : config.workspacePath;
-    
+
     const graph = await indexer.update(path, workspaceId);
     return { success: true, lastUpdated: graph.lastUpdated, nodeCount: graph.nodes.length };
   });

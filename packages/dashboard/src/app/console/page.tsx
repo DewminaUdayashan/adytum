@@ -54,7 +54,7 @@ const TYPE_PREFIXES: Record<string, string> = {
 };
 
 export default function ConsolePage() {
-  const { connected, events, clearEvents, sendFrame } = useGatewaySocket();
+  const { connected, events, clearEvents, sendFrame, sendInputResponse } = useGatewaySocket();
   const [paused, setPaused] = useState(false);
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -110,6 +110,7 @@ export default function ConsolePage() {
               key={i}
               event={event}
               onApprove={(id, approved) => sendFrame({ type: 'approval_response', id, approved })}
+              onInputResponse={(id, response) => sendInputResponse(id, response)}
             />
           ))
         )}
@@ -127,14 +128,18 @@ export default function ConsolePage() {
 function ConsoleEntry({
   event,
   onApprove,
+  onInputResponse,
 }: {
   event: StreamEvent;
   onApprove: (id: string, approved: boolean) => void;
+  onInputResponse: (id: string, response: string) => void;
 }) {
   const type = event.streamType || event.type || 'unknown';
   let color = TYPE_COLORS[type] || 'text-text-secondary';
   let prefix = TYPE_PREFIXES[type] || type.toUpperCase();
   const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+  const [inputValue, setInputValue] = useState('');
+  const [submitted, setSubmitted] = useState(false);
 
   let content = '';
   if (event.delta) {
@@ -161,11 +166,17 @@ function ConsoleEntry({
     content = String(event.content || '').slice(0, 200);
   } else if (event.type === 'approval_request') {
     content = `${event.description || ''}`;
+  } else if (event.type === 'input_request') {
+    content = `${event.description || 'Input Requested'}`;
+    color = 'text-accent-primary';
+    prefix = '❓ INPUT';
+    // Ensure streamType is set for filtering if needed, though we rely on event.type
   } else {
     content = JSON.stringify(event).slice(0, 200);
   }
 
   const isApproval = event.type === 'approval_request' && typeof event.id === 'string';
+  const isInput = event.type === 'input_request' && typeof event.id === 'string';
 
   return (
     <div className="flex gap-3 hover:bg-bg-secondary/40 px-3 py-1 rounded-md transition-colors items-start">
@@ -185,6 +196,35 @@ function ConsoleEntry({
             </Button>
           </div>
         )}
+        {isInput && !submitted && (
+          <div className="mt-2 flex gap-2 items-center">
+            <input
+              type="text"
+              className="bg-bg-primary border border-border-primary rounded px-2 py-1 text-text-primary text-xs focus:outline-none focus:border-accent-primary w-full max-w-sm"
+              placeholder="Type your response..."
+              value={inputValue}
+              onChange={(e) => setInputValue(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && inputValue.trim()) {
+                  onInputResponse(event.id as string, inputValue);
+                  setSubmitted(true);
+                }
+              }}
+            />
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={!inputValue.trim()}
+              onClick={() => {
+                onInputResponse(event.id as string, inputValue);
+                setSubmitted(true);
+              }}
+            >
+              Send
+            </Button>
+          </div>
+        )}
+        {submitted && <div className="mt-1 text-success text-[10px]">Response sent.</div>}
       </div>
     </div>
   );

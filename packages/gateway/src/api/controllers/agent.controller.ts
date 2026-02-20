@@ -8,7 +8,7 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { singleton, inject } from 'tsyringe';
 import { Logger } from '../../logger.js';
 import { AgentService } from '../../application/services/agent-service.js';
-import { ConfigService } from '../../infrastructure/config/config-service.js';
+import { loadConfig } from '../../config.js';
 import { AppError } from '../../domain/errors/app-error.js';
 import { parseFrame, serializeFrame, type WebSocketFrame } from '@adytum/shared';
 import { auditLogger } from '../../security/audit-logger.js';
@@ -24,8 +24,8 @@ import { join } from 'node:path';
  */
 @singleton()
 export class AgentController {
-  private connections = new Map<string, any>(); 
-  
+  private connections = new Map<string, any>();
+
   /**
    * Executes broadcast.
    * @param frame - Frame.
@@ -33,7 +33,8 @@ export class AgentController {
   public broadcast(frame: WebSocketFrame): void {
     const data = serializeFrame(frame);
     for (const socket of this.connections.values()) {
-      if (socket.readyState === 1) { // OPEN
+      if (socket.readyState === 1) {
+        // OPEN
         socket.send(data);
       }
     }
@@ -42,10 +43,9 @@ export class AgentController {
   constructor(
     @inject(Logger) private logger: Logger,
     @inject(AgentService) private agentService: AgentService,
-    @inject(ConfigService) private configService: ConfigService,
     @inject('MemoryRepository') private memoryRepo: MemoryRepository,
     @inject(ApprovalService) private approvals: ApprovalService,
-    @inject(SoulEngine) private soulEngine: SoulEngine
+    @inject(SoulEngine) private soulEngine: SoulEngine,
   ) {}
 
   /**
@@ -57,10 +57,12 @@ export class AgentController {
     // Handle both Fastify SocketStream and raw WebSocket
     const socket = connection.socket || connection;
     const id = randomUUID();
-    
+
     try {
       if (!socket || !socket.on) {
-        this.logger.error(`[WebSocket] Invalid connection object. Keys: ${Object.keys(connection || {})}`);
+        this.logger.error(
+          `[WebSocket] Invalid connection object. Keys: ${Object.keys(connection || {})}`,
+        );
         if (socket) socket.close();
         return;
       }
@@ -75,13 +77,15 @@ export class AgentController {
           if ((log as any).actionType === 'stream') {
             const payload = log.payload as any;
             if (socket.readyState === 1) {
-              socket.send(serializeFrame({ 
-                type: 'stream', 
-                traceId: payload.traceId || log.traceId,
-                sessionId: payload.sessionId || 'unknown',
-                delta: payload.delta || '',
-                streamType: payload.streamType || 'response' 
-              }));
+              socket.send(
+                serializeFrame({
+                  type: 'stream',
+                  traceId: payload.traceId || log.traceId,
+                  sessionId: payload.sessionId || 'unknown',
+                  delta: payload.delta || '',
+                  streamType: payload.streamType || 'response',
+                }),
+              );
             }
           }
         }
@@ -98,7 +102,7 @@ export class AgentController {
           }
 
           const frame = parseFrame(msg);
-          
+
           // Handle approval responses from dashboard
           if (frame.type === 'approval_response' && frame.id) {
             this.approvals.resolve(frame.id, Boolean((frame as any).approved));
@@ -108,56 +112,62 @@ export class AgentController {
           if (frame.type === 'message') {
             const { content, sessionId = 'default', workspaceId } = frame as any;
             const runtime = this.agentService.getRuntime();
-            
+
             /**
              * Executes on stream.
              * @param event - Event.
              */
             const onStream = (event: any) => {
-               if (event.sessionId === sessionId || event.sessionId === 'default') {
-                  if (socket.readyState === 1) {
-                    socket.send(serializeFrame({ 
+              if (event.sessionId === sessionId || event.sessionId === 'default') {
+                if (socket.readyState === 1) {
+                  socket.send(
+                    serializeFrame({
                       type: 'stream',
                       traceId: event.traceId || randomUUID(),
                       sessionId: event.sessionId,
                       delta: event.delta || '',
                       streamType: event.streamType || 'response',
                       workspaceId,
-                      metadata: event.metadata
-                    }));
-                  }
-               }
+                      metadata: event.metadata,
+                    }),
+                  );
+                }
+              }
             };
 
             runtime.on('stream', onStream);
             try {
-               const result = await runtime.run(content, sessionId, {
-                 modelId: (frame as any).modelId,
-                 modelRole: (frame as any).modelRole,
-                 workspaceId: workspaceId
-               });
-               
-               if (socket.readyState === 1) {
-                 socket.send(serializeFrame({
-                   type: 'message',
-                   sessionId: sessionId === 'default' ? randomUUID() : sessionId, // Ensure UUID if default
-                   content: result.response,
-                   modelRole: 'assistant',
-                   workspaceId: workspaceId
-                 }));
-               }
+              const result = await runtime.run(content, sessionId, {
+                modelId: (frame as any).modelId,
+                modelRole: (frame as any).modelRole,
+                workspaceId: workspaceId,
+              });
+
+              if (socket.readyState === 1) {
+                socket.send(
+                  serializeFrame({
+                    type: 'message',
+                    sessionId: sessionId === 'default' ? randomUUID() : sessionId, // Ensure UUID if default
+                    content: result.response,
+                    modelRole: 'assistant',
+                    workspaceId: workspaceId,
+                  }),
+                );
+              }
             } finally {
-               runtime.off('stream', onStream);
+              runtime.off('stream', onStream);
             }
           }
         } catch (err: any) {
           this.logger.error(`WebSocket message error: ${err.message}`);
           if (socket.readyState === 1) {
-            socket.send(serializeFrame({ 
-              type: 'error', 
-              code: 'INTERNAL_ERROR',
-              message: err.message 
-            }));
+            socket.send(
+              serializeFrame({
+                type: 'error',
+                code: 'INTERNAL_ERROR',
+                message: err.message,
+              }),
+            );
           }
         }
       });
@@ -170,7 +180,6 @@ export class AgentController {
         this.connections.delete(id);
         this.logger.info(`Client disconnected: ${id}`);
       });
-
     } catch (err: any) {
       this.logger.error(`WebSocket setup failed for ${id}: ${err.message}`);
       socket.close();
@@ -184,8 +193,19 @@ export class AgentController {
    * @param reply - Reply.
    */
   public async getMemories(request: FastifyRequest, reply: FastifyReply) {
-    const { category, limit, offset } = request.query as { category?: string | string[]; limit?: string; offset?: string };
-    const categories = Array.isArray(category) ? category : category ? category.split(',').map(c => c.trim()).filter(Boolean) : [];
+    const { category, limit, offset } = request.query as {
+      category?: string | string[];
+      limit?: string;
+      offset?: string;
+    };
+    const categories = Array.isArray(category)
+      ? category
+      : category
+        ? category
+            .split(',')
+            .map((c) => c.trim())
+            .filter(Boolean)
+        : [];
     const count = Math.min(Number(limit) || 50, 200);
     const skip = Math.max(Number(offset) || 0, 0);
 
@@ -201,10 +221,10 @@ export class AgentController {
     const { id } = request.params as { id: string };
     const body = request.body as any;
     const updated = await this.memoryRepo.updateMemory(id, {
-        content: body.content,
-        category: body.category,
-        tags: body.tags,
-        metadata: body.metadata
+      content: body.content,
+      category: body.category,
+      tags: body.tags,
+      metadata: body.metadata,
     });
     if (!updated) throw new AppError('Memory not found', 404);
     return { memory: updated };
@@ -255,7 +275,7 @@ export class AgentController {
     if (!body.traceId || !body.rating) {
       throw new AppError('traceId and rating required', 400);
     }
-    
+
     const feedback = {
       id: randomUUID(),
       traceId: body.traceId,
@@ -293,7 +313,7 @@ export class AgentController {
 
     this.soulEngine.updateSoul(body.content);
     this.agentService.getRuntime().refreshSystemPrompt();
-    
+
     return { success: true, content: body.content };
   }
 
@@ -302,14 +322,14 @@ export class AgentController {
    * @param request - Request.
    */
   public async getHeartbeat(request: FastifyRequest) {
-    const workspacePath = this.configService.get('workspacePath');
+    const workspacePath = loadConfig().workspacePath;
     const heartbeatFile = join(workspacePath, 'HEARTBEAT.md');
-    
+
     let content = '';
     if (existsSync(heartbeatFile)) {
       content = readFileSync(heartbeatFile, 'utf-8');
     }
-    
+
     return { content };
   }
 
@@ -321,11 +341,11 @@ export class AgentController {
     const body = request.body as { content: string };
     if (body.content === undefined) throw new AppError('content required', 400);
 
-    const workspacePath = this.configService.get('workspacePath');
+    const workspacePath = loadConfig().workspacePath;
     const heartbeatFile = join(workspacePath, 'HEARTBEAT.md');
-    
+
     writeFileSync(heartbeatFile, body.content, 'utf-8');
-    
+
     return { success: true, content: body.content };
   }
 }

@@ -97,7 +97,6 @@ export class Logger {
   }
 }
 
-// Export a default instance for backward compatibility or direct use if needed, 
+// Export a default instance for backward compatibility or direct use if needed,
 // though DI is preferred.
 export const logger = new Logger();
-

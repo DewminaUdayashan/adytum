@@ -79,11 +79,23 @@ function AgentNode(props: NodeProps) {
         flex items-center gap-3 px-4 py-3 w-[200px] min-h-[72px]
       `}
     >
-      <Handle type="target" position={Position.Top} className="!w-2 !h-2 !border-2 !border-[#6366f1] !bg-bg-secondary" />
-      <Handle type="source" position={Position.Bottom} className="!w-2 !h-2 !border-2 !border-[#6366f1] !bg-bg-secondary" />
+      <Handle
+        type="target"
+        position={Position.Top}
+        className="!w-2 !h-2 !border-2 !border-[#6366f1] !bg-bg-secondary"
+      />
+      <Handle
+        type="source"
+        position={Position.Bottom}
+        className="!w-2 !h-2 !border-2 !border-[#6366f1] !bg-bg-secondary"
+      />
       <div className="absolute top-0 left-0 w-full h-1 rounded-t-xl bg-gradient-to-r from-accent-primary/80 to-transparent opacity-80" />
       {data.avatar ? (
-        <img src={data.avatar} alt="" className="h-12 w-12 rounded-full object-cover shrink-0 border-2 border-border-primary" />
+        <img
+          src={data.avatar}
+          alt=""
+          className="h-12 w-12 rounded-full object-cover shrink-0 border-2 border-border-primary"
+        />
       ) : (
         <div className="h-12 w-12 rounded-full bg-bg-tertiary flex items-center justify-center shrink-0 border-2 border-border-primary">
           <User className="h-6 w-6 text-text-muted" />
@@ -92,9 +104,13 @@ function AgentNode(props: NodeProps) {
       <div className="min-w-0 flex-1">
         <p className="font-semibold text-text-primary truncate text-sm">{data.name}</p>
         <div className="flex items-center gap-2 mt-0.5">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-accent-primary">Tier {data.tier}</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-accent-primary">
+            Tier {data.tier}
+          </span>
           {!isDeactivated && data.uptimeSeconds != null && (
-            <span className="text-[10px] text-text-muted">↑ {formatUptime(data.uptimeSeconds)}</span>
+            <span className="text-[10px] text-text-muted">
+              ↑ {formatUptime(data.uptimeSeconds)}
+            </span>
           )}
         </div>
       </div>
@@ -134,7 +150,10 @@ function getLayoutedElements(nodes: Node[], edges: Edge[]) {
   return { nodes, edges };
 }
 
-function treeToNodesAndEdges(tree: HierarchyTree[], parentId: string | null): { nodes: Node[]; edges: Edge[] } {
+function treeToNodesAndEdges(
+  tree: HierarchyTree[],
+  parentId: string | null,
+): { nodes: Node[]; edges: Edge[] } {
   const nodes: Node[] = [];
   const edges: Edge[] = [];
 
@@ -148,7 +167,7 @@ function treeToNodesAndEdges(tree: HierarchyTree[], parentId: string | null): { 
         tier: t.tier,
         birthTime: t.birthTime,
         endedAt: t.endedAt,
-        avatar: t.tier === 1 ? '/avatars/prometheus.png' : t.avatar,
+        avatar: t.tier === 1 ? '/avatars/prometheus-face.png' : t.avatar,
         parentId: t.parentId,
         uptimeSeconds: t.uptimeSeconds,
         modelIds: t.modelIds ?? [],
@@ -181,7 +200,11 @@ interface AgentHierarchyCanvasProps {
   refreshTrigger?: number;
 }
 
-function AgentHierarchyCanvasInner({ onSelectAgent, selectedAgentId, refreshTrigger }: AgentHierarchyCanvasProps) {
+function AgentHierarchyCanvasInner({
+  onSelectAgent,
+  selectedAgentId,
+  refreshTrigger,
+}: AgentHierarchyCanvasProps) {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [loading, setLoading] = useState(true);
@@ -211,9 +234,7 @@ function AgentHierarchyCanvasInner({ onSelectAgent, selectedAgentId, refreshTrig
   }, [fetchHierarchy, refreshTrigger]);
 
   useEffect(() => {
-    setNodes((nds) =>
-      nds.map((n) => ({ ...n, selected: n.id === selectedAgentId })),
-    );
+    setNodes((nds) => nds.map((n) => ({ ...n, selected: n.id === selectedAgentId })));
   }, [selectedAgentId, setNodes]);
 
   const onNodeClick = useCallback(
@@ -228,7 +249,9 @@ function AgentHierarchyCanvasInner({ onSelectAgent, selectedAgentId, refreshTrig
       <div className="flex items-center justify-center h-full min-h-[320px]">
         <div className="text-center">
           <Spinner size="lg" className="mb-3" />
-          <p className="text-xs font-medium uppercase tracking-widest text-text-muted">Loading hierarchy...</p>
+          <p className="text-xs font-medium uppercase tracking-widest text-text-muted">
+            Loading hierarchy...
+          </p>
         </div>
       </div>
     );
@@ -240,7 +263,10 @@ function AgentHierarchyCanvasInner({ onSelectAgent, selectedAgentId, refreshTrig
         <div className="text-center text-text-muted">
           <User className="h-12 w-12 mx-auto mb-3 opacity-50" />
           <p className="text-sm font-medium">No agents yet</p>
-          <p className="text-xs mt-1">Prometheus (Tier 1) is created on gateway start. Use Birth above or have the alpha spawn agents.</p>
+          <p className="text-xs mt-1">
+            Prometheus (Tier 1) is created on gateway start. Use Birth above or have the alpha spawn
+            agents.
+          </p>
         </div>
       </div>
     );
@@ -273,7 +299,9 @@ function AgentHierarchyCanvasInner({ onSelectAgent, selectedAgentId, refreshTrig
         <Background color="var(--color-bg-tertiary)" gap={16} size={0.5} />
         <Controls className="!bg-bg-secondary !border-border-primary !shadow-lg" />
         <MiniMap
-          nodeColor={(n) => (n.data?.tier === 1 ? '#8b5cf6' : n.data?.tier === 2 ? '#6366f1' : '#4f46e5')}
+          nodeColor={(n) =>
+            n.data?.tier === 1 ? '#8b5cf6' : n.data?.tier === 2 ? '#6366f1' : '#4f46e5'
+          }
           maskColor="rgba(0,0,0,0.6)"
           className="!bg-bg-secondary !border-border-primary"
         />

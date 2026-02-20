@@ -1,56 +1,53 @@
-Roadmap: Elevating Adytum Intelligence & Autonomy
-This roadmap outlines the steps to transform Adytum from a "Smart Tool" to a "Cognitive System".
+# Adytum Roadmap: Autonomous Swarm & Hierarchy
 
-Phase 1: The Semantic Brain (Intelligence)
-Goal: Move from "Keyword Search" to "Concept Understanding".
+## Phase 1: The Swarm Core (Backend)
 
-1.1 Vector Embeddings Integration
+_Objective: Enable the Main Agent (Architect) to spawn, manage, and kill sub-processes with persistent identity._
 
-Action: Add an embedding model (e.g., text-embedding-3-small or local xenova/all-MiniLM-L6-v2) to the ModelRouter.
-Action: Update
-MemoryDB
-schema to support vector columns (using sqlite-vss or migrating to lancedb).
-Action: Update MemoryStore.search() to perform hybrid search (Keyword + Vector).
-1.2 Knowledge Graph traversals
+- [x] **Swarm Manager Class**: Implement a singleton `SwarmManager` to handle the lifecycle of all agents.
+- [x] **Identity Generation**: Integrate `unique-names-generator` (or LLM-based naming) and DiceBear API for agent persona creation.
+- [x] **Context Isolation**: Ensure each spawned agent has its own isolated `memory` array and `system_prompt` but shares the main `workspace` directory.
+- [x] **The Graveyard**: Implement a soft-delete mechanism. Deactivated agents are serialized to a `graveyard.json` or database for historical review.
 
-Action: Implement a "Graph Walker" tool that allows the agent to hop from node to node (e.g., Project -> Related Files -> Authors) to gather context before answering.
-1.3 Markdown Knowledge Base ("The Brain")
+## Phase 2: Communication & Orchestration
 
-Action: Create a KnowledgeWatcher service that monitors workspace/knowledge/\*.md.
-Action: Automatically embed and index these files into the vector store on save.
-Action: Allow the agent to edit these files directly to "learn" new facts permanently (simulating OpenClaw's memory model).
+_Objective: Enable "Intelligent Handoffs" between agents._
 
-## Phase 2: Autonomous Intelligence (COMPLETED)
+- [x] **Inter-Agent Protocol (IAP)**: A structured JSON schema for agents to pass tasks (`{ to: agentId, instruction: string, context: object }`).
+- [x] **Hierarchical Logging**: Update the Socket.io emitter to tag every log chunk with an `agentId` so the frontend can route it to the correct UI card.
+- [x] **Supervisor Loop**: The Architect must have a "listening" state to receive reports from active Managers before marking a main task as complete.
 
-- [x] **Task Planner & Orchestrator**: Break goals into actionable DAGs.
-- [x] **Parallel Execution**: Execute multiple tool calls concurrently.
-- [x] **Error Recovery Engine**: Automated self-correction and retry strategies.
-- [x] **Semantic Search**: Vector-based knowledge retrieval.
-- [x] **Dashboard Phase 2**: Visualizers for plans, search results, and recovery actions.
+## Phase 3: The Dashboard (Frontend)
 
-## Phase 3: Collaborative Ecosystem (UPCOMING)
+_Objective: Visualize the Swarm._
 
-- [ ] **Multi-Agent Swarms**: Dynamic spawning and delegation.
-- [ ] **Cross-Workspace Knowledge**: Federated indexing across projects.
-- [ ] **Real-time Collaboration**: Shared agent sessions and history.
-- [ ] **Advanced Skill Evolution**: Self-generating tools and connectors.
-      Phase 3: Collaborative Swarm (Multi-Agent)
-      Goal: Enable agents to work together without constant micro-management from the root.
+- [x] **Live Hierarchy View**: A tree visualization (e.g., using `react-flow` or D3) showing the Architect -> Managers -> Workers.
+- [x] **Agent Detail Modal**: Clicking an agent node opens a modal showing:
+  - Avatar & Name
+  - Current "Thought" (Stream)
+  - Active Tool usage
+  - Parent ID
+- [x] **The Graveyard Tab**: A list view of "Dead" agents with their final reports and lifetime stats.
 
-  3.1 Peer-to-Peer Messaging
+## Phase 4: Persistence & Recurring Workflows
 
-Action: Create a message_agent tool allowing a Tier 3 agent to send a direct package of data to another active Tier 3 agent.
-Action: Implement a "Shared Blackboard" (Workspace Memory) where multiple agents can read/write to the same scratchpad simultaneously.
-3.2 Dynamic Hierarchy
+- [x] **Cryostasis**: Agents marked as `recurring` are serialized to disk (JSON) when idle and re-hydrated by Cron jobs.
+- [x] **Skill Inheritance**: Allow the Architect to pass specific subsets of its tools to sub-agents (e.g., a "Researcher" gets _only_ `web_search`, not `file_write`).
 
-Action: Allow the system to promote a Tier 2 agent to Tier 1 temporarily for specific domains (e.g., "Davinci" becomes the main agent for a coding session).
-Phase 4: Reliability & Trust
-Goal: Ensure the system doesn't spiral out of control.
+## Phase 5: Advanced Intelligence & Hierarchy (Completed)
 
-4.1 E2E Agent Testing
-Action: Create a test suite that runs a "simulated environment" where agents must solve a puzzle, establishing a benchmark score.
-4.2 Budget & Safety Circuit Breakers
-4.3 Interactive Onboarding (UX)
-Action: Replace
-install.sh
-with a CLI wizard (ink or prompts) that guides the user through setting up API keys, personality, and initial tools (inspired by openclaw onboard).
+- [x] **Automated Tiering**: Sub-agents now automatically inherit `Parent Tier + 1`. This ensures Architect (T1) -> Manager (T2) -> Worker (T3) relationships.
+- [x] **Manager Persona (T2)**: Tier 2 agents receive a "Manager Preamble" instructing them to break down missions and delegate to Tier 3 workers.
+- [x] **Batch Spawning**: `spawn_swarm_agent` now supports a `count` parameter for efficient parallel spawning of workers.
+
+## Phase 6: Unified Swarm Scheduling & Reliability (Completed)
+
+- [x] **Targeted Cron Jobs**: `CronManager` can now target specific sub-agents by ID.
+- [x] **Autonomous Registration**: When you spawn an agent with `mode="scheduled"`, `SwarmManager` automatically registers it in the system's cron engine.
+- [x] **Tool Inheritance**: Sub-agents inherit tools required for communication (e.g., Discord) if specified.
+
+## Next: Phase 7 - Future Expansions
+
+- [ ] **Collaborative Planning**: Agents can propose sub-plans to the Architect.
+- [ ] **Cross-Swarm Memory**: Shared vector store for knowledge retrieval across agents.
+- [ ] **Dynamic Tool Learning**: Agents can write their own tools and share them.

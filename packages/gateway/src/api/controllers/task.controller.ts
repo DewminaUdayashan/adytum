@@ -16,7 +16,7 @@ import { AppError } from '../../domain/errors/app-error.js';
 export class TaskController {
   constructor(
     @inject(Logger) private logger: Logger,
-    @inject(CronManager) private cronManager: CronManager
+    @inject(CronManager) private cronManager: CronManager,
   ) {}
 
   /**
@@ -51,7 +51,7 @@ export class TaskController {
   public async updateJob(request: FastifyRequest, reply: FastifyReply) {
     const { id } = request.params as { id: string };
     const body = request.body as any;
-    
+
     try {
       const job = this.cronManager.updateJob(id, body);
       return { job };

@@ -301,25 +301,17 @@ export const AgentMetadataSchema = z.object({
 export type AgentMetadata = z.infer<typeof AgentMetadataSchema>;
 
 export const HierarchySettingsSchema = z.object({
+  enabled: z.boolean().default(true),
   avatarGenerationEnabled: z.boolean().default(true),
-  maxTier2Agents: z.number().int().min(0).max(50).default(10),
-  maxTier3Agents: z.number().int().min(0).max(100).default(30),
+  maxTier2Agents: z.number().int().min(0).max(50).default(3),
+  maxTier3Agents: z.number().int().min(0).max(100).default(10),
   defaultRetryLimit: z.number().int().min(1).max(10).default(3),
   modelPriorityTier1And2: z.array(z.string()).max(5).default([]),
   modelPriorityTier3: z.array(z.string()).max(3).default([]),
 });
 export type HierarchySettings = z.infer<typeof HierarchySettingsSchema>;
 
-export const AgentLogEntrySchema = z.object({
-  id: z.string().uuid(),
-  agentId: z.string().uuid(),
-  timestamp: z.number(),
-  type: z.enum(['thought', 'action', 'interaction']),
-  content: z.string(),
-  payload: z.record(z.unknown()).optional(),
-  model: z.string().optional(),
-});
-export type AgentLogEntry = z.infer<typeof AgentLogEntrySchema>;
+// AgentLogEntry moved to ./types/agent.ts
 
 // ─── Agent Config ─────────────────────────────────────────────
 
@@ -443,7 +435,7 @@ export interface ToolDefinition {
   description: string;
   parameters: z.ZodObject<any>;
   requiresApproval?: boolean;
-  execute: (args: any) => Promise<unknown>;
+  execute: (args: any, context?: any) => Promise<unknown>;
 }
 
 export interface AdytumSkill {

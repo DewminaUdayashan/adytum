@@ -16,6 +16,7 @@ export const CronJobSchema = z.object({
   name: z.string(),
   schedule: z.string(), // Cron expression
   task: z.string(), // Prompt/Instruction for the agent
+  targetAgentId: z.string().optional(), // [NEW] The specific agent to run this task on
   systemPrompt: z.string().optional(), // Optional system prompt override
   enabled: z.boolean().default(true),
   lastRun: z.number().optional(),
@@ -118,6 +119,9 @@ export class CronManager {
   private async executeJob(job: CronJob): Promise<string> {
     try {
       const sessionId = `cron-${job.id}`;
+      // Use targetAgentId if provided, otherwise fallback to main Architect
+      const agentId = job.targetAgentId || this.agent.getAgentId();
+
       const prompt = `[CRON JOB TRIGGERED: ${job.name}]
 
 Required Action: ${job.task}
@@ -141,7 +145,10 @@ EXECUTION GUIDELINES (PROTOCOL DYNAMO-01):
 
 When done, reply with a brief summary: status (OK/failed), what was done, any errors.`;
 
-      const result = await this.agent.run(prompt, sessionId);
+      const result = await this.agent.run(prompt, sessionId, {
+        agentId,
+        agentMode: 'scheduled',
+      });
 
       const summary = (result?.response ?? '').trim().slice(0, 600);
       if (this.logbook && summary) {
@@ -183,15 +190,17 @@ When done, reply with a brief summary: status (OK/failed), what was done, any er
    * @param name - Name.
    * @param schedule - Schedule.
    * @param taskDescription - Task description.
+   * @param targetAgentId - Optional target agent ID.
    * @returns The add job result.
    */
-  addJob(name: string, schedule: string, taskDescription: string): CronJob {
+  addJob(name: string, schedule: string, taskDescription: string, targetAgentId?: string): CronJob {
     const id = crypto.randomUUID();
     const job: CronJob = {
       id,
       name,
       schedule,
       task: taskDescription,
+      targetAgentId,
       systemPrompt: `You are an automated Cron Agent. Your goal is to execute the user's scheduled task efficiently.
 
 RULES:

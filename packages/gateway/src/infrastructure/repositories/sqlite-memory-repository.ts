@@ -7,7 +7,10 @@ import { singleton, inject } from 'tsyringe';
 import { MemoryDB } from './memory-db.js';
 import { ConfigService } from '../config/config-service.js';
 import { Logger } from '../../logger.js';
-import { MemoryRepository, MemoryEntity } from '../../domain/interfaces/memory-repository.interface.js';
+import {
+  MemoryRepository,
+  MemoryEntity,
+} from '../../domain/interfaces/memory-repository.interface.js';
 
 /**
  * Encapsulates sqlite memory repository behavior.
@@ -18,7 +21,7 @@ export class SqliteMemoryRepository implements MemoryRepository {
 
   constructor(
     @inject(ConfigService) private config: ConfigService,
-    @inject(Logger) private logger: Logger
+    @inject(Logger) private logger: Logger,
   ) {
     const dataPath = this.config.get('dataPath');
     this.logger.info(`Initializing SqliteMemoryRepository at ${dataPath}`);
@@ -70,7 +73,11 @@ export class SqliteMemoryRepository implements MemoryRepository {
    * @param offset - Offset.
    * @returns The resulting collection of values.
    */
-  async getMemoriesFiltered(categories: string[] = [], limit: number = 50, offset: number = 0): Promise<MemoryEntity[]> {
+  async getMemoriesFiltered(
+    categories: string[] = [],
+    limit: number = 50,
+    offset: number = 0,
+  ): Promise<MemoryEntity[]> {
     return this.db.getMemoriesFiltered(categories, limit, offset);
   }
 
@@ -80,7 +87,10 @@ export class SqliteMemoryRepository implements MemoryRepository {
    * @param updates - Updates.
    * @returns The update memory result.
    */
-  async updateMemory(id: string, updates: Partial<Omit<MemoryEntity, 'id' | 'createdAt'>>): Promise<MemoryEntity | null> {
+  async updateMemory(
+    id: string,
+    updates: Partial<Omit<MemoryEntity, 'id' | 'createdAt'>>,
+  ): Promise<MemoryEntity | null> {
     return this.db.updateMemory(id, updates);
   }
 

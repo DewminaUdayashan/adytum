@@ -52,7 +52,7 @@ export class ConfigService {
     this.config = { ...this.config, ...updates } as AdytumConfig;
     this.logger.info('Config updated', Object.keys(updates));
   }
-  
+
   /**
    * Retrieves full config.
    * @returns The get full config result.

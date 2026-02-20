@@ -73,19 +73,29 @@ export function getSocketIOUrl(): string {
   if (typeof window !== 'undefined' && GATEWAY_URL.startsWith('/')) {
     return window.location.origin;
   }
-  
+
   return WS_URL;
 }
 
 export const api = {
-  get: <T = any>(path: string, options?: RequestInit) => gatewayFetch<T>(path, { ...options, method: 'GET' }),
-  post: <T = any>(path: string, body?: any, options?: RequestInit) => 
+  get: <T = any>(path: string, options?: RequestInit) =>
+    gatewayFetch<T>(path, { ...options, method: 'GET' }),
+  post: <T = any>(path: string, body?: any, options?: RequestInit) =>
     gatewayFetch<T>(path, { ...options, method: 'POST', body: JSON.stringify(body) }),
-  put: <T = any>(path: string, body?: any, options?: RequestInit) => 
-    gatewayFetch<T>(path, { ...options, method: 'PUT', body: body !== undefined ? JSON.stringify(body) : undefined }),
-  patch: <T = any>(path: string, body?: any, options?: RequestInit) => 
-    gatewayFetch<T>(path, { ...options, method: 'PATCH', body: body !== undefined ? JSON.stringify(body) : undefined }),
-  delete: <T = any>(path: string, options?: RequestInit) => gatewayFetch<T>(path, { ...options, method: 'DELETE' }),
+  put: <T = any>(path: string, body?: any, options?: RequestInit) =>
+    gatewayFetch<T>(path, {
+      ...options,
+      method: 'PUT',
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }),
+  patch: <T = any>(path: string, body?: any, options?: RequestInit) =>
+    gatewayFetch<T>(path, {
+      ...options,
+      method: 'PATCH',
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    }),
+  delete: <T = any>(path: string, options?: RequestInit) =>
+    gatewayFetch<T>(path, { ...options, method: 'DELETE' }),
 };
 
 export { GATEWAY_URL, WS_URL };

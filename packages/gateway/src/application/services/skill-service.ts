@@ -8,7 +8,7 @@ import { relative, join } from 'node:path';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { singleton, inject } from 'tsyringe';
 import { Logger } from '../../logger.js';
-import { ConfigService } from '../../infrastructure/config/config-service.js';
+import { loadConfig, saveConfig } from '../../config.js';
 import { SkillLoader, type LoadedSkill as Skill } from '../services/skill-loader.js';
 import { SecretsStore } from '../../security/secrets-store.js';
 import type { AdytumConfig } from '@adytum/shared';
@@ -121,7 +121,6 @@ export class SkillService {
 
   constructor(
     @inject(Logger) private logger: Logger,
-    @inject(ConfigService) private configService: ConfigService,
     @inject(SkillLoader) private loader: SkillLoader,
     @inject(SecretsStore) private secretsStore: SecretsStore,
   ) {}
@@ -231,7 +230,7 @@ export class SkillService {
     id: string,
     data: { enabled?: boolean; config?: Record<string, unknown>; installPermission?: string },
   ): Promise<void> {
-    const config = this.configService.getFullConfig();
+    const config = loadConfig();
     const skills = config.skills || { enabled: true, entries: {}, allow: [], deny: [] };
     const entries = skills.entries || {};
     const entry = entries[id] || {};
@@ -242,7 +241,7 @@ export class SkillService {
       entry.installPermission = data.installPermission as 'auto' | 'ask' | 'deny';
 
     entries[id] = entry;
-    this.configService.set({
+    saveConfig({
       skills: { ...skills, entries } as unknown as AdytumConfig['skills'],
     });
     this.logger.info(`Updated config for skill ${id}`);
@@ -568,20 +567,20 @@ export class SkillService {
   }
 
   private getEmailCalendarSkillConfig(): EmailCalendarSkillConfig {
-    const config = this.configService.getFullConfig();
+    const config = loadConfig();
     const raw = config.skills?.entries?.[EMAIL_CALENDAR_SKILL_ID]?.config;
     if (!isRecord(raw)) return {};
     return { ...raw } as EmailCalendarSkillConfig;
   }
 
   private updateEmailCalendarSkillConfig(nextConfig: EmailCalendarSkillConfig): void {
-    const full = this.configService.getFullConfig();
+    const full = loadConfig();
     const skills = full.skills || { enabled: true, entries: {}, allow: [], deny: [] };
     const entries = { ...(skills.entries || {}) };
     const entry = { ...(entries[EMAIL_CALENDAR_SKILL_ID] || {}) };
     entry.config = nextConfig;
     entries[EMAIL_CALENDAR_SKILL_ID] = entry;
-    this.configService.set({
+    saveConfig({
       skills: { ...skills, entries } as unknown as AdytumConfig['skills'],
     });
   }

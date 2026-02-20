@@ -1,4 +1,3 @@
-
 import { singleton } from 'tsyringe';
 import type { AgentRuntime } from '../logic/agent-runtime.js';
 
@@ -10,7 +9,7 @@ import type { AgentRuntime } from '../logic/agent-runtime.js';
 export class RuntimeRegistry {
   // Map sessionId -> AgentRuntime instance
   private sessions = new Map<string, AgentRuntime>();
-  
+
   // Map parentSessionId -> Set<childSessionId>
   // Tracks the hierarchy for cascade abortion
   private hierarchy = new Map<string, Set<string>>();
@@ -37,12 +36,12 @@ export class RuntimeRegistry {
    */
   unregister(sessionId: string) {
     this.sessions.delete(sessionId);
-    
+
     // Remove from hierarchy tracking if it was a child
     for (const children of this.hierarchy.values()) {
       children.delete(sessionId);
     }
-    
+
     // Remove its own children entry if it exists (though children should be gone by now)
     this.hierarchy.delete(sessionId);
   }
@@ -63,7 +62,7 @@ export class RuntimeRegistry {
    */
   abortHierarchy(rootSessionId: string) {
     console.log(`[RuntimeRegistry] Aborting hierarchy for root: ${rootSessionId}`);
-    
+
     // 1. Abort the root itself
     this.abortSession(rootSessionId);
 
@@ -81,5 +80,12 @@ export class RuntimeRegistry {
    */
   isSessionActive(sessionId: string): boolean {
     return this.sessions.has(sessionId);
+  }
+
+  /**
+   * Retrieves the runtime instance for a session.
+   */
+  getRuntime(sessionId: string): AgentRuntime | undefined {
+    return this.sessions.get(sessionId);
   }
 }

@@ -49,17 +49,20 @@ export class ApprovalService {
    * @param payload - Payload.
    * @returns Whether the operation succeeded.
    */
-  public requestManual(id: string, payload: {
-    kind: string;
-    description: string;
-    meta?: Record<string, unknown>;
-  }): Promise<boolean> {
+  public requestManual(
+    id: string,
+    payload: {
+      kind: string;
+      description: string;
+      meta?: Record<string, unknown>;
+    },
+  ): Promise<boolean> {
     const expiresAt = Date.now() + 60_000;
 
     return new Promise<boolean>((resolve, reject) => {
       this.pending.set(id, { resolve, reject, expiresAt, payload });
       this.logger.info(`Approval requested [${id}]: ${payload.description}`);
-      
+
       // Auto-expire after 60s
       setTimeout(() => {
         if (this.pending.has(id)) {
@@ -98,11 +101,58 @@ export class ApprovalService {
   /**
    * Retrieves all pending.
    */
+  /**
+   * Retrieves all pending.
+   */
   public getAllPending() {
-     return Array.from(this.pending.entries()).map(([id, p]) => ({
-        id,
-        ...p.payload,
-        expiresAt: p.expiresAt
-     }));
+    return Array.from(this.pending.entries()).map(([id, p]) => ({
+      id,
+      ...p.payload,
+      expiresAt: p.expiresAt,
+    }));
+  }
+
+  // ─── Input Request Support ───────────────────────────────
+
+  private pendingInputs = new Map<
+    string,
+    {
+      resolve: (value: string) => void;
+      reject: (error: Error) => void;
+      expiresAt: number;
+      payload: { description: string };
+    }
+  >();
+
+  /**
+   * Request text input from the user.
+   */
+  public requestInput(id: string, description: string): Promise<string> {
+    const expiresAt = Date.now() + 300_000; // 5 minutes expiration for input
+
+    return new Promise<string>((resolve, reject) => {
+      this.pendingInputs.set(id, { resolve, reject, expiresAt, payload: { description } });
+      this.logger.info(`Input requested [${id}]: ${description}`);
+
+      setTimeout(() => {
+        if (this.pendingInputs.has(id)) {
+          this.pendingInputs.delete(id);
+          reject(new Error('Input request timed out'));
+          this.logger.warn(`Input request [${id}] timed out`);
+        }
+      }, 300_000);
+    });
+  }
+
+  /**
+   * Resolve a pending input request.
+   */
+  public resolveInput(id: string, value: string): boolean {
+    const item = this.pendingInputs.get(id);
+    if (!item) return false;
+    this.pendingInputs.delete(id);
+    item.resolve(value);
+    this.logger.info(`Input request [${id}] resolved`);
+    return true;
   }
 }

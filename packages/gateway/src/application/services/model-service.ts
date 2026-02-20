@@ -5,7 +5,7 @@
 
 import { singleton, inject } from 'tsyringe';
 import { Logger } from '../../logger.js';
-import { ConfigService } from '../../infrastructure/config/config-service.js';
+import { loadConfig, saveConfig } from '../../config.js';
 import { ModelRepository, ModelEntry } from '../../domain/interfaces/model-repository.interface.js';
 
 /**
@@ -17,8 +17,7 @@ export class ModelService {
 
   constructor(
     @inject(Logger) private logger: Logger,
-    @inject(ConfigService) private configService: ConfigService,
-    @inject('ModelRepository') private modelRepo: ModelRepository
+    @inject('ModelRepository') private modelRepo: ModelRepository,
   ) {}
 
   /**
@@ -68,7 +67,7 @@ export class ModelService {
    * @param entry - Entry.
    */
   private async syncToConfig(entry: ModelEntry): Promise<void> {
-    const config = this.configService.getFullConfig();
+    const config = loadConfig();
     const existingModels = [...(config.models || [])];
     const idx = existingModels.findIndex((m: any) => `${m.provider}/${m.model}` === entry.id);
 
@@ -85,8 +84,8 @@ export class ModelService {
     } else {
       existingModels.push(patch);
     }
-    
-    this.configService.set({ models: existingModels });
+
+    saveConfig({ models: existingModels });
     this.logger.info({ modelId: entry.id }, 'Model synced to adytum.config.yaml');
   }
 
@@ -96,12 +95,12 @@ export class ModelService {
    */
   public async removeModel(id: string): Promise<void> {
     await this.modelRepo.remove(id);
-    
+
     // Also remove from config
-    const config = this.configService.getFullConfig();
+    const config = loadConfig();
     const filtered = (config.models || []).filter((m: any) => `${m.provider}/${m.model}` !== id);
     if (filtered.length !== (config.models || []).length) {
-      this.configService.set({ models: filtered });
+      saveConfig({ models: filtered });
     }
   }
 

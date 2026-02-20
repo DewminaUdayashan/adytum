@@ -27,8 +27,15 @@ export interface MemoryRepository {
   // Long-term Memory
   addMemory(memory: Omit<MemoryEntity, 'id' | 'createdAt'>): Promise<MemoryEntity>;
   searchMemories(query: string, topK?: number): Promise<MemoryEntity[]>;
-  getMemoriesFiltered(categories?: string[], limit?: number, offset?: number): Promise<MemoryEntity[]>;
-  updateMemory(id: string, updates: Partial<Omit<MemoryEntity, 'id' | 'createdAt'>>): Promise<MemoryEntity | null>;
+  getMemoriesFiltered(
+    categories?: string[],
+    limit?: number,
+    offset?: number,
+  ): Promise<MemoryEntity[]>;
+  updateMemory(
+    id: string,
+    updates: Partial<Omit<MemoryEntity, 'id' | 'createdAt'>>,
+  ): Promise<MemoryEntity | null>;
   deleteMemory(id: string): Promise<boolean>;
 
   // Meta/KV

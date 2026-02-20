@@ -56,7 +56,7 @@ async function runExtractor(name: string, args: string[]): Promise<string | null
  */
 function normalizeExtractedText(value: string | null): string {
   if (!value) return '';
-  const normalized = value.replace(/\r\n/g, '\n').replace(/\u0000/g, '').trim();
+  const normalized = value.replace(/\r\n/g, '\n').replace(/\0/g, '').trim();
   if (!normalized || normalized === '(null)') return '';
   return normalized;
 }
@@ -94,11 +94,15 @@ async function extractPdfTextViaOcr(filePath: string): Promise<string | null> {
   const imagePrefix = join(tempDir, 'page');
 
   try {
-    await execFileAsync('pdftoppm', ['-f', '1', '-l', '8', '-r', '220', '-png', filePath, imagePrefix], {
-      timeout: 30000,
-      maxBuffer: 2 * 1024 * 1024,
-      env: { ...process.env, LANG: 'en_US.UTF-8' },
-    });
+    await execFileAsync(
+      'pdftoppm',
+      ['-f', '1', '-l', '8', '-r', '220', '-png', filePath, imagePrefix],
+      {
+        timeout: 30000,
+        maxBuffer: 2 * 1024 * 1024,
+        env: { ...process.env, LANG: 'en_US.UTF-8' },
+      },
+    );
 
     const pageImages = readdirSync(tempDir)
       .filter((name) => /^page-\d+\.png$/i.test(name))

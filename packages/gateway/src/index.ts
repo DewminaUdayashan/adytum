@@ -13,7 +13,10 @@ import { join, resolve } from 'node:path';
 import { loadConfig } from './config.js';
 import { logger } from './logger.js';
 import { GatewayServer } from './server.js';
-import { AgentRuntime } from './domain/logic/agent-runtime.js';
+import { AgentRuntime, AgentRuntimeConfig } from './domain/logic/agent-runtime.js';
+import { SwarmManager } from './domain/logic/swarm-manager.js';
+import { SwarmMessenger } from './domain/logic/swarm-messenger.js';
+import { createSwarmTools } from './tools/swarm-tools.js';
 import { ModelRouter } from './infrastructure/llm/model-router.js';
 import { ModelCatalog } from './infrastructure/llm/model-catalog.js';
 
@@ -39,6 +42,7 @@ import { InnerMonologue } from './application/services/inner-monologue.js';
 import { HeartbeatManager } from './application/services/heartbeat-manager.js';
 import { CronManager } from './application/services/cron-manager.js';
 import { createCronTools } from './tools/cron.js';
+import { createTextTools } from './tools/text-tools.js';
 import cron from 'node-cron';
 import { AgentService } from './application/services/agent-service.js';
 import { SkillService } from './application/services/skill-service.js';
@@ -51,17 +55,24 @@ import { KnowledgeWatcher } from './domain/knowledge/knowledge-watcher.js';
 import { createKnowledgeTools } from './tools/knowledge.js';
 import { AgentRegistry } from './domain/agents/agent-registry.js';
 import { LogbookService } from './application/services/logbook-service.js';
-import { AgentLogStore } from './domain/agents/agent-log-store.js';
+import { AgentLogStore } from './infrastructure/repositories/agent-log-store.js';
 import { AgentsController } from './api/controllers/agents.controller.js';
-import { SubAgentSpawner } from './domain/logic/sub-agent.js';
-import { createSpawnAgentTool } from './tools/spawn-agent.js';
+// import { SubAgentSpawner } from './domain/logic/sub-agent-spawner.js';
+// import { createSpawnAgentTool } from './tools/spawn-agent.js';
 import { RuntimeRegistry } from './domain/agents/runtime-registry.js';
 import { TaskPlanner } from './domain/logic/task-planner.js';
 import { ParallelExecutor } from './domain/logic/parallel-executor.js';
+// import { createDelegationTools } from './tools/delegate-task.js';
+import { randomUUID } from 'crypto';
 import { createPlannerTools } from './tools/planner.js';
 import { ToolErrorHandler } from './domain/logic/tool-error-handler.js';
 import { EventBusService } from './infrastructure/events/event-bus.js';
 import { SocketIOService } from './infrastructure/events/socket-io-service.js';
+import { DirectMessagingService } from './application/services/direct-messaging-service.js';
+import { createCommunicationTools } from './tools/communication-tools.js';
+import { UserInteractionService } from './application/services/user-interaction-service.js';
+import { createInteractionTools } from './tools/interaction.js';
+import { createEventTools } from './tools/events.js';
 
 const defaultProjectRoot = resolve(fileURLToPath(import.meta.url), '../../..');
 
@@ -220,24 +231,87 @@ export const startGateway = async (rootPath?: string) => {
   // Let's just update the constructor for now to fix the build.
   await knowledgeWatcher.start();
 
-  const agentRuntimeConfig = {
+  // ─── Swarm & Hierarchy (Moved Up) ─────────────────────────
+  const swarmMessenger = new SwarmMessenger(eventBus);
+  container.register(SwarmMessenger, { useValue: swarmMessenger });
+
+  const agentRegistry = new AgentRegistry(config.dataPath);
+  container.register('AgentRegistry', { useValue: agentRegistry });
+
+  const agentLogStore = new AgentLogStore(config.dataPath);
+  container.register('AgentLogStore', { useValue: agentLogStore });
+
+  const logbookService = new LogbookService(config.workspacePath);
+  container.register('LogbookService', { useValue: logbookService });
+
+  // Ensure Prometheus (Tier 1) exists for ID resolution
+  const prometheusAvatarUrl = 'https://api.dicebear.com/9.x/bottts/svg?seed=Prometheus';
+  const existingPrometheus = agentRegistry.findAgent({ name: config.agentName, tier: 1 });
+
+  if (!existingPrometheus) {
+    const rootId = (config as any).agentId || 'prometheus';
+    agentRegistry.register({
+      id: rootId,
+      name: config.agentName,
+      tier: 1,
+      mission: 'Master Orchestrator',
+      parentId: null,
+      status: 'idle',
+      modelId: 'default',
+      avatar: prometheusAvatarUrl,
+      mode: 'reactive',
+      cronSchedule: undefined,
+      topics: [],
+      persistence: 'persistent',
+      createdAt: Date.now(),
+    });
+    logbookService.append({
+      timestamp: Date.now(),
+      event: 'birth',
+      detail: 'Prometheus (Tier 1) initialized in AgentRegistry',
+    });
+  }
+  const prometheusAgentId = existingPrometheus
+    ? existingPrometheus.id
+    : (config as any).agentId || 'prometheus';
+
+  // Update config for SwarmManager to pick up correct ID
+  (config as any).agentId = prometheusAgentId;
+
+  const swarmManager = new SwarmManager(config, eventBus, swarmMessenger, agentRegistry);
+  container.register(SwarmManager, { useValue: swarmManager });
+
+  const agentRuntimeConfig: AgentRuntimeConfig = {
     modelRouter,
     toolRegistry,
     soulEngine,
+    swarmManager,
+    swarmMessenger,
     skillLoader,
     graphContext,
     contextSoftLimit: config.contextSoftLimit,
     maxIterations: 20,
     defaultModelRole: 'thinking' as const,
     agentName: config.agentName,
+    agentId: prometheusAgentId, // [UPDATED]
     workspacePath: config.workspacePath,
     memoryStore,
     memoryTopK: 3,
     memoryDb,
     graphStore,
     runtimeRegistry,
-    tier: 1 as const,
     toolErrorHandler,
+    onApprovalRequired: async (description, context) => {
+      // @ts-expect-error - global.adytumServer is dynamically assigned
+      if (!global.adytumServer) return false;
+      // @ts-expect-error - global.adytumServer is dynamically assigned
+      return global.adytumServer.requestApproval({
+        kind: 'tool',
+        description,
+        sessionId: context?.sessionId,
+        workspaceId: context?.workspaceId,
+      });
+    },
   };
 
   const agent = new AgentRuntime(agentRuntimeConfig);
@@ -374,11 +448,15 @@ export const startGateway = async (rootPath?: string) => {
   scheduleDreamer(config.dreamerIntervalMinutes);
   scheduleMonologue(config.monologueIntervalMinutes);
 
-  const logbookService = new LogbookService(config.workspacePath);
+  // LogbookService moved up
   const cronManager = new CronManager(agent, config.dataPath, runtimeRegistry, logbookService);
+  swarmManager.setCronManager(cronManager);
 
   // Register Cron Tools (needs agent instance)
   for (const tool of createCronTools(cronManager)) {
+    toolRegistry.register(tool);
+  }
+  for (const tool of createTextTools(modelRouter)) {
     toolRegistry.register(tool);
   }
   console.log(
@@ -413,62 +491,50 @@ export const startGateway = async (rootPath?: string) => {
   container.register(GraphContext, { useValue: graphContext });
   container.register(KnowledgeWatcher, { useValue: knowledgeWatcher });
 
-  // ── Hierarchical Multi-Agent (Birth Protocol) ─────────────────
-  const agentRegistry = new AgentRegistry(config.dataPath);
-  const agentLogStore = new AgentLogStore(config.dataPath);
-  container.register('AgentRegistry', { useValue: agentRegistry });
-  container.register('LogbookService', { useValue: logbookService });
-  container.register('AgentLogStore', { useValue: agentLogStore });
-  container.registerSingleton(AgentsController);
-  // Ensure Prometheus (Tier 1) exists in registry
-  const prometheusAvatarUrl = '/avatars/prometheus.png'; // Dashboard public asset
-  let tier1 = agentRegistry.getActive().filter((a) => a.tier === 1);
-  if (tier1.length === 0) {
-    agentRegistry.birth({
-      name: config.agentName,
-      tier: 1,
-      parentId: null,
-      avatarUrl: prometheusAvatarUrl,
-    });
-    logbookService.append({
-      timestamp: Date.now(),
-      agentName: config.agentName,
-      tier: 1,
-      event: 'birth',
-      detail: 'Prometheus (Tier 1) initialized',
-    });
-    tier1 = agentRegistry.getActive().filter((a) => a.tier === 1);
-  } else if (!tier1[0]!.avatar) {
-    agentRegistry.setAvatar(tier1[0]!.id, prometheusAvatarUrl);
-  }
-  const prometheusAgentId = tier1[0]!.id;
+  // ── Hierarchical Multi-Agent (Phase 4) ────────────────────────
+  // AgentRegistry & AgentLogStore moved up
 
-  // Tool: Prometheus (and Tier 2) can spawn Tier 2/3 sub-agents during a run
-  const hierarchyConfig = (config as { hierarchy?: { avatarGenerationEnabled?: boolean } })
-    .hierarchy;
-  const avatarEnabled = hierarchyConfig?.avatarGenerationEnabled !== false;
-  const generateAvatar = async (name: string, _tier: number): Promise<string | null> => {
-    const seed = encodeURIComponent(name || 'agent');
-    return `https://api.dicebear.com/9.x/adventurer/svg?seed=${seed}`;
-  };
-
-  const subAgentSpawner = new SubAgentSpawner(
-    agentRuntimeConfig,
+  // ─── Messaging Service (Phase 1.1) ────────────────────────
+  const messagingService = new DirectMessagingService(
+    agentRegistry,
     runtimeRegistry,
-    agentRegistry,
     logbookService,
-    agentLogStore,
-    { generateAvatar, avatarEnabled },
   );
-  const spawnAgentTool = createSpawnAgentTool(
-    agentRegistry,
+  container.register(DirectMessagingService, { useValue: messagingService });
+
+  // ─── Interaction Service (Phase 1.1) ──────────────────────
+  const interactionService = new UserInteractionService(
+    {
+      requestInput: async (...args: any[]) => {
+        // @ts-expect-error - global.adytumServer is dynamically assigned
+        if (!global.adytumServer) throw new Error('GatewayServer not yet initialized');
+        // @ts-expect-error - global.adytumServer is dynamically assigned
+        return global.adytumServer.requestInput(...args);
+      },
+    } as any,
     logbookService,
-    agentLogStore,
-    subAgentSpawner,
+  );
+  container.register(UserInteractionService, { useValue: interactionService });
+
+  // SwarmManager, AgentRegistry, RuntimeConfig moved up
+
+  // Register Communication Tools for Root Agent
+  const commTools = createCommunicationTools(swarmMessenger, swarmManager);
+  commTools.forEach((t) => toolRegistry.register(t));
+
+  // Register Interaction Tools for Root Agent
+  const interactTools = createInteractionTools(
+    interactionService,
     prometheusAgentId,
-    { generateAvatar, avatarEnabled },
+    { workspaceId: config.workspacePath },
+    'reactive', // Root agent is always reactive
   );
-  toolRegistry.register(spawnAgentTool);
+  interactTools.forEach((t) => toolRegistry.register(t));
+
+  // Register Event Tools for Root Agent (Phase 2)
+  const eventTools = createEventTools(eventBus, prometheusAgentId);
+  eventTools.forEach((t) => toolRegistry.register(t));
+
   agent.refreshSystemPrompt();
 
   // Emergency stop: log critical model failure to LOGBOOK
@@ -514,6 +580,7 @@ export const startGateway = async (rootPath?: string) => {
     modelCatalog,
     modelRouter,
     socketIOService,
+    agentsController: container.resolve(AgentsController), // Inject controller
   });
 
   (global as any).adytumServer = server;
@@ -542,8 +609,15 @@ export const startGateway = async (rootPath?: string) => {
     });
   });
 
+  // Register Swarm Tools (Phase 4)
+  const swarmTools = createSwarmTools(swarmManager, agent);
+  swarmTools.forEach((t) => toolRegistry.register(t));
+
   await server.start();
   console.log(chalk.green('  ✓ ') + chalk.white(`Gateway: http://localhost:${config.gatewayPort}`));
+
+  // ── Restore Persistent Daemons (Phase 4.1) ────────────────
+  // await subAgentSpawner.restoreDaemons();
 
   console.log(chalk.dim('\n  ─────────────────────────────────────'));
   console.log(chalk.cyan(`  ${config.agentName} is awake. Type your message below.`));
@@ -563,18 +637,34 @@ export const startGateway = async (rootPath?: string) => {
   /**
    * Executes shutdown.
    */
+  let isShuttingDown = false;
+  /**
+   * Executes shutdown.
+   */
   const shutdown = async () => {
+    if (isShuttingDown) return;
+    isShuttingDown = true;
+
     console.log(chalk.dim(`\n  ${config.agentName} is resting. Goodbye.\n`));
+
+    // Stop interactive loop
     rl.close();
-    permissionManager.stopWatching();
-    await knowledgeWatcher.stop();
-    await skillLoader.stop();
-    await server.stop();
-    process.exit(0);
+
+    try {
+      permissionManager.stopWatching();
+      await knowledgeWatcher.stop();
+      await skillLoader.stop();
+      await server.stop();
+      logger.info('Shutdown complete.');
+      process.exit(0);
+    } catch (err) {
+      logger.error({ err }, 'Error during shutdown');
+      process.exit(1);
+    }
   };
 
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', () => shutdown());
+  process.on('SIGTERM', () => shutdown());
 
   // Shared approval prompt that pauses/resumes the main REPL
   // to prevent double character echo
@@ -601,6 +691,36 @@ export const startGateway = async (rootPath?: string) => {
       });
     });
   };
+
+  /**
+   * Prompts for text input in the CLI.
+   */
+  const promptInput = async (promptText: string): Promise<string> => {
+    rl.pause();
+    process.stdin.setRawMode?.(false);
+
+    return new Promise((resolve) => {
+      const inputRl = createInterface({
+        input: process.stdin,
+        output: process.stdout,
+        terminal: true,
+      });
+      inputRl.question(promptText, (answer) => {
+        inputRl.close();
+        rl.resume();
+        resolve(answer.trim());
+      });
+    });
+  };
+
+  // Handle local input requests from GatewayServer (for ask_user tool)
+  server.on('input_request', async (payload: { id: string; description: string }) => {
+    if (process.stdin.isTTY) {
+      console.log(chalk.yellow(`\n  ❓ Input Requested: ${payload.description}`));
+      const answer = await promptInput(chalk.cyan('  > '));
+      server.resolveInput(payload.id, answer);
+    }
+  });
 
   // Re-wire the shell tool's approval callback to respect execution permissions and dashboard approvals
   toolRegistry.get('shell_execute')!.execute = createShellToolWithApproval(
@@ -762,12 +882,7 @@ export const startGateway = async (rootPath?: string) => {
     rl.prompt();
   });
 
-  rl.on('close', async () => {
-    permissionManager.stopWatching();
-    await skillLoader.stop();
-    await server.stop();
-    process.exit(0);
-  });
+  rl.on('close', () => shutdown());
 };
 
 // Only auto-start if run directly (node index.js)

@@ -11,6 +11,9 @@ import { LLMClient, isLiteLLMAvailable } from './llm-client.js';
 import { auditLogger } from '../../security/audit-logger.js';
 import type { ModelRepository } from '../../domain/interfaces/model-repository.interface.js';
 
+// Helper type for OpenAI response format compatibility
+type OpenAIResponseFormat = { type: 'text' | 'json_object' };
+
 interface ModelRouterConfig {
   litellmBaseUrl: string;
   models: AdytumConfig['models'];
@@ -517,6 +520,7 @@ export class ModelRouter extends EventEmitter {
       maxTokens?: number;
       stream?: boolean;
       fallbackRole?: ModelRole;
+      response_format?: OpenAIResponseFormat;
       /** Tier 1/2: max 5 models; Tier 3: max 3 models (hierarchy spec). */
       tier?: 1 | 2 | 3;
     } = {},
@@ -661,6 +665,7 @@ export class ModelRouter extends EventEmitter {
       tools?: OpenAI.ChatCompletionTool[];
       temperature?: number;
       maxTokens?: number;
+      response_format?: OpenAIResponseFormat;
     },
   ): Promise<{ message: OpenAI.ChatCompletionMessage; usage: TokenUsage }> {
     const completion = await this.openaiClient.chat.completions.create({
@@ -669,6 +674,7 @@ export class ModelRouter extends EventEmitter {
       tools: options.tools,
       temperature: options.temperature ?? 0.7,
       max_tokens: options.maxTokens,
+      response_format: options.response_format,
       stream: false,
     });
 
@@ -707,6 +713,7 @@ export class ModelRouter extends EventEmitter {
       tools?: OpenAI.ChatCompletionTool[];
       temperature?: number;
       maxTokens?: number;
+      response_format?: OpenAIResponseFormat;
     },
   ): Promise<{ message: OpenAI.ChatCompletionMessage; usage: TokenUsage }> {
     const result = await this.llmClient.chat(modelConfig, {
@@ -714,6 +721,7 @@ export class ModelRouter extends EventEmitter {
       tools: options.tools,
       temperature: options.temperature ?? 0.7,
       maxTokens: options.maxTokens,
+      response_format: options.response_format,
     });
 
     // Validation: Empty response (no content, no tools) is treated as a retriable failure
@@ -873,9 +881,12 @@ export class ModelRouter extends EventEmitter {
     // Since this method only gets 'model' string (which might be 'provider/model' or just 'model'),
     // we'll try to find it in our local map first
     const config = this.modelMap.get(model);
-    
+
     if (config?.inputCost !== undefined && config?.outputCost !== undefined) {
-      return (promptTokens / 1_000_000) * config.inputCost + (completionTokens / 1_000_000) * config.outputCost;
+      return (
+        (promptTokens / 1_000_000) * config.inputCost +
+        (completionTokens / 1_000_000) * config.outputCost
+      );
     }
 
     // 2. Fallback to hardcoded defaults for known models
@@ -907,7 +918,7 @@ export class ModelRouter extends EventEmitter {
 
     // Normalize model name (remove provider prefix if present for lookup)
     const shortName = model.includes('/') ? model.split('/').pop()! : model;
-    
+
     // Check full name first, then short name
     const [inputCost, outputCost] = costs[model] || costs[shortName] || [0.05, 0.2]; // Generic fallback instead of 0
     return (promptTokens / 1_000_000) * inputCost + (completionTokens / 1_000_000) * outputCost;

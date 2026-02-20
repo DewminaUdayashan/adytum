@@ -16,7 +16,7 @@ import { AppError } from '../../domain/errors/app-error.js';
 export class ModelController {
   constructor(
     @inject(Logger) private logger: Logger,
-    @inject(ModelService) private modelService: ModelService
+    @inject(ModelService) private modelService: ModelService,
   ) {}
 
   /**
@@ -39,7 +39,7 @@ export class ModelController {
     if (!body.id || !body.provider || !body.model) {
       throw new AppError('id, provider, and model required', 400);
     }
-    
+
     await this.modelService.addModel({
       id: body.id,
       name: body.name || body.id,

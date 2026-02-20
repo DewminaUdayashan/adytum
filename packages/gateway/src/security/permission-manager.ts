@@ -38,7 +38,11 @@ export class PermissionManager {
   }
 
   /** Validate a path for access. Returns resolved path or throws. */
-  validatePath(targetPath: string, operation: 'read' | 'write' = 'read', workspaceId?: string): string {
+  validatePath(
+    targetPath: string,
+    operation: 'read' | 'write' = 'read',
+    workspaceId?: string,
+  ): string {
     try {
       const overrideRoot = workspaceId ? this.resolveWorkspacePath(workspaceId) : undefined;
       return this.validator.validate(targetPath, operation, overrideRoot);

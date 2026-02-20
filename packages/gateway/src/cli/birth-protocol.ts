@@ -443,10 +443,13 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
       baseUrl: m.baseUrl,
       apiKey: m.apiKey,
     })),
-    modelChains: models.reduce((acc: any, m) => {
-      acc[m.role] = [`${m.provider}/${m.model}`];
-      return acc;
-    }, { thinking: [], fast: [], local: [] }),
+    modelChains: models.reduce(
+      (acc: any, m) => {
+        acc[m.role] = [`${m.provider}/${m.model}`];
+        return acc;
+      },
+      { thinking: [], fast: [], local: [] },
+    ),
     litellmPort: 4000,
     gatewayPort: 3001,
     dashboardPort: 3002,

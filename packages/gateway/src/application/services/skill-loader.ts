@@ -300,10 +300,8 @@ export class SkillLoader {
     extensions: ['.ts', '.tsx', '.mts', '.cts', '.js', '.mjs', '.cjs', '.json'],
     alias: {
       zod: createRequire(import.meta.url).resolve('zod'),
-      '@adytum/shared': join(
-        dirname(fileURLToPath(import.meta.url)),
-        '../../../shared/src/index.ts',
-      ),
+      '@adytum/shared': join(dirname(fileURLToPath(import.meta.url)), '../../../../shared/src'),
+      '@adytum/gateway': join(dirname(fileURLToPath(import.meta.url)), '../../'),
     },
   });
 

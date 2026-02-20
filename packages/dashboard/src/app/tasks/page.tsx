@@ -7,9 +7,8 @@
 
 import { useState, useEffect } from 'react';
 import { gatewayFetch } from '@/lib/api';
-import { Card, Button, Spinner, Badge, EmptyState } from '@/components/ui';
+import { Card, Button, Spinner, Badge, EmptyState, PageHeader } from '@/components/ui';
 import { Clock, Plus, Trash2, Play, Pause, AlertTriangle } from 'lucide-react';
-import { PageHeader } from '@/components/ui';
 import { clsx } from 'clsx';
 
 interface CronJob {
@@ -34,7 +33,7 @@ export default function TasksPage() {
   const [newTask, setNewTask] = useState('');
 
   useEffect(() => {
-    loadJobs();
+    void loadJobs();
   }, []);
 
   const loadJobs = async () => {

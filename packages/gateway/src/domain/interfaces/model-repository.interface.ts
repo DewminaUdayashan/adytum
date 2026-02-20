@@ -22,7 +22,10 @@ export interface ModelRepository {
   getAll(): Promise<ModelEntry[]>;
   get(id: string): Promise<ModelEntry | undefined>;
   add(entry: ModelEntry): Promise<void>;
-  update(id: string, updates: Partial<Pick<ModelEntry, 'baseUrl' | 'apiKey' | 'name'>>): Promise<boolean>;
+  update(
+    id: string,
+    updates: Partial<Pick<ModelEntry, 'baseUrl' | 'apiKey' | 'name'>>,
+  ): Promise<boolean>;
   remove(id: string): Promise<void>;
   scanLocalModels(): Promise<ModelEntry[]>;
   resolveModel(aliasOrId: string): Promise<ModelEntry | undefined>;

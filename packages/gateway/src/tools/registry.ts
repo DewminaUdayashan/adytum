@@ -90,7 +90,7 @@ export class ToolRegistry {
   /**
    * Execute a tool call with validation.
    */
-  async execute(call: ToolCall): Promise<ToolResult> {
+  async execute(call: ToolCall, context?: any): Promise<ToolResult> {
     const tool = this.tools.get(call.name);
     if (!tool) {
       return {
@@ -104,7 +104,7 @@ export class ToolRegistry {
     try {
       // Validate arguments
       const validated = tool.parameters.parse(call.arguments);
-      const result = await tool.execute(validated);
+      const result = await tool.execute(validated, context);
 
       return {
         toolCallId: call.id,

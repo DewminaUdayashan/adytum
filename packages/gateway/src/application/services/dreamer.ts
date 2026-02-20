@@ -35,28 +35,52 @@ export class Dreamer {
       payload: { status: 'start' },
       status: 'success',
     });
-    const lastRun = Number(this.memoryDb.getMeta('dreamer_last_run') || '0');
-    const messages = this.memoryDb.getRecentMessages(120);
-    const logs = this.memoryDb.getActionLogsSince(lastRun).filter((l) => {
-      // Skip transient errors and system failures to prevent "hallucinated" persistent issues
-      if (l.actionType === 'error' || l.status === 'error') return false;
-      // Skip model response/call logs as they are internal details
-      if (l.actionType === 'model_call' || l.actionType === 'model_response') return false;
-      return true;
-    });
 
-    if (messages.length === 0 && logs.length === 0) {
+    // 1. Cost Control Check
+    // We check total daily cost to prevent runaway dreaming
+    const today = new Date().toISOString().split('T')[0];
+    const dailyUsage = this.memoryDb.getTokenUsageDaily({ from: new Date().setHours(0, 0, 0, 0) });
+    const totalCost = dailyUsage.reduce((acc, row) => acc + row.cost, 0);
+
+    // Hard limit: $2.00 per day for entire system (conservative)
+    // Dreamer usually runs at end of day, so if we burned budget, skipping is safer
+    if (totalCost > 2.0) {
       auditLogger.log({
         traceId: crypto.randomUUID(),
         actionType: 'dreamer_run',
-        payload: { status: 'skip', reason: 'no_messages_or_logs' },
+        payload: { status: 'skip', reason: 'daily_budget_exceeded', cost: totalCost },
+        status: 'blocked',
+      });
+      return;
+    }
+
+    const lastRun = Number(this.memoryDb.getMeta('dreamer_last_run') || '0');
+    // Fetch logs only since last successful run
+    // We increase limit to capture full day if needed, but 'since' filter handles the window
+    const logs = this.memoryDb.getActionLogsSince(lastRun).filter((l) => {
+      // We only care about user interactions and tool results, not internal model chatter
+      if (l.actionType === 'model_call' || l.actionType === 'model_response') return false;
+      if (l.actionType === 'error') return false;
+      return true;
+    });
+
+    const messages = this.memoryDb.getRecentMessages(100);
+    // Filter messages to only those after lastRun would be ideal, but getRecentMessages doesn't support 'since'
+    // For now, we rely on the overlap being acceptable or we could filter manually:
+    const newMessages = messages.filter((m) => m.createdAt > lastRun);
+
+    if (newMessages.length === 0 && logs.length === 0) {
+      auditLogger.log({
+        traceId: crypto.randomUUID(),
+        actionType: 'dreamer_run',
+        payload: { status: 'skip', reason: 'no_new_activity' },
         status: 'success',
       });
       this.memoryDb.setMeta('dreamer_last_run', String(Date.now()));
       return;
     }
 
-    const convo = messages.map((m) => `${m.role}: ${m.content}`).join('\n');
+    const convo = newMessages.map((m) => `${m.role}: ${m.content}`).join('\n');
     const logText = logs
       .map(
         (l) =>
@@ -67,74 +91,90 @@ export class Dreamer {
     const safeConvo = redactSecrets(convo);
     const safeLogText = redactSecrets(logText);
 
-    const prompt =
-      `Summarize the following recent conversation and actions into concise bullet points.\n` +
-      `Extract concrete facts, preferences, and decisions. Output bullets only.\n\n` +
-      `**IMPORTANT**: Ignore any technical errors, rate limits, model failures, or transient connection issues. ` +
-      `Do NOT turn them into "Facts" or "Memories". Focus only on the user's intent and meaningful interactions.\n\n` +
-      `Conversation:\n${safeConvo}\n\nActions:\n${safeLogText}`;
+    // 2. Structured Extraction Prompt
+    const prompt = `
+You are the "Memory system" for an AI agent. 
+Analyze the following new conversation and activity logs.
+Extract key **Facts**, **User Preferences**, and **Project Context** that should be remembered for the future.
+
+Input Data:
+Conversation:
+${safeConvo}
+
+Activity Logs:
+${safeLogText}
+
+Instructions:
+1. Ignore transient errors, hello/goodbye pleasantries, and system noise.
+2. Focus on:
+   - User tech stack choices (e.g., "User uses Next.js")
+   - Project constraints (e.g., "The API is at port 3000")
+   - User communication preferences (e.g., "User likes concise answers")
+   - Completed major milestones.
+3. Output strictly a JSON object with this shape:
+   {
+     "memories": [
+       { "content": "Fact string", "category": "preference" | "fact" | "milestone", "tags": ["tag1", "tag2"] }
+     ]
+   }
+4. If nothing worth remembering, return { "memories": [] }
+`;
 
     const { message } = await this.modelRouter.chat('fast', [{ role: 'user', content: prompt }], {
-      temperature: 0.2,
+      temperature: 0.1,
+      response_format: { type: 'json_object' }, // Enforce JSON if supported, else prompt does it
       fallbackRole: 'fast' as any,
     });
 
-    const summary = redactSecrets(message.content || '');
-    if (!summary.trim()) {
-      auditLogger.log({
-        traceId: crypto.randomUUID(),
-        actionType: 'dreamer_run',
-        payload: { status: 'skip', reason: 'empty_summary' },
-        status: 'success',
-      });
-      this.memoryDb.setMeta('dreamer_last_run', String(Date.now()));
-      return;
-    }
-
-    /**
-     * Executes scrub file.
-     * @param path - Path.
-     */
-    const scrubFile = (path: string) => {
-      if (!existsSync(path)) return;
-      const raw = readFileSync(path, 'utf-8');
-      const cleaned = redactSecrets(raw);
-      if (cleaned !== raw) writeFileSync(path, cleaned, 'utf-8');
+    let extracted: { memories: Array<{ content: string; category: string; tags: string[] }> } = {
+      memories: [],
     };
 
-    // Persist snapshot
-    const snapshotDir = join(this.dataPath, 'memories', 'snapshots');
-    mkdirSync(snapshotDir, { recursive: true });
-    const date = new Date().toISOString().split('T')[0];
-    const snapshotPath = join(snapshotDir, `${date}.md`);
-    scrubFile(snapshotPath);
-    appendFileSync(snapshotPath, `\n## ${new Date().toISOString()}\n${summary}\n`, 'utf-8');
-
-    // Store bullet facts into memory store
-    const bullets = summary
-      .split('\n')
-      .map((l) => l.replace(/^[-*]\s*/, '').trim())
-      .filter(Boolean);
-    for (const b of bullets) {
-      this.memoryStore.add(b, 'conversation', ['dreamer'], { source: 'dreamer' }, 'dream');
+    try {
+      if (message.content) {
+        extracted = JSON.parse(message.content);
+      }
+    } catch (e) {
+      console.warn('[Dreamer] Failed to parse structured memory JSON', e);
+      // Fallback: simple text saving if JSON fails? No, better to skip than pollute DB.
     }
 
-    // Append evolution log
-    const evolutionPath = join(this.workspacePath, 'EVOLUTION.md');
-    scrubFile(evolutionPath);
-    appendFileSync(evolutionPath, `\n## ${new Date().toISOString()}\n${summary}\n`, 'utf-8');
+    // 3. Store Memories
+    if (extracted.memories && extracted.memories.length > 0) {
+      await this.memoryStore.addBatch(
+        extracted.memories.map((m) => ({
+          content: m.content,
+          category: m.category as any,
+          tags: m.tags,
+          source: 'dreamer',
+          metadata: { confidence: 1.0, extractedAt: Date.now() },
+        })),
+      );
+    }
 
-    // Evolve Soul based on new insights
-    await this.evolveSoul(summary);
+    // 4. Evolve Soul (Legacy support - keep updating EVOLUTION.md for debugging)
+    const summary = extracted.memories.map((m) => `- ${m.content}`).join('\n');
+    if (summary) {
+      const evolutionPath = join(this.workspacePath, 'EVOLUTION.md');
+      if (existsSync(evolutionPath)) {
+        appendFileSync(evolutionPath, `\n## ${new Date().toISOString()}\n${summary}\n`, 'utf-8');
+      } else {
+        writeFileSync(
+          evolutionPath,
+          `# Evolution of Soul\n\n## ${new Date().toISOString()}\n${summary}\n`,
+          'utf-8',
+        );
+      }
+    }
 
     this.memoryDb.setMeta('dreamer_last_run', String(Date.now()));
+
     auditLogger.log({
       traceId: crypto.randomUUID(),
       actionType: 'dreamer_run',
       payload: {
         status: 'complete',
-        bullets: bullets.length,
-        summary: summary.length > 1200 ? `${summary.slice(0, 1200)}…` : summary,
+        memoriesExtracted: extracted.memories.length,
       },
       status: 'success',
     });
