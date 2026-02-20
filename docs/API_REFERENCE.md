@@ -15,7 +15,7 @@ Base defaults:
 
 Returns basic health metadata.
 
-## Agent and Session Operations
+## Swarm and Session Operations
 
 - `GET /api/memories`
 - `PUT /api/memories/:id`

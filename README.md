@@ -5,7 +5,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-007ACC?style=flat-square&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square)](https://opensource.org/licenses/MIT)
 
-Adytum is a **self-hosted, autonomous AI agent** that lives in your local machine. Unlike standard chatbots, Adytum is designed to be proactive—managing your files, scheduling your tasks, and connecting your digital world through a robust **Skill System**.
+Adytum is a **self-hosted, autonomous AI agent swarm** that lives in your local machine. Powered by hierarchical intelligence, Adytum is designed to be proactive—managing your files, scheduling your tasks, and delegating complex asynchronous workflows across specialized agents through a robust **Skill System**.
 
 ---
 
@@ -13,9 +13,9 @@ Adytum is a **self-hosted, autonomous AI agent** that lives in your local machin
 
 Adytum isn't just a tool—it's a **digital companion**.
 
-- **Your AI Buddy**: Think of Adytum as a pet or a sidekick that lives in your computer. It's not just a command-line utility; it has a presence.
-- **Independent Personality**: As it works with you, Adytum builds its own personality (defined in `SOUL.md`). It doesn't just reply; it _thinks_, _reflects_, and _grows_ alongside you.
-- **Proactive Autonomy**: It doesn't wait for orders. Adytum independently manages its own goals (`HEARTBEAT.md`), organizes its memory, and suggests actions to help you be more productive.
+- **Hierarchical Swarm**: Think of Adytum not as a single chatbot, but as an entire digital team. An Architect dynamically spawns specialized Managers and Workers to handle multiple tasks in parallel.
+- **Independent Personality**: The central components build their own narrative (`SOUL.md`). The swarm doesn't just reply; it _thinks_, _reflects_, and _grows_ alongside you.
+- **Proactive Autonomy**: It doesn't wait for orders. Agents independently manage their own goals (`HEARTBEAT.md`), organize their memory, and coordinate to help you be more productive.
 - **Privacy Centric**: Your data stays where it belongs—on your machine. Use Local LLMs (Ollama) for maximum privacy.
 
 ---
@@ -108,8 +108,8 @@ Use the **Models** page in the Dashboard to test connections and switch active r
 
 - **Monorepo**: Managed with NPM Workspaces.
 - **Backend**: Node.js + Fastify + WebSocket.
-- **Frontend**: Next.js 15 + React + Tailwind CSS.
-- **Agent Logic**: ReAct loop with Retrieval-Augmented Generation (RAG).
+- **Frontend**: Next.js 15 + React + Tailwind CSS (plus React Flow for Swarm visualization).
+- **Agent Logic**: Multi-tiered Swarm Architecture with decentralized ReAct loops and RAG.
 - **LLM Integration**: Provider-agnostic via `@mariozechner/pi-ai`.
 
 ---

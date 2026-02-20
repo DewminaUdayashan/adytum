@@ -21,6 +21,8 @@ Under configured `dataPath` (default: `~/.adytum/data`):
 - `security.json`: path whitelist and permission entries
 - `secrets.json`: per-skill secrets store
 - `memories/snapshots/*.md`: Dreamer periodic memory snapshots
+- `cryostasis.json`: dormant agents preserved across gateway restarts
+- `graveyard.json`: record of terminated reactive agents
 
 Under workspace:
 
@@ -41,7 +43,14 @@ Under workspace:
 - `pending_updates`: queued soul/guideline updates
 - `meta`: small key-value metadata (for timestamps, watermarks)
 
-## 4. Memory Categories
+## 4. Agent Persistence & Knowledge Graph
+
+Parallel to the DB, two core structures manage long-term state:
+
+- **AgentRegistry & Cryostasis**: The Swarm lifecycle pushes dormant daemons or scheduled workers into `cryostasis.json` to conserve active memory, thawing them upon demand. Finished workers rest in `graveyard.json` for historical auditing.
+- **GraphStore (Knowledge Graph)**: Entity nodes and relational edges are extracted by agents and stored to provide deep structural context across disparate tasks.
+
+## 5. Memory Categories
 
 `MemoryStore` supports categories:
 

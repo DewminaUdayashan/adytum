@@ -1,160 +1,112 @@
-# Adytum Architecture
+# Adytum: Technical & Architectural Overview
 
-This document explains the runtime architecture of Adytum for contributors.
+This document provides a comprehensive technical overview of the Adytum ecosystem, detailing the structural components, the hierarchical swarm logic, memory persistence, LLM orchestration, and event-driven communication.
 
-## 1. System Overview
+---
 
-Adytum is a monorepo with three primary packages:
+## 1. System Components
 
-- `packages/gateway`: backend runtime, API, WebSocket, tool orchestration, skill loading
-- `packages/dashboard`: Next.js UI for chat, operations, skills, settings, token analytics
-- `packages/shared`: shared types, schemas, protocol frames, constants, DB schema exports
+The project is structured as a monorepo containing three core packages:
 
-At runtime, the `gateway` is the central process. It hosts:
+- **`@adytum/gateway` (Backend)**: Built with Node.js and TypeScript, using `tsyringe` for dependency injection. It serves as the "brain," managing LLM routers, specialized agents, memory databases, and skills. It exposes both a REST API and a real-time Socket.IO server.
+- **`@adytum/dashboard` (Frontend)**: A Next.js application acting as the control center. It connects to the Gateway to visualize live Swarm metrics, read memory logs, modify model settings, and provide a direct chat interface with active agents.
+- **`@adytum/shared` (Shared Logic)**: Defines universal TypeScript types (`AdytumAgent`, `AgentStatus`, `SwarmMessage`) and constants (`SwarmEvents`) used by both the Gateway and the Dashboard.
 
-- the model routing layer
-- the ReAct agent runtime
-- tool execution
-- background services (heartbeat, dreamer, monologue, cron)
-- REST and WebSocket APIs consumed by dashboard and CLI
+---
 
-## 2. High-Level Topology
+## 2. Hierarchical Swarm Intelligence
 
-```mermaid
-flowchart LR
-    User[User] --> CLI[CLI: adytum]
-    User --> UI[Dashboard UI]
-    CLI --> GW[Gateway Server]
-    UI --> GW
+Adytum replaces standard single-agent paradigms with an autonomous, multi-tiered agent swarm capable of complex delegation.
 
-    GW --> AR[Agent Runtime]
-    AR --> MR[Model Router]
-    MR --> Proxy[LiteLLM Proxy]
-    MR --> Direct[Direct Provider APIs]
+### 2.1 Agent Hierarchy
 
-    AR --> TR[Tool Registry]
-    TR --> FS[Filesystem Tools]
-    TR --> SH[Shell Tool]
-    TR --> WEB[Web Fetch]
-    TR --> MEM[Memory Tools]
-    TR --> SKT[Skill Tools]
+The swarm enforces a strict chain of command to prevent recursion leaks and ensure structured delegation:
 
-    GW --> SL[Skill Loader]
-    SL --> SK[Workspace and Managed Skills]
+- **Tier 1 (The Architect)**: The central overseer (e.g., Prometheus). It manages the overall workspace goal. The Architect is strictly forbidden from spawning low-level workers directly or engaging in heavy parallel tasks itself. It must spawn Tier 2 Managers.
+- **Tier 2 (Managers)**: Orchestrators of specific workflows (e.g., "Weather Workflow Manager"). A Manager interprets the Architect's delegation and spawns Tier 3 Workers in parallel batches. Managers are programmatically blocked from spawning other Managers.
+- **Tier 3 (Workers)**: Task-specific executors designed to utilize tools and yield results back up the chain.
 
-    GW --> MDB[(SQLite: adytum.db)]
-    GW --> SEC[(data/security.json)]
-    GW --> SECR[(data/secrets.json)]
-    GW --> CRON[(data/cron.json)]
-```
+### 2.2 Swarm Management & Lifecycles
 
-## 3. Package Layout
+The `SwarmManager` (`swarm-manager.ts`) holds the state of all agents across their lifecycle:
 
-### `packages/gateway`
+- **Birth**: Triggered by `spawn_swarm_agent`. Agents receive a unique personality and toolset. The tool mandates a required "next step" to delegate a task to the newly spawned agent, ensuring agents aren't just spawned but actively utilized.
+- **Cryostasis**: Agents that are `scheduled` or run as `daemons` do not die; instead, they are frozen to a local `cryostasis.json` store when idle, freeing memory. Upon starting the Gateway, these persistent agents are "thawed" into active memory.
+- **Death & Graveyard**: Single-run "reactive" agents that complete their tasks are terminated and moved to `graveyard.json`, maintaining historical records without bloating the active registry.
 
-- `src/index.ts`: bootstraps runtime graph and starts gateway
-- `src/server.ts`: Fastify server wiring + route registration + event bridge
-- `src/domain/logic`: core runtime logic (agent loop, context, token tracking, approvals)
-- `src/infrastructure/llm`: model routing and provider client integration
-- `src/application/services`: skill service, cron manager, dreamer, heartbeat, monologue
-- `src/tools`: built-in tool definitions and registry
-- `src/security`: path validation, permission checks, audit logging, secrets store
-- `src/api`: REST/WebSocket controllers and route registration
+### 2.3 Swarm Communication
 
-### `packages/shared`
+Agents do not share a single hive-mind prompt. Instead, they interact via the `SwarmMessenger`.
 
-- `src/types.ts`: shared zod schemas and runtime config contracts
-- `src/protocol.ts`: WebSocket frame contracts and parse/serialize helpers
-- `src/constants.ts`: provider lists, dangerous commands, defaults
+- **Point-to-Point**: Agents can use the `send_message` tool to transmit queries, reports, or alerts to specific sibling/parent agents.
+- **Broadcasting**: Sending a message to the `BOARDCAST` ID distributes the message to all active agents. Agents use `check_inbox` to consume directed messages.
 
-### `packages/dashboard`
+---
 
-- consumes REST and WebSocket APIs from gateway
-- default startup port: `3002`
+## 3. Memory & Knowledge Management
 
-## 4. Runtime Boot Flow
+Memory in Adytum is designed for permanence, enabling the swarm to recall past events contextually.
 
-`startGateway(projectRoot)` in `packages/gateway/src/index.ts` performs:
+### 3.1 Local Vector Storage (SQLite)
 
-1. load and validate config from `adytum.config.yaml` + `.env`
-2. setup DI container
-3. auto-provision storage target (existing Postgres, Docker Postgres, or SQLite fallback)
-4. initialize security services (`PermissionManager`, `SecretsStore`)
-5. register built-in tools in `ToolRegistry`
-6. create memory persistence (`MemoryDB`, `MemoryStore`)
-7. initialize model catalog and `ModelRouter`
-8. discover and initialize skills via `SkillLoader`
-9. instantiate `AgentRuntime`
-10. start skill services with runtime context
-11. schedule background jobs (`Dreamer`, `InnerMonologue`, cron jobs)
-12. start `GatewayServer` (HTTP + WS)
+The primary memory mechanism relies on `SqliteMemoryRepository`, wrapping a core `MemoryDB`.
 
-## 5. Request Lifecycle
+- **Short-Term Logs**: Stores the exact input/output chat history for active sessions.
+- **Long-Term Snapshots**: Stores discrete facts and summarized insights. The engine can perform semantic similarity searches (`searchMemories` with Top-K results) when an agent encounters related contexts.
 
-User message flow:
+### 3.2 Knowledge Graph
 
-1. client sends WS `message` frame to `/ws`
-2. `AgentController` parses frame and calls `AgentRuntime.run`
-3. `AgentRuntime` builds model prompt from:
-   - system prompt (SOUL + tool guidance + skill context)
-   - conversation history (`ContextManager`)
-   - optional retrieved persistent memory
-4. runtime invokes `ModelRouter.chat`
-5. if model returns tool calls, runtime executes tools via `ToolRegistry`
-6. tool results are appended to context, loop repeats until final assistant text
-7. stream events are emitted as WS `stream` frames to connected clients
-8. logs and token usage are persisted and exposed through REST APIs
+Parallel to vector memory, Adytum builds a relational network of concepts. The `GraphStore` and `GraphIndexer` map entities (people, technologies, tasks) to nodes, establishing edges between them for high-level relationship deduction.
 
-## 6. Core Internal Boundaries
+### 3.3 Agent Memory Logging
 
-### Domain logic
+Each specific agent has an `AgentLogStore` mapping their individual internal monologue ("thoughts"), tool input/outputs, and intermediate findings, keeping debug trails isolated to the specific agent rather than cluttering a global log.
 
-- `AgentRuntime` controls conversation loop and tool orchestration
-- `ContextManager` handles short term context and compaction
-- `ApprovalService` handles pending approvals and resolve lifecycle
-- `TokenTracker` emits incremental token updates
+---
 
-### Infrastructure
+## 4. LLM Orchestration & Routing
 
-- `ModelRouter` handles chain resolution, retries, fallback, and proxy vs direct model calls
-- `MemoryDB` is the current operational persistence backend for messages, memories, and metrics
+Adytum abstracts underlying LLM providers (OpenAI, Anthropic, local models) behind a unified, resilient `ModelRouter`.
 
-### Application services
+### 4.1 Role-Based Chain Routing
 
-- `SkillLoader` discovers, validates, and loads plugin or instruction skills
-- `CronManager` persists and runs recurring jobs
-- `Dreamer` and `InnerMonologue` create autonomous memory and evolution loops
+Rather than hardcoding models (e.g., "use gpt-4"), agents request roles (`thinking`, `fast`, `local`).
 
-## 7. Configuration and State Surfaces
+- **Model Chains**: Each role corresponds to an ordered array of models defined in the workspace config.
+- **Automatic Fallback**: If the primary model in a chain fails (due to API downtime or rate limits), the router automatically re-attempts the prompt with the next model in the chain.
 
-Main files:
+### 4.2 Rate Limiting & Protection
 
-- `adytum.config.yaml`: system and skill configuration
-- `.env`: provider keys and optional overrides
-- `workspace/SOUL.md`: runtime personality prompt source
-- `workspace/HEARTBEAT.md`: heartbeat goals source
+- The router monitors HTTP response codes. Standard 429 quota errors trigger temporary bans (`cooldowns`) on specific models, immediately bypassing them in future checks until the TTL expires.
+- **Tier Quotas**: Lower-tier workers (Tier 3) are restricted to shorter fallback chains (max 3 models) compared to Managers/Architects (max 5) to conserve API budgets.
 
-Data files under `data/`:
+### 4.3 Proxy vs. Direct Access
 
-- `sqlite/adytum.db`: runtime DB (messages, memories, logs, tokens, pending updates)
-- `security.json`: path permission whitelist
-- `secrets.json`: per-skill secrets map
-- `cron.json`: scheduled jobs
-- `memories/snapshots/*.md`: Dreamer snapshots
+The Gateway dynamically checks for the presence of a local proxy (like LiteLLM). If detected, it funnels requests via standard OpenAI SDK protocol to the proxy. If not, it falls back to native API wrapper calls directly out to the cloud providers via `LLMClient`.
 
-## 8. Architecture Notes for Contributors
+---
 
-- Gateway is the source of truth for runtime state.
-- Dashboard is primarily an observer/controller over gateway APIs.
-- Skill contracts are enforced at load time (manifest + config schema).
-- Security is layered: path validation, permission manager, and explicit approval flow.
-- Shared zod schemas in `packages/shared` are the compatibility contract across packages.
+## 5. Event-Driven Backbone
 
-For deeper subsystem docs, see:
+The system relies heavily on decoupled event passing to synchronize the swarm and the frontend UI.
 
-- `docs/GATEWAY_RUNTIME.md`
-- `docs/API_REFERENCE.md`
-- `docs/SKILL_SYSTEM.md`
-- `docs/SKILL_DEVELOPMENT_GUIDE.md`
-- `docs/SECURITY_AND_APPROVALS.md`
-- `docs/STORAGE_AND_MEMORY.md`
+### 5.1 Internal Event Bus
+
+`EventBusService` acts as a central `EventEmitter`.
+
+- Agents use `emit_event` to declare state changes (e.g., "tests:passed").
+- Sibling agents use `wait_for_event` to pause their computational loop until the specified event fires, avoiding busy-waiting and conserving tokens.
+
+### 5.2 Real-time Dashboard Sync
+
+The `SocketIOService` bridges internal Gateway events via Websockets. When `SwarmManager` publishes an `AGENT_SPAWNED` or `AGENT_UPDATED` event, the socket pushes it to the Dashboard in real-time. This is what drives the dynamic graph visually expanding as new agents enter the battlefield.
+
+---
+
+## 6. Proactive Subsystems
+
+Adytum instances possess autonomy outside of direct user prompting.
+
+- **CronManager**: Tracks scheduled agent routines, allowing completely disjointed tasks (like daily reports or periodic cleanups) to spawn entirely independently.
+- **Inner Monologue / Dreamer**: Idling periods trigger internal self-reflection cycles where the core Architect evaluates its goals, cleans its memory, or generates proactive insights without external stimulation.
+- **Sensors**: Background file/system watchers inject events into the bus (e.g., "File changed in `.git`") that the swarm can react to programmatically.

@@ -9,7 +9,9 @@ Main objects are assembled in `packages/gateway/src/index.ts`:
 - `ToolRegistry`: registry and executor for tool definitions
 - `ModelRouter`: resolves model chains and executes model calls
 - `SkillLoader`: discovers and loads workspace/managed/extra skills
-- `AgentRuntime`: ReAct-style message loop and tool orchestration
+- `SwarmManager`: manages hierarchy (T1/T2/T3), persistence, and lifecycle of agents
+- `SwarmMessenger`: handles inter-agent point-to-point and broadcast communication
+- `AgentRuntime`: ReAct-style message loop and tool orchestration (per agent)
 - `GatewayServer`: Fastify HTTP/WS surface and event broadcasting
 
 Supporting services:
@@ -20,9 +22,9 @@ Supporting services:
 
 ## 2. Agent Loop (`AgentRuntime.run`)
 
-`AgentRuntime` is the central stateful loop.
+`AgentRuntime` is the central stateful loop for _each individual agent_.
 
-Per user turn:
+Per agent turn:
 
 1. create trace metadata and emit `trace_start`
 2. append user input to context and persistent message log
@@ -77,6 +79,9 @@ Built-in tools:
 - memory (`memory_store`, `memory_search`, `memory_list`)
 - personality update proposals
 - cron scheduling
+- **Swarm**: `spawn_swarm_agent`, `terminate_agent`, `delegate_task`, `list_agents`
+- **Communication**: `send_message`, `check_inbox`
+- **Events**: `emit_event`, `wait_for_event`
 
 Skills may register additional tools and long-running services.
 

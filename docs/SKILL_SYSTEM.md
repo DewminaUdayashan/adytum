@@ -128,7 +128,7 @@ Secrets flow:
 - selected non-secret config values
 - merged instructions from `SKILL.md` and any referenced instruction files
 
-This context is appended into `AgentRuntime` system prompt.
+This context is appended into the `AgentRuntime` system prompt (for the entire swarm).
 
 ## 9. Service Lifecycle
 
