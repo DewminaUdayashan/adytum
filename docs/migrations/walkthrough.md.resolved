@@ -1,0 +1,52 @@
+# Phase 1: Foundation Types — Walkthrough
+
+## What Was Done
+
+Created a comprehensive model connectivity type system inspired by OpenClaw's architecture. All changes are **backward compatible** — existing [ModelConfig](file:///Users/dewminaudayashan/Documents/project-adytum/packages/shared/src/types.ts#68-69), [ModelRole](file:///Users/dewminaudayashan/Documents/project-adytum/packages/shared/src/types.ts#55-56), and `models[]` in config continue to work unchanged.
+
+## Files Changed
+
+### New File
+- [models.ts](file:///Users/dewminaudayashan/Documents/project-adytum/packages/shared/src/types/models.ts) — 293 lines, the core type system
+
+### Modified Files
+
+| File | Change |
+|------|--------|
+| [index.ts](file:///Users/dewminaudayashan/Documents/project-adytum/packages/shared/src/index.ts) | Added `export * from './types/models.js'` |
+| [types.ts](file:///Users/dewminaudayashan/Documents/project-adytum/packages/shared/src/types.ts) | Added `modelProviders` and `fallback` to `AdytumConfigSchema` |
+| [model-repository.interface.ts](file:///Users/dewminaudayashan/Documents/project-adytum/packages/gateway/src/domain/interfaces/model-repository.interface.ts) | Enriched [ModelEntry](file:///Users/dewminaudayashan/Documents/project-adytum/packages/gateway/src/domain/interfaces/model-repository.interface.ts#8-34) with `api`, `cost`, `maxTokens`, `compat`, `headers` |
+| [model-catalog.ts](file:///Users/dewminaudayashan/Documents/project-adytum/packages/gateway/src/infrastructure/llm/model-catalog.ts) | New step 1.5 in [load()](file:///Users/dewminaudayashan/Documents/project-adytum/packages/gateway/src/infrastructure/llm/model-catalog.ts#45-179) reads from provider-grouped config |
+
+## New Type Hierarchy
+
+```mermaid
+graph TD
+    A[ModelsConfig] --> B[ModelProviderConfig]
+    B --> C[ModelDefinitionConfig]
+    C --> D[ModelCompatConfig]
+    C --> E[ModelCostConfig]
+    B --> F[ModelProviderAuthMode]
+    A --> G[Model Aliases]
+    A --> H[Default Model + Fallbacks]
+    I[FallbackConfig] -.-> A
+    J[ModelRef] -.-> A
+    K[ModelCatalogEntry] -.-> C
+```
+
+## Key Design Decisions
+
+1. **`modelProviders` not replacing `models`** — The new provider-grouped config lives in a separate `modelProviders` field. The legacy `models[]` array stays for simple setups and chain role assignments.
+
+2. **`source` field expanded** — `ModelEntry.source` now supports `'builtin' | 'config' | 'discovered' | 'user' | 'default'` to distinguish pi-ai builtins, config-file models, auto-discovered models, and dashboard overrides.
+
+3. **Cost is structured** — Instead of flat `inputCost`/`outputCost`, the new [ModelCostConfig](file:///Users/dewminaudayashan/Documents/project-adytum/packages/shared/src/types/models.ts#70-71) has `input`, `output`, `cacheRead`, `cacheWrite`. Old fields are marked `@deprecated` but still populated for backward compat.
+
+4. **API protocol types** — 7 distinct [ModelApi](file:///Users/dewminaudayashan/Documents/project-adytum/packages/shared/src/types/models.ts#26-27) values including our existing `litellm` proxy, so the LLMClient/ModelRouter can dispatch correctly per protocol.
+
+## Verification
+
+- ✅ Shared package compiles clean (`tsc --noEmit` → exit 0)
+- ✅ All existing exports preserved
+- ✅ `AdytumConfigSchema` backward compatible
+- ✅ [ModelEntry](file:///Users/dewminaudayashan/Documents/project-adytum/packages/gateway/src/domain/interfaces/model-repository.interface.ts#8-34) backward compatible (all new fields optional)

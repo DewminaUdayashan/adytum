@@ -3,6 +3,8 @@
  * @description Declares domain contracts used across the gateway.
  */
 
+import type { ModelApi, ModelCompatConfig, ModelCostConfig } from '@adytum/shared';
+
 export interface ModelEntry {
   id: string; // "provider/model"
   name: string; // Display name
@@ -12,10 +14,22 @@ export interface ModelEntry {
   reasoning?: boolean;
   apiKey?: string;
   baseUrl?: string;
-  source: 'default' | 'user' | 'discovered';
-  input?: ('text' | 'image')[];
+  source: 'default' | 'user' | 'discovered' | 'builtin' | 'config';
+  input?: ('text' | 'image' | 'audio' | 'video')[];
+  /** @deprecated Use cost.input instead */
   inputCost?: number; // Cost per 1M tokens
+  /** @deprecated Use cost.output instead */
   outputCost?: number; // Cost per 1M tokens
+  /** Structured cost data (per 1M tokens) */
+  cost?: ModelCostConfig;
+  /** API protocol type */
+  api?: ModelApi;
+  /** Maximum output tokens per request */
+  maxTokens?: number;
+  /** Per-model compatibility quirks */
+  compat?: ModelCompatConfig;
+  /** Custom headers for this model */
+  headers?: Record<string, string>;
 }
 
 export interface ModelRepository {

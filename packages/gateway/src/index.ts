@@ -200,6 +200,11 @@ export const startGateway = async (rootPath?: string) => {
   const llmStatus = await modelRouter.initialize();
   console.log(chalk.green('  ✓ ') + chalk.white(`LLM: ${llmStatus}`));
 
+  // Initialize provider infrastructure (env detection, discovery, auth, selection, fallback)
+  await modelCatalog.initProviders();
+  const allModels = await modelCatalog.getAll();
+  console.log(chalk.green('  ✓ ') + chalk.white(`Providers: ${allModels.length} models loaded`));
+
   const soulEngine = new SoulEngine(config.workspacePath);
   const skillLoader = new SkillLoader(config.workspacePath, {
     projectRoot,
