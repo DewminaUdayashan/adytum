@@ -1,4 +1,3 @@
-
 import { singleton, inject } from 'tsyringe';
 import { GatewayServer } from '../../server.js';
 import { LogbookService } from './logbook-service.js';
@@ -14,11 +13,15 @@ export class UserInteractionService {
    * Asks the user a question and waits for a text response.
    * This bridges the agent to the frontend/CLI via GatewayServer events.
    */
-  async askUser(agentId: string, question: string, metadata?: { sessionId?: string; workspaceId?: string }): Promise<string> {
+  async askUser(
+    agentId: string,
+    question: string,
+    metadata?: { sessionId?: string; workspaceId?: string },
+  ): Promise<string> {
     this.logbook.append({
       timestamp: Date.now(),
       agentId,
-      agentName: 'System', 
+      agentName: 'System',
       tier: 0,
       event: 'user_interaction_request',
       detail: `Question: ${question}`,
@@ -26,11 +29,11 @@ export class UserInteractionService {
 
     try {
       const answer = await this.server.requestInput(question, metadata);
-      
+
       this.logbook.append({
         timestamp: Date.now(),
         agentId,
-        agentName: 'System', 
+        agentName: 'System',
         tier: 0,
         event: 'user_interaction_response',
         detail: `Answer: ${answer.slice(0, 50)}...`,

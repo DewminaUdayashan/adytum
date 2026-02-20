@@ -50,7 +50,7 @@ export class GraphStore {
    * Gets a workspace by ID.
    */
   getWorkspace(id: string): Workspace | undefined {
-    return this.listWorkspaces().find(w => w.id === id);
+    return this.listWorkspaces().find((w) => w.id === id);
   }
 
   /**
@@ -90,18 +90,18 @@ export class GraphStore {
   save(graph: KnowledgeGraph, workspaceId?: string): void {
     const id = workspaceId || 'default';
     const graphPath = join(this.graphsDir, `graph_${id}.json`);
-    
+
     try {
       writeFileSync(graphPath, JSON.stringify(graph, null, 2), 'utf-8');
-      
+
       // Update workspace stats if it exists
       const workspaces = this.listWorkspaces();
-      const ws = workspaces.find(w => w.id === id);
+      const ws = workspaces.find((w) => w.id === id);
       if (ws) {
-          ws.lastIndexed = graph.lastUpdated;
-          ws.nodeCount = graph.nodes.length;
-          ws.edgeCount = graph.edges.length;
-          this.saveWorkspaces(workspaces);
+        ws.lastIndexed = graph.lastUpdated;
+        ws.nodeCount = graph.nodes.length;
+        ws.edgeCount = graph.edges.length;
+        this.saveWorkspaces(workspaces);
       }
     } catch (err) {
       logger.error({ err, workspaceId }, 'Failed to save knowledge graph.');
@@ -110,8 +110,8 @@ export class GraphStore {
   }
 
   deleteWorkspace(id: string): void {
-      const workspaces = this.listWorkspaces().filter(w => w.id !== id);
-      this.saveWorkspaces(workspaces);
-      // Optional: delete the graph file
+    const workspaces = this.listWorkspaces().filter((w) => w.id !== id);
+    this.saveWorkspaces(workspaces);
+    // Optional: delete the graph file
   }
 }

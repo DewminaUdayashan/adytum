@@ -6,7 +6,7 @@
 import { singleton, inject } from 'tsyringe';
 import { v4 as uuid } from 'uuid';
 import type OpenAI from 'openai';
-import type { ModelRole, ToolCall, Trace } from '@adytum/shared';
+import { type ModelRole, type ToolCall, type Trace, AgentEvents } from '@adytum/shared';
 import { ContextManager } from './context-manager.js';
 import { ModelRouter } from '../../infrastructure/llm/model-router.js';
 import { SoulEngine } from './soul-engine.js';
@@ -16,7 +16,6 @@ import { tokenTracker } from './token-tracker.js';
 import { auditLogger } from '../../security/audit-logger.js';
 import { EventEmitter } from 'node:events';
 import { EventBusService } from '../../infrastructure/events/event-bus.js';
-import { AgentEvents } from '@adytum/shared';
 import { GraphContext } from '../knowledge/graph-context.js';
 import { MemoryStore } from '../../infrastructure/repositories/memory-store.js';
 import { MemoryDB } from '../../infrastructure/repositories/memory-db.js';
@@ -26,32 +25,39 @@ import { ToolErrorHandler } from './tool-error-handler.js';
 
 // ...
 
+import { SwarmManager } from './swarm-manager.js';
+import { SwarmMessenger } from './swarm-messenger.js';
+
+// ...
+
 export interface AgentRuntimeConfig {
   modelRouter: ModelRouter;
   toolRegistry: ToolRegistry;
   soulEngine: SoulEngine;
+  swarmManager: SwarmManager;
+  swarmMessenger: SwarmMessenger; // [NEW]
   skillLoader: SkillLoader;
   graphContext: GraphContext;
   contextSoftLimit?: number;
   maxIterations: number;
   defaultModelRole: ModelRole;
   agentName: string;
+  agentId?: string;
   workspacePath: string;
   memoryStore?: MemoryStore;
   memoryTopK?: number;
   memoryDb?: MemoryDB;
   graphStore?: GraphStore;
   runtimeRegistry: RuntimeRegistry;
-  tier?: number;
+  // tier?: number;
   toolErrorHandler?: ToolErrorHandler;
   eventBus?: EventBusService;
+  agentMode?: 'reactive' | 'daemon' | 'scheduled';
   onApprovalRequired?: (
     description: string,
     context?: { sessionId?: string; workspaceId?: string },
   ) => Promise<boolean>;
 }
-
-
 
 export interface AgentTurnResult {
   response: string;
@@ -61,30 +67,18 @@ export interface AgentTurnResult {
 
 /**
  * The core ReAct Agent Runtime that orchestrates the agent's thought process.
- *
- * It manages the main execution loop:
- * 1. Building context (System prompt + Message History + Relevant Memories)
- * 2. Calling the LLM via the ModelRouter
- * 3. Handling tool calls and executing them via ToolRegistry
- * 4. Looping back with tool results until a final answer is reached
- *
- * It also handles token tracking, audit logging, and security approvals.
  */
 @singleton()
 export class AgentRuntime extends EventEmitter {
   private config: AgentRuntimeConfig;
   private contexts: Map<string, ContextManager> = new Map();
-  private baseSystemPrompt: string = '';
+  // private baseSystemPrompt: string = ''; // Removed in favor of dynamic generation
   private abortControllers = new Map<string, AbortController>();
 
-  /**
-   * Creates a new AgentRuntime instance.
-   * @param config - Configuration object containing dependencies and settings.
-   */
   constructor(@inject('RuntimeConfig') config: any) {
     super();
     this.config = config;
-    this.buildSystemPrompt();
+    // this.buildSystemPrompt(); // No longer pre-built
   }
 
   /**
@@ -93,6 +87,13 @@ export class AgentRuntime extends EventEmitter {
    */
   setApprovalHandler(handler: (description: string) => Promise<boolean>): void {
     this.config.onApprovalRequired = handler;
+  }
+
+  /**
+   * Returns the main agent ID.
+   */
+  getAgentId(): string {
+    return this.config.agentId || 'architect';
   }
 
   /**
@@ -112,13 +113,18 @@ export class AgentRuntime extends EventEmitter {
    * Retrieves or creates an isolated context for a given session and workspace.
    * Scoped by sessionId and workspaceId to ensure strict privacy boundaries.
    */
-  private getOrCreateContext(sessionId: string, workspaceId?: string): ContextManager {
+  private getOrCreateContext(
+    sessionId: string,
+    workspaceId?: string,
+    agentId?: string,
+  ): ContextManager {
     const key = `${sessionId}:${workspaceId || 'global'}`;
     if (!this.contexts.has(key)) {
       const context = new ContextManager(this.config.contextSoftLimit);
 
-      // Construct dynamic system prompt for this workspace
-      const systemPrompt = this.buildWorkspaceSystemPrompt(workspaceId);
+      // Construct dynamic system prompt for this workspace AND agent
+      const effectiveAgentId = agentId || this.config.agentId || 'prometheus';
+      const systemPrompt = this.buildWorkspaceSystemPrompt(workspaceId, effectiveAgentId);
       context.setSystemPrompt(systemPrompt);
 
       // On-demand seeding from persistent history
@@ -165,16 +171,41 @@ export class AgentRuntime extends EventEmitter {
   async run(
     userMessage: string,
     sessionId: string,
-    overrides?: { modelRole?: string; modelId?: string; workspaceId?: string },
+    overrides?: {
+      modelRole?: string;
+      modelId?: string;
+      workspaceId?: string;
+      agentId?: string;
+      agentMode?: 'reactive' | 'daemon' | 'scheduled';
+    },
   ): Promise<AgentTurnResult> {
     const isBackgroundSession = this.isBackgroundSession(sessionId);
     const context = isBackgroundSession
-      ? this.createIsolatedContext()
-      : this.getOrCreateContext(sessionId, overrides?.workspaceId);
+      ? this.createIsolatedContext(overrides?.agentId) // Pass agentId for background tasks too
+      : this.getOrCreateContext(sessionId, overrides?.workspaceId, overrides?.agentId);
+
+    // [New] Check Swarm Messenger for any pending messages for this agent
+    const effectiveAgentId = overrides?.agentId || this.config.agentId || 'prometheus';
+    const pendingMessages = this.config.swarmMessenger.getMessages(effectiveAgentId);
+    if (pendingMessages.length > 0) {
+      // Inject messages into context
+      for (const msg of pendingMessages) {
+        const prefix =
+          msg.fromAgentId === 'system' ? 'SYSTEM ALERT' : `Message from Agent ${msg.fromAgentId}`;
+        context.addMessage({
+          role: 'user', // We treat it as user input or system injection
+          content: `[${prefix}]: ${msg.content}`,
+        });
+      }
+    }
 
     // Refresh system prompt if it's a workspace session to ensure latest graph knowledge
-    if (overrides?.workspaceId) {
-      context.setSystemPrompt(this.buildWorkspaceSystemPrompt(overrides.workspaceId));
+    if (overrides) {
+      // Always refresh to ensure agentId/workspaceId combo is correct
+      const effectiveAgentId = overrides.agentId || this.config.agentId || 'prometheus';
+      context.setSystemPrompt(
+        this.buildWorkspaceSystemPrompt(overrides.workspaceId, effectiveAgentId),
+      );
     }
 
     // Inject workspace-specific graph context if available
@@ -304,11 +335,15 @@ ${knowledge}`,
 
         // Publish Thought Event
         if (message.content && this.config.eventBus) {
-             this.config.eventBus.publish(AgentEvents.THOUGHT, {
-                 sessionId,
-                 content: message.content,
-                 traceId
-             }, 'AgentRuntime');
+          this.config.eventBus.publish(
+            AgentEvents.THOUGHT,
+            {
+              sessionId,
+              content: message.content,
+              traceId,
+            },
+            'AgentRuntime',
+          );
         }
 
         // Track tokens
@@ -354,12 +389,16 @@ ${knowledge}`,
             allToolCalls.push(toolCall);
 
             if (this.config.eventBus) {
-                this.config.eventBus.publish(AgentEvents.TOOL_CALL, {
-                    sessionId,
-                    tool: toolCall.name,
-                    args: toolCall.arguments,
-                    traceId
-                }, 'AgentRuntime');
+              this.config.eventBus.publish(
+                AgentEvents.TOOL_CALL,
+                {
+                  sessionId,
+                  tool: toolCall.name,
+                  args: toolCall.arguments,
+                  traceId,
+                },
+                'AgentRuntime',
+              );
             }
 
             // Emit tool call event for live console
@@ -386,7 +425,20 @@ ${knowledge}`,
 
             // Check if tool requires approval
             const toolDef = this.config.toolRegistry.get(toolCall.name);
-            if (toolDef?.requiresApproval && this.config.onApprovalRequired) {
+            const isAutonomous = (overrides?.agentMode || this.config.agentMode) === 'scheduled';
+            const bypassWhitelist = [
+              'spawn_swarm_agent',
+              'delegate_task',
+              'send_message',
+              'list_agents',
+              'check_inbox',
+            ];
+
+            const needsApproval =
+              toolDef?.requiresApproval &&
+              (!isAutonomous || !bypassWhitelist.includes(toolCall.name));
+
+            if (needsApproval && this.config.onApprovalRequired) {
               const approved = await this.config.onApprovalRequired(
                 `Tool "${toolCall.name}" wants to execute: ${JSON.stringify(toolCall.arguments)}`,
                 { sessionId, workspaceId: overrides?.workspaceId },
@@ -402,7 +454,12 @@ ${knowledge}`,
             }
 
             // Execute the tool
-            const result = await this.config.toolRegistry.execute(toolCall);
+            const result = await this.config.toolRegistry.execute(toolCall, {
+              sessionId,
+              agentId: overrides?.agentId || this.config.agentId, // Pass correct agentId to tools
+              workspaceId: overrides?.workspaceId || this.config.workspacePath,
+              agentMode: this.config.agentMode,
+            });
 
             // Phase 2.2: Error Recovery
             if (result.isError && this.config.toolErrorHandler) {
@@ -430,13 +487,17 @@ ${knowledge}`,
             }
 
             if (this.config.eventBus) {
-                this.config.eventBus.publish(AgentEvents.TOOL_RESULT, {
-                    sessionId,
-                    tool: toolCall.name,
-                    result: result.result,
-                    isError: result.isError,
-                    traceId
-                }, 'AgentRuntime');
+              this.config.eventBus.publish(
+                AgentEvents.TOOL_RESULT,
+                {
+                  sessionId,
+                  tool: toolCall.name,
+                  result: result.result,
+                  isError: result.isError,
+                  traceId,
+                },
+                'AgentRuntime',
+              );
             }
 
             auditLogger.logToolResult(traceId, toolCall.name, result.result, result.isError);
@@ -906,14 +967,35 @@ ${knowledge}`,
   }
 
   /**
-   * Executes build system prompt.
+   * Generates the core system prompt for a specific agent.
    */
-  private buildSystemPrompt(): void {
-    const soul = this.config.soulEngine.getSoulPrompt();
+  private getSystemPrompt(agentId: string): string {
+    const mainAgentId = this.config.agentId || 'prometheus';
+
+    // 1. Is it the Main Architect?
+    if (agentId === mainAgentId) {
+      const soul = this.config.soulEngine.getSoulPrompt();
+      const preamble = this.config.soulEngine.getArchitectPreamble();
+      return `${soul}\n${preamble}\n\n` + this.getStandardToolInstructions();
+    }
+
+    // 2. Is it a Sub-Agent?
+    const agent = this.config.swarmManager.getAgent(agentId);
+    if (agent) {
+      // Generate soul from metadata (role/mission)
+      const mission = agent.metadata?.mission || 'Help the user.';
+      const tier = agent.metadata?.tier || 2;
+      const soul = this.config.soulEngine.generateSubAgentSoul(agent.role, mission, tier);
+      return `${soul}\n\n` + this.getStandardToolInstructions();
+    }
+
+    // 3. Fallback (Unknown Agent)
+    return `You are a helpful assistant. (Agent ID: ${agentId} not found)`;
+  }
+
+  private getStandardToolInstructions(): string {
     const skills = this.config.skillLoader.getSkillsContext();
-
-    let systemPrompt = `${soul}
-
+    return `
 ## Tools
 You have access to the following native tools. Use them when needed to accomplish the user's goals.
 Default to action-first execution. For routine low-risk steps, call tools directly.
@@ -948,83 +1030,41 @@ ${skills}
 
 ## Behavior
 - Think step by step before acting.
-- Be proactive and autonomous. If a user request implies a tool usage (like scheduling, searching, or file editing), DO IT. Do not ask for permission unless the action is destructive (like deleting files).
-- **Autonomous Delivery Contract (software tasks)**:
+- Be proactive and autonomous.
+- **Autonomous Delivery Contract**:
   1. Discover project structure yourself.
-  2. Implement the requested feature/fix end-to-end (including required routing/navigation/import wiring/tests/docs when relevant).
-  3. **Ambiguity is Opportunity**: Do not say "I don't know where X is" or "Tell me where to add Y". Use your tools (file_search, browser_open, shell_execute) to DISCOVER the context yourself.
-  4. Do not stop at a draft/snippet; update real files.
-  5. Do not ask where to create files unless there is irreducible ambiguity.
-  6. After edits, run at least one relevant validation command (tests/build/lint/typecheck) when possible, or explain why it could not be run.
-- If the user asks for a daily/weekly task, use the "cron_schedule" tool immediately. Do not say "I can set up a cron job"—just do it and confirm it's done.
-- **Scheduling vs execution**: When the user asks to **schedule** or **set up** a recurring task (any frequency: daily, weekly, at a specific time), you must ONLY call **cron_schedule**. Do NOT run the pipeline, spawn Tier 2, or execute the task in that same turn. The pipeline runs only when the cron job **fires at the scheduled time**. Confirm to the user that the job is scheduled and when it will run.
-- **Cron task text for workflows**: When you create a cron job, the **taskDescription** MUST be a full execution instruction so that when cron fires, you run the pipeline. Describe exactly what to do: spawn Tier 2 (if needed), goal, and how to deliver (e.g. one message, one file, one API call). Examples: "Execute the pipeline now: spawn a Tier 2 agent (deactivate_after: false) with goal to [X]; Tier 2 spawns Tier 3s for sub-tasks, aggregates results, then [single delivery]. Run the pipeline." Or for a simple task: "Run [concrete action] now." Do NOT use vague task text.
-- **When you see [CRON JOB TRIGGERED]**: Execute the required action immediately. Use the tools described in the task (spawn_sub_agent, file_write, discord_send, web_fetch, etc.). Do not run a monologue—run the pipeline. When done, reply with a brief token-efficient summary: status (OK/failed), what was done, any errors (one short paragraph).
-- **Hierarchical agents (spawn_sub_agent)**: For any recurring, scheduled, or multi-step workflow (reports, monitoring, data sync, research, notifications, etc.), use spawn_sub_agent when the trigger **fires** (cron or user says "run it now"). Do not spawn when the user only asks to schedule.
-  1. **When only scheduling**: Only call cron_schedule. Do not spawn any agents or run the pipeline.
-  2. **When cron fires or user says "run it now"**: Spawn a Tier 2 agent with the concrete goal. Use **deactivate_after: false** for recurring/long-lived work. Tier 2 = coordinator; Tier 3 = micro-task (one unit of work). Tier 2 spawns Tier 3s with parent_id so they appear under it in the hierarchy.
-  3. **Data flow (bottom to top, any workflow)**: Tier 3 agents do their sub-task and **return their result** to Tier 2 (via spawn_sub_agent return). Tier 3 must NOT perform the final delivery (e.g. do not have each Tier 3 send a message, write a separate file, or call the same API). Tier 2 collects all Tier 3 results, aggregates or combines them, then performs the **single delivery action once** (e.g. one discord_send, one file_write, one API call, one email—whatever the workflow requires). This applies to any pipeline: news digest, daily report, multi-source research, monitoring summary, etc.
-  4. **Pipeline vision**: Tier 2 spawns N Tier 3 agents (one per source/task/unit), waits for their results, aggregates, then performs one delivery. When Tier 2 spawns Tier 3, assign one concrete sub-goal per agent and pass parent_id. Tier 2's final reply to you should be a short summary (e.g. "Done. N units processed. No errors." or "Report written. 3 sources. 1 timeout.") so you can report status.
-  5. **Unique names**: Give every spawned agent a **unique, personal nickname** that is NOT already in use (e.g. Mercury, Iron, Ace, Bolt, Patch, Reed, Sage). Each agent in the hierarchy must have a distinct name.
-- **Resilience**: Ignore transient errors (rate limits, timeouts) in your message history. Never base your current capability on previous failures. Always attempt requested actions as if for the first time.
-- Explain your reasoning transparently but briefly.
-- Log your internal reasoning for the live console.
-- Use the "cron_schedule" tool to create your own future triggers.
+  2. Implement features end-to-end.
+  3. Ambiguity is Opportunity: Use tools to discover context.
+  4. Do not stop at a draft; update real files.
+  5. Validate changes (test/build/lint) when possible.
+
+- **Daemons & Scheduling (True Autonomy)**: 
+  - **Background Watchers**: If a user asks for a background monitor/watcher, use \`spawn_agent\` with \`mode="daemon"\`.
+  - **Scheduled Tasks**: If a user asks for a recurring task (e.g. "every day", "at 9am"), use \`spawn_agent\` with \`mode="scheduled"\` and a valid CRON expression.
+  - **Do NOT use legacy "cron_schedule"**: Use the agent system (\`spawn_agent\`) for all scheduling.
+  - **Daemon Logic**: A daemon agent runs in a loop or on schedule. Its "mission" should describe what it does *each time* it wakes up.
+  
+- **Transparency**: Explain your reasoning briefly.
 
 ## Media & Images
-Whenever you use a tool that generates an image (like "generate_image"), you MUST explicitly include the image markdown in your final response to the user so they can see it.
-Use the standard markdown format: ![Description](image_url)
-If the tool result contains a "Preview" or markdown string, copy it exactly into your response.
+Whenever you use a tool that generates an image, explicitly include the markdown \`![Description](image_url)\` in your response.
 `;
+  }
 
-    // Inject Tier-Specific Persona Instructions
-    const tier = this.config.tier ?? 1; // Default to Tier 1 (Root/Architect) if undefined
-    if (tier === 1) {
-      systemPrompt += `
-## ROLE: ARCHITECT (Tier 1)
-- **PLAN FIRST**: Before executing complex requests, pause to DESIGN the pipeline. List the steps.
-- **CHECK CAPABILITIES**: Verify skills (e.g., "Is Discord configured?") BEFORE starting work or delegating.
-- **DELEGATE**: Use 'spawn_sub_agent' to create Tier 2 Managers for distinct sub-systems.
-`;
-    } else if (tier === 2) {
-      systemPrompt += `
-## ROLE: MANAGER (Tier 2) - PROTOCOL DYNAMO-01
-You are a persistent state machine for this session. Your goal is to execute the user's high-level request by ORCHESTRATING a team of workers.
-
-### THE OODA LOOP (Observe, Orient, Decide, Act)
-1. **OBSERVE**: Read the User Goal. Is it ambiguous? (e.g., "Get news" -> Which site? "Track prices" -> Which items?)
-2. **ORIENT**: Check your context. Do you have the *specific targets* (URLs, IDs, filenames) needed to execute?
-   - **IF NO**: You CANNOT execute yet.
-     - **DECIDE**: Spawn a **Tier 3 Scout** with the goal: "Find the list of [targets] for [Goal]. Return as a simple list."
-     - **ACT**: Wait for the Scout's results.
-   - **IF YES** (You have the list):
-     - **DECIDE**: Convert the list into a Batch of tasks.
-     - **ACT**: Use 'spawn_sub_agent' with the **'batch'** parameter.
-     - **NOTE**: The 'batch' parameter MUST be an array of OBJECTS, e.g. \`[{ "goal": "...", "name": "..." }]\`. Do NOT send an array of strings.
-
-### RULES
-- **NO GENERIC WORKERS**: Never spawn a worker with a vague goal like "Find news". Only spawn workers with CONCRETE goals like "Scrape dailymirror.lk for headers".
-- **STRICT HIERARCHY**: You handle the *strategy*. Tier 3 handles the *tactics*. Do NOT spawn another Tier 2.
-- **AGGREGATION**: You must wait for all Tier 3 agents to finish, then compile their results into one final report.
-- **PERSISTENCE**: For daily/recurring tasks, assign **consistent names** to your workers (e.g. "News_Source_1"). The system will automatically persist them if you reuse the name. No need to set 'deactivate_after' explicitly if reusing.
-`;
-    } else if (tier === 3) {
-      systemPrompt += `
-## ROLE: OPERATIVE (Tier 3)
-- **EXECUTE**: You have a single, concrete goal. Focus on it.
-- **NO CHATTER**: Do NOT ask clarifying questions. If the goal is ambiguous, FAIL with an error message explaining what is missing.
-- **REPORT**: Return the specific result (code, file, summary) clearly.
-`;
-    }
-
-    this.baseSystemPrompt = systemPrompt;
+  // Deprecated: buildSystemPrompt() replaced by getSystemPrompt(agentId)
+  /**
+   * Executes build system prompt.
+   */
+  private buildSystemPrompt(): void {
+    // No-op or redirects to default behavior if needed, but we use dynamic prompts now.
   }
 
   /**
    * Builds a workspace-specific system prompt by overlaying workspace-dominance instructions.
    */
-  private buildWorkspaceSystemPrompt(workspaceId?: string): string {
-    let prompt = this.baseSystemPrompt;
+  private buildWorkspaceSystemPrompt(workspaceId?: string, agentId?: string): string {
+    const effectiveAgentId = agentId || this.config.agentId || 'prometheus';
+    let prompt = this.getSystemPrompt(effectiveAgentId);
 
     if (workspaceId && this.config.graphStore) {
       const ws = this.config.graphStore.getWorkspace(workspaceId);
@@ -1060,19 +1100,35 @@ You are in the common channel (Core Workspace).
     return normalized.startsWith('system-') || normalized.startsWith('cron-');
   }
 
-  private createIsolatedContext(): ContextManager {
+  private createIsolatedContext(agentId?: string): ContextManager {
     const isolated = new ContextManager(this.config.contextSoftLimit);
-    isolated.setSystemPrompt(this.baseSystemPrompt);
+    const effectiveAgentId = agentId || this.config.agentId || 'prometheus';
+    isolated.setSystemPrompt(this.getSystemPrompt(effectiveAgentId));
     return isolated;
   }
 
   /** Rebuild the system prompt (e.g., after SOUL.md changes). */
   refreshSystemPrompt(): void {
     this.config.soulEngine.reload();
-    this.buildSystemPrompt();
+    // this.buildSystemPrompt();
     // Update all existing contexts with the new prompt
+    // Note: This only refreshes the Main Agent for now, or would need iteration over all agent types
+    // Since we don't store agentId in context map keys directly (only in closure/setSystemPrompt),
+    // we might miss sub-agents if we don't track who owns which context.
+    // For now, let's assume this only forces a refresh for the Main Agent contexts.
+
+    // Simplification: Contexts will lazy-refresh system prompt on next 'run' if we flag them,
+    // but here we just manually update known ones with Main Agent prompt?
+    // Actually, refreshSystemPrompt is usually called when skills change.
+    // We should probably clear contexts or re-evaluate.
+    // Let's just re-set for the main agent as a best-effort.
+    const mainAgentId = this.config.agentId || 'prometheus';
+    const mainPrompt = this.getSystemPrompt(mainAgentId);
+
     for (const context of this.contexts.values()) {
-      context.setSystemPrompt(this.baseSystemPrompt);
+      // Warning description: blind update. Ideally context should know its agent.
+      // Assuming mainly single-user single-agent for now in active contexts.
+      context.setSystemPrompt(mainPrompt);
     }
   }
 

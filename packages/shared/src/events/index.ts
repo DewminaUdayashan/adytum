@@ -36,6 +36,15 @@ export const AgentEvents = {
   ERROR: 'agent:error',
 } as const;
 
+// Swarm Events
+export const SwarmEvents = {
+  AGENT_SPAWNED: 'agent:spawned',
+  AGENT_UPDATED: 'agent:updated',
+  AGENT_LOG: 'agent:log',
+  AGENT_MESSAGE: 'agent:message',
+  AGENT_TERMINATED: 'agent:terminated',
+} as const;
+
 // System Events
 export const SystemEvents = {
   READY: 'system:ready',
@@ -55,5 +64,6 @@ export type EventType =
   | (typeof MemoryEvents)[keyof typeof MemoryEvents]
   | (typeof GraphEvents)[keyof typeof GraphEvents]
   | (typeof AgentEvents)[keyof typeof AgentEvents]
+  | (typeof SwarmEvents)[keyof typeof SwarmEvents]
   | (typeof FileEvents)[keyof typeof FileEvents]
   | (typeof SystemEvents)[keyof typeof SystemEvents];

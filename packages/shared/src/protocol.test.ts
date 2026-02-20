@@ -4,8 +4,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { parseFrame, serializeFrame } from './protocol.js';
-import type { MessageFrame, ConnectFrame } from './protocol.js';
+import { parseFrame, serializeFrame, type MessageFrame, type ConnectFrame } from './protocol.js';
 
 describe('Protocol', () => {
   describe('serializeFrame', () => {

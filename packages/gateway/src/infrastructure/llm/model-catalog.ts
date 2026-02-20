@@ -8,8 +8,10 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { type AdytumConfig } from '@adytum/shared';
 import * as pi from '@mariozechner/pi-ai';
 import { singleton, inject } from 'tsyringe';
-import { ConfigService } from '../config/config-service.js';
-import { ModelRepository, ModelEntry } from '../../domain/interfaces/model-repository.interface.js';
+import type {
+  ModelRepository,
+  ModelEntry,
+} from '../../domain/interfaces/model-repository.interface.js';
 import { Logger } from '../../logger.js';
 
 // Initialize pi-ai built-ins once
@@ -21,6 +23,8 @@ try {
 
 export { ModelEntry };
 
+import { loadConfig } from '../../config.js';
+
 /**
  * Encapsulates model catalog behavior.
  */
@@ -29,13 +33,11 @@ export class ModelCatalog implements ModelRepository {
   private catalogPath: string;
   private models: Map<string, ModelEntry> = new Map();
   private detailsCache: Map<string, any> = new Map();
+  private config: AdytumConfig;
 
-  constructor(
-    @inject(ConfigService) private configService: ConfigService,
-    @inject(Logger) private logger: Logger
-  ) {
-    const config = this.configService.getFullConfig();
-    this.catalogPath = join(config.workspacePath || process.cwd(), 'models.json');
+  constructor(@inject(Logger) private logger: Logger) {
+    this.config = loadConfig();
+    this.catalogPath = join(this.config.workspacePath || process.cwd(), 'models.json');
     this.logger.info('ModelCatalog initialized');
     this.load();
   }
@@ -45,23 +47,25 @@ export class ModelCatalog implements ModelRepository {
    */
   private load() {
     this.models.clear();
-    const config = this.configService.getFullConfig();
+    // Refresh config in case it changed
+    this.config = loadConfig();
+    const config = this.config;
 
     // 1. Load built-in models from pi-ai
     try {
-      // @ts-ignore
+      // @ts-expect-error - pi-ai types are missing from package
       const providers = pi.getProviders();
       for (const providerId of providers) {
         if (typeof providerId !== 'string') continue;
-        // @ts-ignore
+        // @ts-expect-error - pi-ai types are missing from package
         const providerModels = pi.getModels(providerId);
         for (const m of providerModels) {
           const id = `${m.provider}/${m.id}`;
           // pi-ai provides pricing in cost/1k or cost/1M?
           // Looking at pi-ai types (inferred), it might have .pricing object
           // For now, we'll try to extract if present, or leave undefined to fall back to router defaults
-          // @ts-ignore
-          const cost = m.cost; 
+          // @ts-expect-error - pi-ai types are missing from package
+          const cost = m.cost;
           this.models.set(id, {
             id,
             name: m.name || m.id,
@@ -70,9 +74,9 @@ export class ModelCatalog implements ModelRepository {
             contextWindow: m.contextWindow,
             reasoning: m.reasoning,
             input: m.input,
-            // @ts-ignore
+            // @ts-expect-error - pi-ai types are missing from package
             inputCost: cost?.input, // Ensure these map correctly if pi-ai uses different structure
-            // @ts-ignore
+            // @ts-expect-error - pi-ai types are missing from package
             outputCost: cost?.output,
             source: 'default',
             baseUrl: m.baseUrl,
@@ -102,7 +106,7 @@ export class ModelCatalog implements ModelRepository {
       for (const mc of config.models) {
         const id = `${mc.provider}/${mc.model}`;
         const existing = this.models.get(id);
-        
+
         if (!existing) {
           this.models.set(id, {
             id,
@@ -115,7 +119,7 @@ export class ModelCatalog implements ModelRepository {
           });
         } else {
           // Merge config fields (baseUrl, apiKey) into existing entry
-          // Important: CLI models in adytum.config.yaml should be treated as high priority 
+          // Important: CLI models in adytum.config.yaml should be treated as high priority
           // but if we have a 'user' model from models.json it usually means a dashboard override.
           if (mc.baseUrl) existing.baseUrl = mc.baseUrl;
           if (mc.apiKey) existing.apiKey = mc.apiKey;
@@ -128,7 +132,9 @@ export class ModelCatalog implements ModelRepository {
    * Executes save.
    */
   save() {
-    const config = this.configService.getFullConfig();
+    // Refresh config
+    this.config = loadConfig();
+    const config = this.config;
     const userModels = Array.from(this.models.values()).filter((m) => m.source === 'user');
     try {
       if (!existsSync(config.workspacePath)) {
@@ -172,13 +178,16 @@ export class ModelCatalog implements ModelRepository {
    * @param updates - Updates.
    * @returns Whether the operation succeeded.
    */
-  async update(id: string, updates: Partial<Pick<ModelEntry, 'baseUrl' | 'apiKey' | 'name'>>): Promise<boolean> {
+  async update(
+    id: string,
+    updates: Partial<Pick<ModelEntry, 'baseUrl' | 'apiKey' | 'name'>>,
+  ): Promise<boolean> {
     const entry = this.models.get(id);
     if (!entry) return false;
     if (updates.baseUrl !== undefined) entry.baseUrl = updates.baseUrl || undefined;
     if (updates.apiKey !== undefined) entry.apiKey = updates.apiKey || undefined;
     if (updates.name !== undefined) entry.name = updates.name;
-    
+
     // If we are updating a default/discovered model, convert it to 'user' so it persists
     entry.source = 'user';
     this.models.set(id, entry);

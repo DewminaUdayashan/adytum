@@ -6,13 +6,18 @@
 import { readdirSync, statSync, readFileSync, existsSync } from 'node:fs';
 import { join, relative, extname, basename, resolve } from 'node:path';
 import { createHash } from 'node:crypto';
-import { KnowledgeGraph, GraphNode, GraphEdge, GraphNodeType } from '@adytum/shared';
+import {
+  type KnowledgeGraph,
+  type GraphNode,
+  type GraphEdge,
+  type GraphNodeType,
+  GraphEvents,
+} from '@adytum/shared';
 import { GraphStore } from './graph-store.js';
 import { logger } from '../../logger.js';
 import { SemanticProcessor } from './semantic-processor.js';
 
 import { EventBusService } from '../../infrastructure/events/event-bus.js';
-import { GraphEvents } from '@adytum/shared';
 
 // ...
 
@@ -45,9 +50,13 @@ export class GraphIndexer {
 
     // Safety Net: Force skipLLM to true if undefined, to prevent accidental costs.
     if (options.skipLLM === undefined) options.skipLLM = true;
-    
+
     if (this.eventBus) {
-        this.eventBus.publish(GraphEvents.INDEXING_STARTED, { path, mode: options.mode }, 'GraphIndexer');
+      this.eventBus.publish(
+        GraphEvents.INDEXING_STARTED,
+        { path, mode: options.mode },
+        'GraphIndexer',
+      );
     }
 
     const graph = this.store.load(workspaceId);
@@ -83,9 +92,9 @@ export class GraphIndexer {
         if (!existingNode || existingNode.metadata?.hash !== hash) {
           logger.debug(`Processing changed file: ${relPath}`);
           currentNode = this.createFileNode(relPath, filePath, hash);
-          
+
           if (this.eventBus) {
-             this.eventBus.publish(GraphEvents.NODE_UPDATED, currentNode, 'GraphIndexer');
+            this.eventBus.publish(GraphEvents.NODE_UPDATED, currentNode, 'GraphIndexer');
           }
         } else {
           currentNode = existingNode;
@@ -148,11 +157,15 @@ export class GraphIndexer {
     );
 
     if (this.eventBus) {
-        this.eventBus.publish(GraphEvents.INDEXING_COMPLETED, { 
-            nodes: graph.nodes.length, 
-            edges: graph.edges.length,
-            duration 
-        }, 'GraphIndexer');
+      this.eventBus.publish(
+        GraphEvents.INDEXING_COMPLETED,
+        {
+          nodes: graph.nodes.length,
+          edges: graph.edges.length,
+          duration,
+        },
+        'GraphIndexer',
+      );
     }
 
     return graph;

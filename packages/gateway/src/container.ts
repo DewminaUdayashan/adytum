@@ -29,10 +29,10 @@ export function setupContainer() {
   // Register singletons
   container.register(Logger, { useValue: new Logger() });
   container.register(ConfigService, { useClass: ConfigService });
-  
+
   // Repositories
   container.register('MemoryRepository', { useClass: SqliteMemoryRepository });
-  
+
   // Register ModelCatalog as a singleton first
   container.registerSingleton(ModelCatalog);
   // Then alias the interface token to the class token so they resolve to the SAME instance

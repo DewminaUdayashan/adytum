@@ -8,9 +8,10 @@ import type { ToolDefinition } from '@adytum/shared';
 import type { UserInteractionService } from '../application/services/user-interaction-service.js';
 
 export function createInteractionTools(
-  interactionService: UserInteractionService, 
+  interactionService: UserInteractionService,
   agentId: string,
-  context?: { sessionId?: string; workspaceId?: string }
+  context?: { sessionId?: string; workspaceId?: string },
+  agentMode: 'reactive' | 'daemon' | 'scheduled' = 'reactive',
 ): ToolDefinition[] {
   return [
     {
@@ -21,9 +22,21 @@ export function createInteractionTools(
         question: z.string().describe('The question or request for the user.'),
       }),
       requiresApproval: false, // asking the user IS the approval basically
-      execute: async (args: unknown) => {
+      execute: async (args: unknown, execContext?: any) => {
+        // Prevent headless agents from blocking on user input
+        if (agentMode === 'daemon' || agentMode === 'scheduled') {
+          return `TOOL_ERROR: You are running in ${agentMode} mode (HEADLESS). You cannot ask the user for input.
+            Unrecoverable error? Report to your manager.
+            Missing info? Search for it yourself.
+            DO NOT CALL ask_user AGAIN.`;
+        }
+
         const { question } = args as { question: string };
-        const answer = await interactionService.askUser(agentId, question, context);
+        const effectiveAgentId = execContext?.agentId || agentId;
+        const answer = await interactionService.askUser(effectiveAgentId, question, {
+          ...context,
+          ...execContext,
+        });
         return `User Response: ${answer}`;
       },
     },

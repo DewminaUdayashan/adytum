@@ -107,7 +107,7 @@ export default function PermissionsPage() {
         /* ignore */
       }
     };
-    load();
+    void load();
   }, []);
 
   const handleGrant = async () => {

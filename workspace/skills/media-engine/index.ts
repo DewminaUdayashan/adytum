@@ -4,12 +4,12 @@
  */
 
 import { z } from 'zod';
-import { container } from '../../../packages/gateway/src/container.js';
+import { container } from '@adytum/gateway/container.js';
 import AdmZip from 'adm-zip';
 import { join, basename, extname } from 'node:path';
 import { mkdirSync, existsSync } from 'node:fs';
-import { ConfigService } from '../../../packages/gateway/src/infrastructure/config/config-service.js';
-import { logger } from '../../../packages/gateway/src/logger.js';
+import { ConfigService } from '@adytum/gateway/infrastructure/config/config-service.js';
+import { logger } from '@adytum/gateway/logger.js';
 
 export default {
   tools: [
@@ -30,10 +30,10 @@ export default {
 
         try {
           const zip = new AdmZip(fullPath);
-          const entries = zip.getEntries().map(e => ({
+          const entries = zip.getEntries().map((e) => ({
             name: e.entryName,
             size: e.header.size,
-            isDirectory: e.isDirectory
+            isDirectory: e.isDirectory,
           }));
           return { name: basename(path), entries };
         } catch (err: any) {
@@ -62,17 +62,17 @@ export default {
           mkdirSync(targetDir, { recursive: true });
           const zip = new AdmZip(fullPath);
           zip.extractAllTo(targetDir, true);
-          
-          return { 
-            success: true, 
+
+          return {
+            success: true,
             message: `Extracted ${path} to managed directory.`,
             extraction_path: targetDir,
-            note: 'You can now use list_dir and read_file on this path.'
+            note: 'You can now use list_dir and read_file on this path.',
           };
         } catch (err: any) {
           return { error: `Extraction failed: ${err.message}` };
         }
       },
-    }
+    },
   ],
 };

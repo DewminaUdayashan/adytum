@@ -6,17 +6,14 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import { singleton, inject } from 'tsyringe';
 import { Logger } from '../../logger.js';
-import { ConfigService } from '../../infrastructure/config/config-service.js';
+import { loadConfig } from '../../config.js';
 
 /**
  * Encapsulates health controller behavior.
  */
 @singleton()
 export class HealthController {
-  constructor(
-    @inject(Logger) private logger: Logger,
-    @inject(ConfigService) private config: ConfigService
-  ) {}
+  constructor(@inject(Logger) private logger: Logger) {}
 
   /**
    * Executes check.
@@ -27,8 +24,8 @@ export class HealthController {
     return {
       status: 'ok',
       timestamp: new Date().toISOString(),
-      agent: this.config.get('agentName'),
-      version: process.env.npm_package_version || 'unknown'
+      agent: loadConfig().agentName,
+      version: process.env.npm_package_version || 'unknown',
     };
   }
 }

@@ -26,7 +26,13 @@ import {
 const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: Brain, group: 'main' },
   { href: '/chat', label: 'Chat Interface', icon: MessageCircle, group: 'main' },
-  { href: '/agents', label: 'Agent Management', icon: GitBranch, group: 'main' },
+  {
+    href: '/swarm',
+    label: 'Swarm Intelligence',
+    icon: Brain,
+    group: 'main',
+    badge: 'Experimental',
+  },
   { href: '/workspaces', label: 'Workspaces', icon: Layers, group: 'main' },
   { href: '/tasks', label: 'Scheduled Tasks', icon: Clock, group: 'main' },
   { href: '/console', label: 'Console Stream', icon: Terminal, group: 'tools' },
@@ -59,7 +65,15 @@ export function Sidebar() {
       <div className="flex-none px-6 py-6 border-b border-border-primary/40 bg-bg-tertiary/20">
         <div className="flex items-center gap-3.5">
           <div className="relative flex h-10 w-10 items-center justify-center rounded-xl overflow-hidden shadow-lg shadow-accent-primary/20 ring-1 ring-white/10">
-            <img src="/avatars/prometheus.png" alt="Prometheus" className="w-full h-full object-cover" onError={(e) => (e.currentTarget.src = 'https://ui-avatars.com/api/?name=Prometheus&background=0D1117&color=38bdf8')} />
+            <img
+              src="/avatars/prometheus.png"
+              alt="Prometheus"
+              className="w-full h-full object-cover"
+              onError={(e) =>
+                (e.currentTarget.src =
+                  'https://ui-avatars.com/api/?name=Prometheus&background=0D1117&color=38bdf8')
+              }
+            />
           </div>
           <div className="flex flex-col">
             <span className="text-[17px] font-bold text-text-primary tracking-tight leading-none">
@@ -79,7 +93,7 @@ export function Sidebar() {
                   {label}
                 </h3>
                 <div className="space-y-1">
-                  {items.map(({ href, label: navLabel, icon: Icon }) => {
+                  {items.map(({ href, label: navLabel, icon: Icon, badge }: any) => {
                     const isActive = pathname === href;
                     return (
                       <Link
@@ -103,7 +117,12 @@ export function Sidebar() {
                               : 'text-text-tertiary group-hover/item:text-text-secondary',
                           )}
                         />
-                        <span>{navLabel}</span>
+                        <span className="flex-1">{navLabel}</span>
+                        {badge && (
+                          <span className="px-1.5 py-0.5 rounded-md bg-accent-primary/10 text-accent-primary text-[9px] font-bold uppercase tracking-wider ring-1 ring-inset ring-accent-primary/20">
+                            {badge}
+                          </span>
+                        )}
                       </Link>
                     );
                   })}
@@ -112,8 +131,6 @@ export function Sidebar() {
             ),
         )}
       </nav>
-
-
     </aside>
   );
 }

@@ -63,7 +63,7 @@ export default function MemoriesPage() {
   };
 
   useEffect(() => {
-    load();
+    void load();
   }, [query]);
 
   const startEdit = (m: Memory) => {
@@ -146,7 +146,9 @@ export default function MemoriesPage() {
                       size="sm"
                       className={clsx(
                         'transition-all duration-200',
-                        active ? 'shadow-lg shadow-accent-primary/20' : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary'
+                        active
+                          ? 'shadow-lg shadow-accent-primary/20'
+                          : 'text-text-muted hover:text-text-primary hover:bg-bg-tertiary',
                       )}
                       onClick={() => toggleCategory(opt.value)}
                     >

@@ -53,20 +53,20 @@ export function useGatewaySocket() {
   const handleIncomingData = useCallback((data: any) => {
     // If it's a connect ack
     if (data && data.type === 'connect' && data.sessionId) {
-        sessionIdRef.current = data.sessionId;
+      sessionIdRef.current = data.sessionId;
     }
-    
+
     // Normalize data to StreamEvent
     const event = data as StreamEvent;
-    
+
     // DEBUG: Log incoming event to console
     if (event.type === 'input_request' || event.type === 'input_response') {
-        console.log('[Dashboard] Received event:', event);
+      console.log('[Dashboard] Received event:', event);
     }
 
     setEvents((prev) => {
-        // Deduplicate if needed? For now just append.
-        return [...prev.slice(-500), event];
+      // Deduplicate if needed? For now just append.
+      return [...prev.slice(-500), event];
     });
   }, []);
 
@@ -84,14 +84,14 @@ export function useGatewaySocket() {
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
     });
-    
+
     socketRef.current = socket;
 
     socket.on('connect', () => {
       console.log('Socket.IO Connected:', socket.id);
       setConnected(true);
       connectingRef.current = false;
-      
+
       // Send handshake/identify message
       socket.emit('message', {
         type: 'connect',
@@ -107,8 +107,8 @@ export function useGatewaySocket() {
     });
 
     socket.on('connect_error', (err) => {
-        console.error('Socket.IO Connection Error:', err);
-        connectingRef.current = false;
+      console.error('Socket.IO Connection Error:', err);
+      connectingRef.current = false;
     });
 
     // Handle standard messages (chat, stream frames)
@@ -118,25 +118,32 @@ export function useGatewaySocket() {
 
     // Handle generic Event Bus events
     socket.on('event', (data: any) => {
-       // Tag them so UI can distinguish if needed
-       handleIncomingData({ ...data, source: 'eventLoop' });
+      // Tag them so UI can distinguish if needed
+      handleIncomingData({ ...data, source: 'eventLoop' });
     });
-
   }, [handleIncomingData]);
 
   const sendMessage = useCallback(
-    (content: string, sessionId: string, options?: { 
-      modelRole?: string; 
-      modelId?: string;
-      workspaceId?: string;
-      attachments?: Array<{ type: 'image' | 'file' | 'audio' | 'video'; data: string; name?: string }>;
-    }) => {
+    (
+      content: string,
+      sessionId: string,
+      options?: {
+        modelRole?: string;
+        modelId?: string;
+        workspaceId?: string;
+        attachments?: Array<{
+          type: 'image' | 'file' | 'audio' | 'video';
+          data: string;
+          name?: string;
+        }>;
+      },
+    ) => {
       if (socketRef.current?.connected) {
         socketRef.current.emit('message', {
-            type: 'message',
-            sessionId,
-            content,
-            ...options,
+          type: 'message',
+          sessionId,
+          content,
+          ...options,
         });
       }
     },
@@ -155,8 +162,8 @@ export function useGatewaySocket() {
     connect();
     return () => {
       if (socketRef.current) {
-          socketRef.current.disconnect();
-          socketRef.current = null;
+        socketRef.current.disconnect();
+        socketRef.current = null;
       }
       connectingRef.current = false;
     };

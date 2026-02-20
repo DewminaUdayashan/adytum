@@ -29,10 +29,10 @@ describe('ModelRouter', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
-    
+
     mockModelCatalog = {
       get: vi.fn().mockImplementation(async (id: string) => {
-        const found = mockModels.find(m => `${m.provider}/${m.model}` === id || m.model === id);
+        const found = mockModels.find((m) => `${m.provider}/${m.model}` === id || m.model === id);
         return found ? { ...found } : null;
       }),
       list: vi.fn(),
@@ -72,17 +72,15 @@ describe('ModelRouter', () => {
       expect(mockLLMClient.chat).toHaveBeenCalledTimes(1);
       expect(mockLLMClient.chat).toHaveBeenCalledWith(
         expect.objectContaining({ model: 'claude-3-sonnet' }),
-        expect.any(Object)
+        expect.any(Object),
       );
     });
 
     it('should retry the same model on retriable error', async () => {
-      mockLLMClient.chat
-        .mockRejectedValueOnce(new Error('timeout'))
-        .mockResolvedValueOnce({
-          message: { content: 'recovered' },
-          usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
-        });
+      mockLLMClient.chat.mockRejectedValueOnce(new Error('timeout')).mockResolvedValueOnce({
+        message: { content: 'recovered' },
+        usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
+      });
 
       const result = await modelRouter.chat('thinking', [{ role: 'user', content: 'hi' }]);
 
@@ -97,19 +95,25 @@ describe('ModelRouter', () => {
         fallbackOnError: false,
       });
 
-      mockLLMClient.chat
-        .mockRejectedValueOnce(new Error('429 rate limit'))
-        .mockResolvedValueOnce({
-          message: { content: 'fallback success' },
-          usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
-        });
+      mockLLMClient.chat.mockRejectedValueOnce(new Error('429 rate limit')).mockResolvedValueOnce({
+        message: { content: 'fallback success' },
+        usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
+      });
 
       const result = await modelRouter.chat('fast', [{ role: 'user', content: 'hi' }]);
 
       expect(result.message.content).toBe('fallback success');
       expect(mockLLMClient.chat).toHaveBeenCalledTimes(2);
-      expect(mockLLMClient.chat).toHaveBeenNthCalledWith(1, expect.objectContaining({ model: 'gpt-4o' }), expect.any(Object));
-      expect(mockLLMClient.chat).toHaveBeenNthCalledWith(2, expect.objectContaining({ model: 'gpt-4o-mini' }), expect.any(Object));
+      expect(mockLLMClient.chat).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ model: 'gpt-4o' }),
+        expect.any(Object),
+      );
+      expect(mockLLMClient.chat).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ model: 'gpt-4o-mini' }),
+        expect.any(Object),
+      );
     });
 
     it('should NOT fallback to next model on rate limit when fallbackOnRateLimit is false', async () => {
@@ -121,9 +125,10 @@ describe('ModelRouter', () => {
 
       mockLLMClient.chat.mockRejectedValue(new Error('429 rate limit'));
 
-      await expect(modelRouter.chat('fast', [{ role: 'user', content: 'hi' }]))
-        .rejects.toThrow(/fallback is disabled/);
-      
+      await expect(modelRouter.chat('fast', [{ role: 'user', content: 'hi' }])).rejects.toThrow(
+        /fallback is disabled/,
+      );
+
       // Should try maxRetries (1) for the first model then stop
       expect(mockLLMClient.chat).toHaveBeenCalledTimes(1);
     });
@@ -135,12 +140,10 @@ describe('ModelRouter', () => {
         fallbackOnError: true,
       });
 
-      mockLLMClient.chat
-        .mockRejectedValueOnce(new Error('generic failure'))
-        .mockResolvedValueOnce({
-          message: { content: 'recovered' },
-          usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
-        });
+      mockLLMClient.chat.mockRejectedValueOnce(new Error('generic failure')).mockResolvedValueOnce({
+        message: { content: 'recovered' },
+        usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
+      });
 
       const result = await modelRouter.chat('fast', [{ role: 'user', content: 'hi' }]);
 
@@ -151,33 +154,31 @@ describe('ModelRouter', () => {
 
   describe('chatStream', () => {
     it('should NOT fallback on error when fallbackOnError is false', async () => {
-        modelRouter.updateRouting({
-            maxRetries: 1,
-            fallbackOnRateLimit: true,
-            fallbackOnError: false,
-        });
+      modelRouter.updateRouting({
+        maxRetries: 1,
+        fallbackOnRateLimit: true,
+        fallbackOnError: false,
+      });
 
-        mockLLMClient.chat
-            .mockRejectedValueOnce(new Error('generic failure'))
-            .mockResolvedValueOnce({
-                message: { content: 'unexpected fallback' },
-                usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
-            });
+      mockLLMClient.chat.mockRejectedValueOnce(new Error('generic failure')).mockResolvedValueOnce({
+        message: { content: 'unexpected fallback' },
+        usage: { promptTokens: 10, completionTokens: 10, totalTokens: 20 },
+      });
 
-        const stream = modelRouter.chatStream('fast', [{ role: 'user', content: 'hi' }]);
-        
-        /**
-         * Executes iterate stream.
-         */
-        const iterateStream = async () => {
-            for await (const _ of stream) {
-                // ...
-            }
-        };
+      const stream = modelRouter.chatStream('fast', [{ role: 'user', content: 'hi' }]);
 
-        await expect(iterateStream()).rejects.toThrow(/fallback is disabled/);
+      /**
+       * Executes iterate stream.
+       */
+      const iterateStream = async () => {
+        for await (const _ of stream) {
+          // ...
+        }
+      };
 
-        expect(mockLLMClient.chat).toHaveBeenCalledTimes(1);
+      await expect(iterateStream()).rejects.toThrow(/fallback is disabled/);
+
+      expect(mockLLMClient.chat).toHaveBeenCalledTimes(1);
     });
   });
 });

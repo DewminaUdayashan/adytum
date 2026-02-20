@@ -63,7 +63,7 @@ export class InnerMonologue {
     const reflection = redactSecrets(message.content || '');
     if (reflection.trim()) {
       this.memoryDb.addThought(reflection);
-      this.memoryStore.add(
+      await this.memoryStore.add(
         reflection,
         'conversation',
         ['monologue'],

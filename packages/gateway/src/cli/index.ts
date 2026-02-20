@@ -10,13 +10,13 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 import { ADYTUM_VERSION } from '@adytum/shared';
 import { runBirthProtocol } from './birth-protocol.js';
-import { existsSync, rmSync, readFileSync } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { existsSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import { confirm } from '@inquirer/prompts';
 import { ModelCatalog } from '../infrastructure/llm/model-catalog.js';
 import { spawn, execSync } from 'node:child_process';
 import open from 'open';
-import { fileURLToPath } from 'node:url';
+// No unnecessary imports
 
 const program = new Command();
 
@@ -71,7 +71,9 @@ program
           rmSync(envPath, { force: true });
           console.log(chalk.dim('   ✓ Removed .env'));
         }
-      } catch (e) {}
+      } catch {
+        // Ignore cleanup errors
+      }
     }
 
     await runBirthProtocol(projectRoot);
@@ -96,7 +98,7 @@ program
       console.log(chalk.yellow('⚠  Project not built. Running build first...'));
       try {
         execSync('npm run build', { stdio: 'inherit', cwd: projectRoot });
-      } catch (e) {
+      } catch {
         console.error(chalk.red('❌ Build failed. Please run `npm run build` manually.'));
         process.exit(1);
       }

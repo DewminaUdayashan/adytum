@@ -7,14 +7,21 @@ import { z } from 'zod';
 import type { ToolDefinition } from '@adytum/shared';
 import type { EventBusService } from '../infrastructure/events/event-bus.js';
 
-export function createEventTools(eventBus: EventBusService, sourceAgentId: string): ToolDefinition[] {
+export function createEventTools(
+  eventBus: EventBusService,
+  sourceAgentId: string,
+): ToolDefinition[] {
   return [
     {
       name: 'emit_event',
       description:
         'Emits a system-wide event. Use this to notify other agents or system components about a state change, a completed task, or a trigger condition.',
       parameters: z.object({
-        type: z.string().describe('The event type (e.g., "build:failed", "test:completed"). Use namespaced keys.'),
+        type: z
+          .string()
+          .describe(
+            'The event type (e.g., "build:failed", "test:completed"). Use namespaced keys.',
+          ),
         payload: z.string().describe('JSON stringified payload containing event details.'),
       }),
       execute: async (args: unknown) => {
@@ -38,16 +45,14 @@ export function createEventTools(eventBus: EventBusService, sourceAgentId: strin
       }),
       execute: async (args: unknown) => {
         const { type, timeoutMs = 60000 } = args as { type: string; timeoutMs?: number };
-        
-        return new Promise((resolve) => {
-          let timer: NodeJS.Timeout;
 
+        return new Promise((resolve) => {
           const handler = (event: any) => {
-            clearTimeout(timer);
+            if (timer) clearTimeout(timer);
             resolve(`Event "${type}" received: ${JSON.stringify(event.payload)}`);
           };
 
-          timer = setTimeout(() => {
+          const timer = setTimeout(() => {
             eventBus.off(type, handler);
             resolve(`Timeout waiting for event "${type}" after ${timeoutMs}ms.`);
           }, timeoutMs);

@@ -34,16 +34,16 @@ export class EventBusService extends EventEmitter {
 
     // Emit specific event type
     this.emit(type, event);
-    
+
     // Emit wildcard for global listeners (debuggers, websocket bridge)
     this.emit('*', event);
 
     // Simple robust logging (avoid circular JSON errors with complex payloads)
     try {
-        // Only log high-level info unless debug mode
-        // console.log(`[EventBus] ${type} from ${source}`);
+      // Only log high-level info unless debug mode
+      // console.log(`[EventBus] ${type} from ${source}`);
     } catch {
-        // ignore logging errors
+      // ignore logging errors
     }
   }
 

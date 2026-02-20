@@ -10,7 +10,6 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  transpilePackages: ['@adytum/shared'],
   webpack: (config) => {
     // In this monorepo, gateway depends on React 18 (via ink) and dashboard
     // uses React 19. Ensure webpack resolves React from dashboard's own

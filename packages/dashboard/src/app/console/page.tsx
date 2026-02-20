@@ -206,14 +206,14 @@ function ConsoleEntry({
               onChange={(e) => setInputValue(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && inputValue.trim()) {
-                   onInputResponse(event.id as string, inputValue);
-                   setSubmitted(true);
+                  onInputResponse(event.id as string, inputValue);
+                  setSubmitted(true);
                 }
               }}
             />
-            <Button 
-              size="sm" 
-              variant="primary" 
+            <Button
+              size="sm"
+              variant="primary"
               disabled={!inputValue.trim()}
               onClick={() => {
                 onInputResponse(event.id as string, inputValue);

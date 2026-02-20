@@ -7,7 +7,10 @@ import { z } from 'zod';
 import type { ToolDefinition } from '@adytum/shared';
 import type { DirectMessagingService } from '../application/services/direct-messaging-service.js';
 
-export function createCommunicationTools(messagingService: DirectMessagingService, senderId: string): ToolDefinition[] {
+export function createCommunicationTools(
+  messagingService: DirectMessagingService,
+  senderId: string,
+): ToolDefinition[] {
   return [
     {
       name: 'send_message',
@@ -17,9 +20,10 @@ export function createCommunicationTools(messagingService: DirectMessagingServic
         recipient: z.string().describe('Name or ID of the agent to message.'),
         content: z.string().describe('The message content. Be clear and concise.'),
       }),
-      execute: async (args: unknown) => {
+      execute: async (args: unknown, context?: any) => {
         const { recipient, content } = args as { recipient: string; content: string };
-        const result = await messagingService.sendMessage(senderId, recipient, content);
+        const effectiveSenderId = context?.agentId || senderId;
+        const result = await messagingService.sendMessage(effectiveSenderId, recipient, content);
         if (result.success) {
           return `Message sent to "${recipient}". Response: ${result.response}`;
         } else {

@@ -14,11 +14,7 @@ import { container } from 'tsyringe';
  * @param request - Request.
  * @param reply - Reply.
  */
-export function errorHandler(
-  error: FastifyError,
-  request: FastifyRequest,
-  reply: FastifyReply
-) {
+export function errorHandler(error: FastifyError, request: FastifyRequest, reply: FastifyReply) {
   const logger = container.resolve(Logger);
 
   if (error instanceof AppError) {

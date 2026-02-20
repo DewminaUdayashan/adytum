@@ -10,6 +10,24 @@ import type { AgentMetadata, AgentTier, AgentLogEntry } from '@adytum/shared';
 
 const AGENTS_FILENAME = 'agents.json';
 
+import { EventEmitter } from 'events';
+
+export interface AgentProfile {
+  id: string;
+  name: string;
+  tier: 1 | 2 | 3;
+  mission?: string;
+  parentId: string | null;
+  status: 'idle' | 'busy' | 'offline' | 'running'; // 'running' for daemons
+  modelId: string;
+  avatar: string;
+  mode: 'reactive' | 'daemon' | 'scheduled';
+  cronSchedule?: string;
+  topics?: string[];
+  persistence: 'ephemeral' | 'persistent';
+  createdAt: number;
+}
+
 export interface BirthParams {
   name: string;
   tier: AgentTier;
@@ -17,6 +35,11 @@ export interface BirthParams {
   avatarUrl?: string | null;
   role?: string;
   model?: string;
+  mission?: string;
+  mode?: 'reactive' | 'daemon' | 'scheduled';
+  cronSchedule?: string;
+  topics?: string[];
+  persistence?: 'ephemeral' | 'persistent';
 }
 
 export interface AgentRecord extends AgentMetadata {
@@ -24,17 +47,24 @@ export interface AgentRecord extends AgentMetadata {
   _activeSince?: number | null;
   /** Persistent session ID for long-lived agents. */
   activeSessionId?: string;
+  mission?: string;
+  status?: AgentProfile['status'];
+  mode?: AgentProfile['mode'];
+  cronSchedule?: string;
+  topics?: string[];
+  persistence?: AgentProfile['persistence'];
 }
 
 /**
  * Registry of all agents (Prometheus + Tier 2 + Tier 3) with Birth Protocol metadata.
  * Persists to data/agents.json; supports Birth and Death (Last Breath).
  */
-export class AgentRegistry {
+export class AgentRegistry extends EventEmitter {
   private dataPath: string;
   private agents = new Map<string, AgentRecord>();
 
   constructor(dataPath: string) {
+    super();
     this.dataPath = dataPath;
     this.load();
   }
@@ -56,7 +86,12 @@ export class AgentRegistry {
       const data = JSON.parse(raw) as { agents: AgentRecord[] };
       this.agents.clear();
       for (const a of data.agents || []) {
-        this.agents.set(a.id, { ...a, modelIds: a.modelIds ?? [], _activeSince: null });
+        this.agents.set(a.id, {
+          ...a,
+          modelIds: a.modelIds ?? [],
+          _activeSince: null,
+          status: 'idle', // Default status on load
+        });
       }
     } catch {
       this.agents.clear();
@@ -88,10 +123,79 @@ export class AgentRegistry {
       modelIds: params.model ? [params.model] : [], // Store assigned model
       _activeSince: now,
       activeSessionId: params.sessionId,
+      mission: params.mission,
+      mode: params.mode || 'reactive',
+      cronSchedule: params.cronSchedule,
+      topics: params.topics || [],
+      persistence: params.persistence || 'persistent',
+      status: 'idle',
     };
-    this.agents.set(id, record);
-    this.save();
+    this.registerInternal(record);
     return this.toMetadata(record);
+  }
+
+  /** Internal helper to register and save */
+  private registerInternal(record: AgentRecord) {
+    this.agents.set(record.id, record);
+    this.save();
+    this.emit('registered', this.toProfile(record));
+  }
+
+  /** Swarm Compatibility: Register via Profile (converts to Record) */
+  register(profile: AgentProfile): void {
+    const record: AgentRecord = {
+      id: profile.id,
+      name: profile.name,
+      tier: profile.tier,
+      birthTime: Math.floor(profile.createdAt / 1000),
+      lastBreath: null,
+      avatar: profile.avatar,
+      parentId: profile.parentId,
+      modelIds: [profile.modelId],
+      mission: profile.mission,
+      mode: profile.mode,
+      cronSchedule: profile.cronSchedule,
+      topics: profile.topics,
+      persistence: profile.persistence,
+      status: profile.status,
+      _activeSince: Math.floor(Date.now() / 1000),
+    };
+    this.registerInternal(record);
+  }
+
+  /** Swarm Compatibility: Unregister */
+  unregister(id: string): void {
+    this.agents.delete(id);
+    this.save();
+    this.emit('unregistered', id);
+  }
+
+  /** Swarm Compatibility: Update Status */
+  updateStatus(id: string, status: AgentProfile['status']): void {
+    const agent = this.agents.get(id);
+    if (agent) {
+      agent.status = status;
+      this.agents.set(id, agent);
+      // No save needed for transient status? Or maybe yes if we want to know current state on restart?
+      // For now, let's not save status excessively to disk to avoid IO churn, or maybe save only significant changes.
+      // But for dashboard to see it, it's in memory.
+      this.emit('status_changed', { id, status });
+    }
+  }
+
+  /** Swarm Compatibility: Find Agent */
+  findAgent(criteria: Partial<AgentProfile>): AgentProfile | undefined {
+    const found = this.getAllRecords().find((agent) => {
+      // Map criteria to AgentRecord fields
+      if (criteria.id && agent.id !== criteria.id) return false;
+      if (criteria.name && agent.name !== criteria.name) return false;
+      if (criteria.tier !== undefined && agent.tier !== criteria.tier) return false;
+      if (criteria.mission && agent.mission !== criteria.mission) return false;
+      if (criteria.status && agent.status !== criteria.status) return false;
+      if (criteria.modelId && !agent.modelIds?.includes(criteria.modelId)) return false;
+      return true;
+    });
+    return found ? this.toProfile(found) : undefined;
   }
 
   /** Death (Last Breath): deactivate agent and set lastBreath timestamp. */
@@ -101,6 +205,7 @@ export class AgentRegistry {
     const now = Math.floor(Date.now() / 1000);
     record.lastBreath = now;
     record._activeSince = null;
+    record.status = 'offline';
     this.agents.set(agentId, record);
     this.save();
     return this.toMetadata(record);
@@ -110,6 +215,12 @@ export class AgentRegistry {
   get(agentId: string): AgentMetadata | null {
     const r = this.agents.get(agentId);
     return r ? this.toMetadata(r) : null;
+  }
+
+  /** Helper to get full Profile for Swarm usage */
+  getProfile(agentId: string): AgentProfile | undefined {
+    const r = this.agents.get(agentId);
+    return r ? this.toProfile(r) : undefined;
   }
 
   /** Find active agent by name (case-insensitive) for reuse. */
@@ -124,8 +235,17 @@ export class AgentRegistry {
   }
 
   /** Get all agents (active and deactivated). */
+  getAllRecords(): AgentRecord[] {
+    return Array.from(this.agents.values());
+  }
+
   getAll(): AgentMetadata[] {
     return Array.from(this.agents.values()).map((a) => this.toMetadata(a));
+  }
+
+  /** Swarm Compatibility: Get all Profiles */
+  getAllProfiles(): AgentProfile[] {
+    return Array.from(this.agents.values()).map((a) => this.toProfile(a));
   }
 
   /** Get only active agents (lastBreath === null). */
@@ -195,6 +315,24 @@ export class AgentRegistry {
       avatar: r.avatar,
       parentId: r.parentId,
       modelIds: r.modelIds ?? [],
+    };
+  }
+
+  private toProfile(r: AgentRecord): AgentProfile {
+    return {
+      id: r.id,
+      name: r.name,
+      tier: r.tier as 1 | 2 | 3, // Casting safely as AgentTier includes these
+      mission: r.mission || '',
+      mode: r.mode || 'reactive',
+      cronSchedule: r.cronSchedule,
+      topics: r.topics || [],
+      parentId: r.parentId,
+      status: r.status || (r.lastBreath ? 'offline' : 'idle'),
+      modelId: r.modelIds?.[0] || 'default',
+      avatar: r.avatar || '',
+      persistence: r.persistence || 'persistent',
+      createdAt: r.birthTime * 1000,
     };
   }
 }

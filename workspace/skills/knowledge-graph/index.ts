@@ -4,11 +4,11 @@
  */
 
 import { z } from 'zod';
-import { container } from '../../../packages/gateway/src/container.js';
-import { GraphContext } from '../../../packages/gateway/src/domain/knowledge/graph-context.js';
-import { GraphIndexer } from '../../../packages/gateway/src/domain/knowledge/graph-indexer.js';
-import { PermissionManager } from '../../../packages/gateway/src/security/permission-manager.js';
-import { GatewayServer } from '../../../packages/gateway/src/server.js';
+import { container } from '@adytum/gateway/container.js';
+import { GraphContext } from '@adytum/gateway/domain/knowledge/graph-context.js';
+import { GraphIndexer } from '@adytum/gateway/domain/knowledge/graph-indexer.js';
+import { PermissionManager } from '@adytum/gateway/security/permission-manager.js';
+import { GatewayServer } from '@adytum/gateway/server.js';
 
 export default {
   tools: [
@@ -30,10 +30,10 @@ export default {
       async execute() {
         const indexer = container.resolve(GraphIndexer);
         const graph = await indexer.update();
-        return { 
-            success: true, 
-            message: `Knowledge graph updated. Total nodes: ${graph.nodes.length}`,
-            lastUpdated: new Date(graph.lastUpdated).toISOString() 
+        return {
+          success: true,
+          message: `Knowledge graph updated. Total nodes: ${graph.nodes.length}`,
+          lastUpdated: new Date(graph.lastUpdated).toISOString(),
         };
       },
     },
@@ -56,21 +56,21 @@ export default {
       async execute({ path, reason }: { path: string; reason: string }) {
         const server = container.resolve(GatewayServer);
         const permissionManager = container.resolve(PermissionManager);
-        
+
         // Request manual approval via the gateway
         const approved = await server.requestApproval({
-            kind: 'folder_access',
-            description: `Agent requested access to: ${path}. Reason: ${reason}`,
-            meta: { path, reason }
+          kind: 'folder_access',
+          description: `Agent requested access to: ${path}. Reason: ${reason}`,
+          meta: { path, reason },
         });
 
         if (approved) {
-            permissionManager.grantAccess(path, 'full_access');
-            return { success: true, message: `Access granted for ${path}` };
+          permissionManager.grantAccess(path, 'full_access');
+          return { success: true, message: `Access granted for ${path}` };
         } else {
-            return { success: false, message: `Access denied by user for ${path}` };
+          return { success: false, message: `Access denied by user for ${path}` };
         }
       },
-    }
+    },
   ],
 };

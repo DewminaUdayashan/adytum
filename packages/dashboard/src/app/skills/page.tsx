@@ -971,7 +971,6 @@ export default function SkillsPage() {
                             </div>
                           )}
                         </div>
-
                       </div>
 
                       {requiredEnv.length > 0 && (
@@ -1281,8 +1280,6 @@ export default function SkillsPage() {
                           </>
                         )}
                       </div>
-
-
                     </div>
                   </Card>
                 );

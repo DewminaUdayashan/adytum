@@ -17,7 +17,9 @@ export async function agentsRoutes(app: FastifyInstance) {
   app.get('/api/agents/settings', (req, reply) => controller.getSettings(req, reply));
   app.put('/api/agents/settings', (req, reply) => controller.updateSettings(req, reply));
   app.post('/api/agents/birth', (req, reply) => controller.birth(req, reply));
-  app.post('/api/agents/deactivate-all-subagents', (req, reply) => controller.deactivateAllSubagents(req, reply));
+  app.post('/api/agents/deactivate-all-subagents', (req, reply) =>
+    controller.deactivateAllSubagents(req, reply),
+  );
   app.get('/api/agents/:id', (req, reply) => controller.get(req, reply));
   app.patch('/api/agents/:id', (req, reply) => controller.update(req, reply));
   app.post('/api/agents/:id/death', (req, reply) => controller.death(req, reply));

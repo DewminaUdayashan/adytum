@@ -1,4 +1,3 @@
-
 import 'reflect-metadata';
 import { container } from 'tsyringe';
 import { v4 as uuid } from 'uuid';
@@ -16,7 +15,7 @@ const mockLogbook = {
 const mockServer = {
   requestInput: async (desc: string) => {
     console.log(`[Server] Input requested: ${desc}`);
-    return "User Answer";
+    return 'User Answer';
   },
 };
 
@@ -46,12 +45,12 @@ async function verify() {
   const messagingService = new DirectMessagingService(
     agentRegistry,
     runtimeRegistry,
-    mockLogbook as any
+    mockLogbook as any,
   );
 
   console.log('Testing sendMessage...');
   const result = await messagingService.sendMessage('sender-id', 'Recipient', 'Hello World');
-  
+
   if (result.success && result.response?.includes('Echo')) {
     console.log('✅ sendMessage success:', result.response);
   } else {
@@ -59,14 +58,11 @@ async function verify() {
   }
 
   // 2. Test UserInteractionService
-  const interactionService = new UserInteractionService(
-    mockServer as any,
-    mockLogbook as any
-  );
+  const interactionService = new UserInteractionService(mockServer as any, mockLogbook as any);
 
   console.log('Testing askUser...');
   const answer = await interactionService.askUser('agent-id', 'How are you?');
-  
+
   if (answer === 'User Answer') {
     console.log('✅ askUser success:', answer);
   } else {

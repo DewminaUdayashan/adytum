@@ -12,7 +12,7 @@ import { Logger } from '../../logger.js';
 import { auditLogger } from '../../security/audit-logger.js';
 import { AppError } from '../../domain/errors/app-error.js';
 import { MemoryDB } from '../../infrastructure/repositories/memory-db.js';
-import { ConfigService } from '../../infrastructure/config/config-service.js';
+import { loadConfig } from '../../config.js';
 import { createReadStream, existsSync } from 'node:fs';
 
 /**
@@ -23,7 +23,6 @@ export class SystemController {
   constructor(
     @inject(Logger) private logger: Logger,
     @inject('MemoryDB') private memoryDb: MemoryDB,
-    @inject(ConfigService) private configService: ConfigService,
   ) {}
 
   /**
@@ -143,7 +142,7 @@ export class SystemController {
       throw new AppError('File path is required', 400);
     }
 
-    const config = this.configService.getFullConfig();
+    const config = loadConfig();
     const workspacePath = path.resolve(config.workspacePath);
     const targetPath = path.normalize(path.join(workspacePath, rawPath));
 
@@ -178,10 +177,10 @@ export class SystemController {
     const contentType = contentTypes[ext] || 'application/octet-stream';
     reply.header('Content-Type', contentType);
     reply.header('Content-Length', stats.size);
-    
+
     // Cache for 1 hour for images
     if (contentType.startsWith('image/')) {
-        reply.header('Cache-Control', 'public, max-age=3600');
+      reply.header('Cache-Control', 'public, max-age=3600');
     }
 
     return reply.send(createReadStream(targetPath));

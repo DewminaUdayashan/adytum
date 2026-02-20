@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect } from 'react';
-import { usePolling } from '@/hooks/use-polling';
+// No unnecessary hooks
 import { gatewayFetch } from '@/lib/api';
 import { PageHeader, Card, Badge, Button, Spinner, Select, EmptyState } from '@/components/ui';
 import {
@@ -21,7 +21,6 @@ import {
   Brain,
   Cpu,
   Target,
-  Calendar,
   Plus,
   Trash2,
   FileText,
@@ -125,7 +124,7 @@ export default function AgentSettingsPage() {
   };
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, []);
 
   // --- Helpers for Heartbeat Goals ---

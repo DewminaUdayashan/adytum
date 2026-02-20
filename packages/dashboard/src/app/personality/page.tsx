@@ -19,7 +19,7 @@ export default function PersonalityPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadSoul();
+    void loadSoul();
   }, []);
 
   const loadSoul = async () => {

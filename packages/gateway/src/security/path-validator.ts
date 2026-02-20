@@ -3,8 +3,8 @@
  * @description Provides security utilities and policy enforcement logic.
  */
 
-import { resolve, relative, sep, basename } from 'node:path';
-import { existsSync, readFileSync, realpathSync } from 'node:fs';
+import { resolve, relative, sep, basename, dirname } from 'node:path';
+import { existsSync, readFileSync, realpathSync, mkdirSync, writeFileSync } from 'node:fs';
 import type { AccessMode, PermissionEntry } from '@adytum/shared';
 
 /**
@@ -34,7 +34,11 @@ export class PathValidator {
    * Validate that a path is accessible under current permissions.
    * Returns the resolved absolute path if valid, throws if blocked.
    */
-  validate(targetPath: string, operation: 'read' | 'write' = 'read', overrideRoot?: string): string {
+  validate(
+    targetPath: string,
+    operation: 'read' | 'write' = 'read',
+    overrideRoot?: string,
+  ): string {
     // 1. Resolve relative paths against workspace root (or overrideRoot)
     const root = overrideRoot || this.workspaceRoot;
     let resolved = resolve(root, targetPath);
@@ -210,9 +214,7 @@ export class PathValidator {
    * Persists whitelist.
    */
   private saveWhitelist(): void {
-    // We use basic fs imports here to avoid circular dep issues if any
-    const { writeFileSync, mkdirSync } = require('node:fs');
-    const { dirname } = require('node:path');
+    // We avoid circular dep issues by using imported fs methods directly
     mkdirSync(dirname(this.securityManifestPath), { recursive: true });
     writeFileSync(
       this.securityManifestPath,

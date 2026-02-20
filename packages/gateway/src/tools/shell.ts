@@ -7,8 +7,7 @@ import { z } from 'zod';
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { join } from 'node:path';
-import { DANGEROUS_COMMANDS } from '@adytum/shared';
-import type { ToolDefinition } from '@adytum/shared';
+import { DANGEROUS_COMMANDS, type ToolDefinition } from '@adytum/shared';
 
 const execAsync = promisify(exec);
 

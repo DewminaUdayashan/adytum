@@ -10,9 +10,7 @@ import { AdytumEvent } from '@adytum/shared';
 export class SocketIOService extends EventEmitter {
   private io: Server | null = null;
 
-  constructor(
-    @inject(EventBusService) private eventBus: EventBusService
-  ) {
+  constructor(@inject(EventBusService) private eventBus: EventBusService) {
     super();
   }
 
@@ -44,7 +42,7 @@ export class SocketIOService extends EventEmitter {
         // Broadcast to all connected clients
         // We emit the specific event type as the socket event name
         this.io.emit(event.type, event);
-        
+
         // Also emit a generic 'event' for catch-all listeners on client
         this.io.emit('event', event);
       }
@@ -63,7 +61,7 @@ export class SocketIOService extends EventEmitter {
     if (this.io) {
       logger.info('Stopping Socket.IO Service...');
       return new Promise<void>((resolve) => {
-        this.io!.close(() => {
+        void this.io!.close(() => {
           logger.info('Socket.IO Service stopped.');
           this.io = null;
           resolve();

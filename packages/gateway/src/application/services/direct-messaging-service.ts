@@ -1,4 +1,3 @@
-
 import { singleton, inject } from 'tsyringe';
 import { AgentRegistry } from '../../domain/agents/agent-registry.js';
 import { RuntimeRegistry } from '../../domain/agents/runtime-registry.js';
@@ -52,22 +51,25 @@ export class DirectMessagingService {
     // I need to ensure I can get the session ID.
     // For now, I'll cheat and access the private map if I was inside registry, but I am in a service.
     // I should add `getActiveSessionId(agentId)` to AgentRegistry.
-    
+
     // WAIT. DirectMessagingService is in `application/services`. AgentRegistry is in `domain/agents`.
     // I should modify AgentRegistry to expose `getActiveSessionId`.
-    
+
     // For this write, I'll assume I can add that method to AgentRegistry next.
     const sessionId = this.agentRegistry.getActiveSessionId(recipient.id);
 
     if (!sessionId) {
-       return { success: false, error: `Recipient "${recipient.name}" has no active session.` };
+      return { success: false, error: `Recipient "${recipient.name}" has no active session.` };
     }
 
     // 3. Get Runtime
-    const runtime = this.runtimeRegistry.getRuntime(sessionId); 
+    const runtime = this.runtimeRegistry.getRuntime(sessionId);
 
     if (!runtime) {
-      return { success: false, error: `Recipient "${recipient.name}" is not currently running (Session ${sessionId} not found in registry).` };
+      return {
+        success: false,
+        error: `Recipient "${recipient.name}" is not currently running (Session ${sessionId} not found in registry).`,
+      };
     }
 
     // 4. Execute Turn
@@ -86,7 +88,7 @@ export class DirectMessagingService {
       });
 
       const result = await runtime.run(formattedMessage, sessionId);
-      
+
       this.logbook.append({
         timestamp: Date.now(),
         agentId: recipient.id,

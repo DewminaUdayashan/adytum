@@ -8,7 +8,7 @@
 import { useState, useEffect } from 'react';
 import { gatewayFetch } from '@/lib/api';
 import { Card, Button, Spinner, Badge, EmptyState } from '@/components/ui';
-import { Heart, Save, RotateCcw, Plus, Trash2, Target, Calendar, Clock, Timer } from 'lucide-react';
+import { Heart, Save, RotateCcw, Plus, Trash2, Target, Calendar } from 'lucide-react';
 
 interface Goal {
   id: string;
@@ -28,7 +28,7 @@ export default function HeartbeatPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    loadHeartbeat();
+    void loadHeartbeat();
   }, []);
 
   const loadHeartbeat = async () => {
@@ -128,7 +128,7 @@ export default function HeartbeatPage() {
               size="sm"
               variant="ghost"
               onClick={() => {
-                loadHeartbeat();
+                void loadHeartbeat();
               }}
               disabled={!hasChanges}
             >
@@ -139,7 +139,7 @@ export default function HeartbeatPage() {
               size="sm"
               variant="primary"
               onClick={() => {
-                handleSave();
+                void handleSave();
               }}
               disabled={!hasChanges || saving}
             >

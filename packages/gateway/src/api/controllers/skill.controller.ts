@@ -6,7 +6,7 @@
 import { FastifyReply, FastifyRequest } from 'fastify';
 import { singleton, inject } from 'tsyringe';
 import { SkillService } from '../../application/services/skill-service.js';
-import { ConfigService } from '../../infrastructure/config/config-service.js';
+import { loadConfig } from '../../config.js';
 import { AppError } from '../../domain/errors/app-error.js';
 
 /**
@@ -14,10 +14,7 @@ import { AppError } from '../../domain/errors/app-error.js';
  */
 @singleton()
 export class SkillController {
-  constructor(
-    @inject(SkillService) private skillService: SkillService,
-    @inject(ConfigService) private configService: ConfigService,
-  ) {}
+  constructor(@inject(SkillService) private skillService: SkillService) {}
 
   /**
    * Retrieves skills.
@@ -27,7 +24,7 @@ export class SkillController {
   public async getSkills(request: FastifyRequest, reply: FastifyReply) {
     await this.skillService.migrateEmailCalendarLegacyConfig();
     const skills = this.skillService.getAllSkills();
-    const config = this.configService.getFullConfig();
+    const config = loadConfig();
     const skillsCfg = config.skills || {
       enabled: true,
       allow: [],
@@ -87,7 +84,7 @@ export class SkillController {
       throw new AppError(`Skill ${id} not found`, 404);
     }
 
-    const config = this.configService.getFullConfig();
+    const config = loadConfig();
     const skillsCfg = config.skills || {
       enabled: true,
       allow: [],

@@ -7,7 +7,18 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { useGatewaySocket, type StreamEvent } from '@/hooks/use-gateway-socket';
-import { Send, Bot, User, Zap, Sparkles, Paperclip, File, X, Layers, HelpCircle } from 'lucide-react';
+import {
+  Send,
+  Bot,
+  User,
+  Zap,
+  Sparkles,
+  Paperclip,
+  File,
+  X,
+  Layers,
+  HelpCircle,
+} from 'lucide-react';
 import { clsx } from 'clsx';
 import { MarkdownRenderer } from '@/components/chat/markdown-renderer';
 import { LinkPreviewList } from '@/components/chat/link-previews';
@@ -41,7 +52,8 @@ interface ChatMessage {
 }
 
 export default function ChatPage() {
-  const { connected, events, sendMessage, sendFrame, sessionId, sendInputResponse } = useGatewaySocket();
+  const { connected, events, sendMessage, sendFrame, sessionId, sendInputResponse } =
+    useGatewaySocket();
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState('');
   const [isThinking, setIsThinking] = useState(false);
@@ -59,13 +71,18 @@ export default function ChatPage() {
 
   const [selectedRole, setSelectedRole] = useState('thinking');
   const [selectedModelId, setSelectedModelId] = useState('');
-  const [attachments, setAttachments] = useState<Array<{ type: 'image' | 'file' | 'audio' | 'video'; data: string; name: string; file: File }>>([]);
+  const [attachments, setAttachments] = useState<
+    Array<{ type: 'image' | 'file' | 'audio' | 'video'; data: string; name: string; file: File }>
+  >([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string>('');
-  
-  const [activeInputRequest, setActiveInputRequest] = useState<{ id: string; description: string } | null>(null);
+
+  const [activeInputRequest, setActiveInputRequest] = useState<{
+    id: string;
+    description: string;
+  } | null>(null);
   const processedInputsRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -77,8 +94,8 @@ export default function ChatPage() {
         console.error('Failed to fetch workspaces:', error);
       }
     };
-    fetchWorkspaces();
-  }, []);
+    void fetchWorkspaces();
+  }, [api]);
 
   // Restore chat history from localStorage
   useEffect(() => {
@@ -234,13 +251,13 @@ export default function ChatPage() {
       if (event.type === 'input_request') {
         const id = String(event.id);
         if (processedInputsRef.current.has(id)) continue;
-        
+
         processedInputsRef.current.add(id);
         const description = String(event.description || 'Input Requested');
         const tool = (event.metadata as any)?.tool || 'ask_user';
-        
+
         setActiveInputRequest({ id, description });
-        
+
         const tools = pendingToolsRef.current.length > 0 ? [...pendingToolsRef.current] : undefined;
 
         setMessages((prev) => {
@@ -274,7 +291,7 @@ export default function ChatPage() {
             },
           ];
         });
-        
+
         setIsThinking(false);
         setThinkingStartedAt(null);
         pushActivity('tool_call', `Waiting for user input: ${description}`);
@@ -414,44 +431,44 @@ export default function ChatPage() {
 
     // HIJACK: If there is an active input request, fulfill it instead of sending a new message
     if (activeInputRequest) {
-        sendInputResponse(activeInputRequest.id, text);
-        
-        // Add user response to chat history
-        const msg: ChatMessage = {
-            id: crypto.randomUUID(),
-            role: 'user',
-            content: text,
-            timestamp: Date.now(),
-        };
-        setMessages((prev) => [...prev, msg]);
-        
-        // Update message status
-        setMessages((prev) => {
-            return prev.map((msg) => {
-                if (msg.inputRequest?.id === activeInputRequest.id) {
-                    return {
-                        ...msg,
-                        inputRequest: { ...msg.inputRequest, status: 'resolved' },
-                    };
-                }
-                return msg;
-            });
-        });
+      sendInputResponse(activeInputRequest.id, text);
 
-        setInput('');
-        setActiveInputRequest(null);
-        setActivityFeed((prev) => [
-            ...prev,
-            {
-                id: crypto.randomUUID(),
-                type: 'response',
-                text: 'Input provided.',
-                timestamp: Date.now(),
-            }
-        ]);
-        setThinkingStartedAt(Date.now());
-        setIsThinking(true);
-        return;
+      // Add user response to chat history
+      const msg: ChatMessage = {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: text,
+        timestamp: Date.now(),
+      };
+      setMessages((prev) => [...prev, msg]);
+
+      // Update message status
+      setMessages((prev) => {
+        return prev.map((msg) => {
+          if (msg.inputRequest?.id === activeInputRequest.id) {
+            return {
+              ...msg,
+              inputRequest: { ...msg.inputRequest, status: 'resolved' },
+            };
+          }
+          return msg;
+        });
+      });
+
+      setInput('');
+      setActiveInputRequest(null);
+      setActivityFeed((prev) => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          type: 'response',
+          text: 'Input provided.',
+          timestamp: Date.now(),
+        },
+      ]);
+      setThinkingStartedAt(Date.now());
+      setIsThinking(true);
+      return;
     }
 
     const msg: ChatMessage = {
@@ -466,7 +483,7 @@ export default function ChatPage() {
       modelRole: selectedRole,
       modelId: selectedModelId || undefined,
       workspaceId: selectedWorkspaceId || undefined,
-      attachments: attachments.map(a => ({ type: a.type, data: a.data, name: a.name })),
+      attachments: attachments.map((a) => ({ type: a.type, data: a.data, name: a.name })),
     });
     setInput('');
     setAttachments([]);
@@ -499,16 +516,16 @@ export default function ChatPage() {
           <div className="flex items-center gap-4">
             {workspaces.length > 0 && (
               <div className="flex items-center gap-2 bg-bg-secondary border border-border-primary rounded-xl px-3 py-1.5 shadow-sm">
-                 <Layers className="h-4 w-4 text-text-muted" />
-                 <Select 
-                   value={selectedWorkspaceId}
-                   onChange={setSelectedWorkspaceId}
-                   options={[
-                     { value: '', label: 'No context' },
-                     ...workspaces.map(ws => ({ value: ws.id, label: ws.name }))
-                   ]}
-                   className="min-w-[140px]"
-                 />
+                <Layers className="h-4 w-4 text-text-muted" />
+                <Select
+                  value={selectedWorkspaceId}
+                  onChange={setSelectedWorkspaceId}
+                  options={[
+                    { value: '', label: 'No context' },
+                    ...workspaces.map((ws) => ({ value: ws.id, label: ws.name })),
+                  ]}
+                  className="min-w-[140px]"
+                />
               </div>
             )}
             <div className="flex items-center gap-2 text-xs font-medium">
@@ -576,11 +593,14 @@ export default function ChatPage() {
         {attachments.length > 0 && (
           <div className="flex flex-wrap gap-2 mb-3">
             {attachments.map((a, i) => (
-              <div key={i} className="relative group flex items-center gap-2 bg-bg-tertiary px-3 py-1.5 rounded-lg border border-border-primary text-xs text-text-secondary">
+              <div
+                key={i}
+                className="relative group flex items-center gap-2 bg-bg-tertiary px-3 py-1.5 rounded-lg border border-border-primary text-xs text-text-secondary"
+              >
                 <File className="h-3 w-3 text-accent-primary" />
                 <span className="max-w-[120px] truncate">{a.name}</span>
-                <button 
-                  onClick={() => removeAttachment(i)} 
+                <button
+                  onClick={() => removeAttachment(i)}
                   className="p-0.5 hover:bg-bg-hover rounded-full text-text-tertiary hover:text-error transition-colors"
                 >
                   <X className="h-3 w-3" />
@@ -612,10 +632,10 @@ export default function ChatPage() {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleSend()}
               placeholder={
-                !connected 
-                  ? 'Connecting…' 
-                  : activeInputRequest 
-                    ? `Replying to: ${activeInputRequest.description}` 
+                !connected
+                  ? 'Connecting…'
+                  : activeInputRequest
+                    ? `Replying to: ${activeInputRequest.description}`
                     : 'Message your agent…'
               }
               disabled={!connected}
@@ -740,34 +760,40 @@ function MessageBubble({
               ))}
             </div>
           )}
-          
+
           {/* Inline Input Request */}
           {!isUser && message.inputRequest && (
             <div className="mt-4 pt-3 border-t border-border-primary/30">
               <div
                 className={clsx(
-                  "rounded-lg px-3 py-3 flex flex-col gap-2 transition-colors",
+                  'rounded-lg px-3 py-3 flex flex-col gap-2 transition-colors',
                   message.inputRequest.status === 'pending'
-                    ? "bg-accent-primary/10 border border-accent-primary/20 shadow-sm"
-                    : "bg-bg-tertiary/40 border border-transparent"
+                    ? 'bg-accent-primary/10 border border-accent-primary/20 shadow-sm'
+                    : 'bg-bg-tertiary/40 border border-transparent',
                 )}
               >
                 <div className="flex items-start justify-between gap-3">
                   <div className="flex gap-3 items-start">
-                    <div className={clsx(
-                      "mt-0.5 p-1.5 rounded-lg shrink-0",
-                      message.inputRequest.status === 'pending' 
-                        ? "bg-accent-primary text-white" 
-                        : "bg-bg-quaternary text-text-muted"
-                    )}>
+                    <div
+                      className={clsx(
+                        'mt-0.5 p-1.5 rounded-lg shrink-0',
+                        message.inputRequest.status === 'pending'
+                          ? 'bg-accent-primary text-white'
+                          : 'bg-bg-quaternary text-text-muted',
+                      )}
+                    >
                       <HelpCircle className="h-4 w-4" />
                     </div>
                     <div className="space-y-1">
                       <div className="flex items-center gap-3">
-                        <p className={clsx(
-                          "text-[10px] font-bold uppercase tracking-[0.05em]",
-                          message.inputRequest.status === 'pending' ? "text-accent-primary" : "text-text-muted"
-                        )}>
+                        <p
+                          className={clsx(
+                            'text-[10px] font-bold uppercase tracking-[0.05em]',
+                            message.inputRequest.status === 'pending'
+                              ? 'text-accent-primary'
+                              : 'text-text-muted',
+                          )}
+                        >
                           Question for you
                         </p>
                         {message.inputRequest.tool && (
