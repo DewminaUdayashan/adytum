@@ -4,6 +4,7 @@
  */
 
 import { z } from 'zod';
+import { ModelsConfigSchema, FallbackConfigSchema } from './types/models.js';
 
 // ─── Core Message Types ───────────────────────────────────────
 
@@ -322,13 +323,22 @@ export const AdytumConfigSchema = z.object({
   userPreferences: z.string().optional(),
   workspacePath: z.string(),
   dataPath: z.string(),
+  /** Legacy flat model list — still supported for simple setups */
   models: z.array(ModelConfigSchema),
+  /**
+   * New provider-grouped model configuration.
+   * When present, this takes priority over the flat `models[]` for provider resolution.
+   * The flat `models[]` is still used for chain role assignments.
+   */
+  modelProviders: ModelsConfigSchema.optional(),
   modelChains: z.record(ModelRoleSchema, z.array(z.string())).default({
     thinking: [],
     fast: [],
     local: [],
   }),
   taskOverrides: z.record(z.string(), z.string()).default({}), // taskName -> modelId/chainId
+  /** Fallback behavior configuration */
+  fallback: FallbackConfigSchema.optional(),
   soul: z
     .object({
       autoUpdate: z.boolean().default(true),

@@ -9,3 +9,4 @@ export * from './constants.js';
 export * from './events/index.js';
 export * from './types/agent.js';
 export * from './types/communication.js';
+export * from './types/models.js';

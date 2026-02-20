@@ -1,0 +1,71 @@
+# Model Connectivity Upgrade — Final Walkthrough
+
+## All 5 Phases Complete ✅
+
+### File Summary (10 new files)
+
+| Phase | File | Purpose |
+|-------|------|---------|
+| 1 | [models.ts](file:///Users/dewminaudayashan/Documents/project-adytum/packages/shared/src/types/models.ts) | 10 Zod schemas, 5 utilities |
+| 2 | [provider-builders.ts](file:///Users/dewminaudayashan/Documents/project-adytum/packages/gateway/src/infrastructure/llm/provider-builders.ts) | 12 provider factories |
+| 2 | [provider-env-resolver.ts](file:///Users/dewminaudayashan/Documents/project-adytum/packages/gateway/src/infrastructure/llm/provider-env-resolver.ts) | Env var detection |
+| 2 | [provider-discovery.ts](file:///Users/dewminaudayashan/Documents/project-adytum/packages/gateway/src/infrastructure/llm/provider-discovery.ts) | Local model discovery |
+| 2 | [provider-merge.ts](file:///Users/dewminaudayashan/Documents/project-adytum/packages/gateway/src/infrastructure/llm/provider-merge.ts) | Provider merge pipeline |
+| 3 | [auth-store.ts](file:///Users/dewminaudayashan/Documents/project-adytum/packages/gateway/src/infrastructure/llm/auth-store.ts) | AES-256-GCM encrypted profiles |
+| 3 | [auth-resolver.ts](file:///Users/dewminaudayashan/Documents/project-adytum/packages/gateway/src/infrastructure/llm/auth-resolver.ts) | 4-level credential chain |
+| 4 | [model-selection.ts](file:///Users/dewminaudayashan/Documents/project-adytum/packages/gateway/src/infrastructure/llm/model-selection.ts) | Aliases, allowlist, capability filtering |
+| 4 | [model-fallback.ts](file:///Users/dewminaudayashan/Documents/project-adytum/packages/gateway/src/infrastructure/llm/model-fallback.ts) | Cooldowns, probing, overflow recovery |
+| 5 | [model-observability.ts](file:///Users/dewminaudayashan/Documents/project-adytum/packages/gateway/src/infrastructure/llm/model-observability.ts) | Cost tracking, health, analytics |
+
+### Modified Files
+
+| File | Changes |
+|------|---------|
+| [models.ts](file:///Users/dewminaudayashan/Documents/project-adytum/packages/shared/src/types/models.ts) | New type system (293 lines) |
+| [types.ts](file:///Users/dewminaudayashan/Documents/project-adytum/packages/shared/src/types.ts) | `modelProviders` + `fallback` in config |
+| [index.ts](file:///Users/dewminaudayashan/Documents/project-adytum/packages/shared/src/index.ts) | Export new models module |
+| [model-repository.interface.ts](file:///Users/dewminaudayashan/Documents/project-adytum/packages/gateway/src/domain/interfaces/model-repository.interface.ts) | Enriched [ModelEntry](file:///Users/dewminaudayashan/Documents/project-adytum/packages/gateway/src/domain/interfaces/model-repository.interface.ts#8-34) |
+| [model-catalog.ts](file:///Users/dewminaudayashan/Documents/project-adytum/packages/gateway/src/infrastructure/llm/model-catalog.ts) | Full integration hub |
+
+### System Architecture
+
+```mermaid
+graph TB
+    subgraph "Startup Pipeline"
+        A[Gateway Start] --> B[ModelCatalog.initProviders]
+        B --> C[AuthResolver]
+        B --> D[Provider Merge Pipeline]
+        B --> E[ModelSelector init]
+        B --> F[FallbackManager init]
+    end
+
+    subgraph "Request Pipeline"
+        G[Request] --> H[ModelSelector.select]
+        H --> I{Alias? Override?}
+        I --> J[ModelCatalog.resolveModel]
+        J --> K[ModelRouter.chat]
+        K -->|Success| L[ObservabilityManager.recordCost]
+        K -->|Error| M[FallbackManager.classifyError]
+        M --> N{Fallback?}
+        N --> O[Next in chain / larger model]
+    end
+
+    subgraph "Observability"
+        L --> P[Cost Summary]
+        L --> Q[Provider Health]
+        L --> R[Usage Analytics]
+    end
+```
+
+### Key Capabilities
+
+| Feature | Details |
+|---------|---------|
+| **Providers** | 12 supported (Anthropic, OpenAI, Google, OpenRouter, Groq, Together, Ollama, LM Studio, vLLM, DeepInfra, Mistral, xAI) |
+| **Auto-detection** | Env vars auto-enable providers, local providers auto-scanned |
+| **Auth** | AES-256-GCM encrypted profiles, 4-level resolution chain |
+| **Selection** | Aliases, per-agent overrides, allowlist/denylist with wildcards |
+| **Fallback** | Error classification (6 types), exponential cooldowns, probing, context overflow auto-upgrade |
+| **Cost tracking** | Per-request with cache savings, per-provider/model breakdown |
+| **Health** | healthy/degraded/down, success rate, p95 latency |
+| **Backward compat** | Legacy `models[]` array still works alongside new system |

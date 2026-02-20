@@ -37,6 +37,44 @@ export interface LLMChatResult {
   finishReason?: string;
 }
 
+// ─── API Type Resolution ──────────────────────────────────────
+
+/**
+ * Resolve the pi-ai API provider ID for a given provider name.
+ * pi-ai registered API providers (from registerBuiltInApiProviders):
+ *   anthropic-messages, openai-completions, openai-responses,
+ *   azure-openai-responses, openai-codex-responses,
+ *   google-generative-ai, google-gemini-cli, google-vertex, bedrock-converse-stream
+ */
+function resolveApiType(provider: string): string {
+  switch (provider.toLowerCase()) {
+    case 'anthropic':
+      return 'anthropic-messages';
+    case 'google':
+    case 'gemini':
+      return 'google-generative-ai';
+    case 'google-vertex':
+      return 'google-vertex';
+    case 'bedrock':
+    case 'aws':
+      return 'bedrock-converse-stream';
+    // All OpenAI-compatible providers (including local)
+    case 'openai':
+    case 'ollama':
+    case 'lmstudio':
+    case 'vllm':
+    case 'localai':
+    case 'openrouter':
+    case 'groq':
+    case 'together':
+    case 'deepinfra':
+    case 'mistral':
+    case 'xai':
+    default:
+      return 'openai-completions';
+  }
+}
+
 /**
  * Encapsulates llmclient behavior.
  */
@@ -75,15 +113,16 @@ export class LLMClient {
       piModel = {
         id: modelConfig.model,
         provider: provider,
-        api: provider === 'anthropic' ? 'anthropic-messages' : 'openai-chat', // Assume openai-chat for custom
+        api: resolveApiType(provider),
         baseUrl: baseUrl,
         name: modelConfig.model,
+        // Required by pi-ai's Model interface — calculateCost() reads model.cost.input directly
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+        reasoning: false,
+        input: ['text'] as ('text' | 'image')[],
+        contextWindow: 128_000,
+        maxTokens: 8_192,
       };
-
-      // Special case for Google if user manually specified 'google' but not in catalog (unlikely but possible)
-      if (provider === 'google') {
-        piModel.api = 'google-generative-ai';
-      }
     } else {
       // Override baseUrl if user config has one (unlikely for built-ins but good for custom)
       if (modelConfig.baseUrl) {
@@ -92,7 +131,12 @@ export class LLMClient {
     }
 
     // 2. Prepare API Key
-    const apiKey = modelConfig.apiKey || process.env[`${provider.toUpperCase()}_API_KEY`] || '';
+    // Resolve API key. Local providers (ollama, lmstudio, vllm) don't require a real key,
+    // but pi-ai rejects empty strings — use a non-empty dummy. Their servers ignore the auth header.
+    const LOCAL_PROVIDERS = new Set(['ollama', 'lmstudio', 'vllm', 'localai']);
+    const resolvedEnvKey = process.env[`${provider.toUpperCase()}_API_KEY`];
+    const apiKey =
+      modelConfig.apiKey || resolvedEnvKey || (LOCAL_PROVIDERS.has(provider) ? 'ollama' : '');
 
     // 3. Prepare options
     const piOptions: any = {
@@ -131,9 +175,21 @@ export class LLMClient {
         const timestamp = Date.now();
 
         if (m.role === 'user') {
+          // m.content can be a string or an array of ContentParts (multimodal)
+          let textContent: string;
+          if (Array.isArray(m.content)) {
+            // Flatten array content to a single string (extract text parts only)
+            textContent =
+              m.content
+                .filter((p: any) => p.type === 'text')
+                .map((p: any) => p.text || '')
+                .join('\n') || '';
+          } else {
+            textContent = (m.content as string) || '';
+          }
           return {
             role: 'user',
-            content: m.content || '',
+            content: textContent,
             timestamp,
           };
         }
