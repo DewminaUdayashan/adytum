@@ -11,12 +11,24 @@ import chalk from 'chalk';
 import { ADYTUM_VERSION } from '@adytum/shared';
 import { runBirthProtocol } from './birth-protocol.js';
 import { existsSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, dirname, basename } from 'node:path';
 import { confirm } from '@inquirer/prompts';
 import { ModelCatalog } from '../infrastructure/llm/model-catalog.js';
 import { spawn, execSync } from 'node:child_process';
 import open from 'open';
 // No unnecessary imports
+
+const findProjectRoot = (startDir: string): string => {
+  let curr = startDir;
+  while (curr !== dirname(curr)) {
+    if (existsSync(join(curr, 'adytum.config.yaml'))) return curr;
+    if (existsSync(join(curr, 'package.json')) && !basename(curr).match(/gateway|dashboard/)) {
+      if (existsSync(join(curr, 'workspace'))) return curr;
+    }
+    curr = dirname(curr);
+  }
+  return startDir;
+};
 
 const program = new Command();
 
@@ -229,30 +241,26 @@ program
 // ─── adytum skill install ─────────────────────────────────────
 program
   .command('skill')
-  .argument('<action>', 'install | list | remove')
-  .argument('[url]', 'Git repository URL (for install)')
+  .argument('<action>', 'install | list | check | remove')
+  .argument('[id]', 'Skill ID (for install or check)')
   .description('Manage agent skills')
-  .action(async (action: string, url?: string) => {
-    if (action === 'list') {
-      const { SkillLoader } = await import('../application/services/skill-loader.js');
-      const { loadConfig } = await import('../config.js');
-      const config = loadConfig(process.cwd());
-      const loader = new SkillLoader(config.workspacePath, {
-        projectRoot: process.cwd(),
-        dataPath: config.dataPath,
-        config,
-      });
-      const { ToolRegistry } = await import('../tools/registry.js');
-      await loader.init(new ToolRegistry());
-      const skills = loader.getAll();
+  .action(async (action: string, id?: string) => {
+    const { SkillLoader } = await import('../application/services/skill-loader.js');
+    const { loadConfig } = await import('../config.js');
+    const projectRoot = findProjectRoot(process.cwd());
+    const config = loadConfig(projectRoot);
+    const loader = new SkillLoader(config.workspacePath, {
+      projectRoot,
+      dataPath: config.dataPath,
+      config,
+    });
+    const { ToolRegistry } = await import('../tools/registry.js');
+    await loader.init(new ToolRegistry());
 
+    if (action === 'list') {
+      const skills = loader.getAll();
       if (skills.length === 0) {
         console.log(chalk.dim('No skills installed.'));
-        console.log(
-          chalk.dim(
-            '  Add a plugin under workspace/skills/<id>/ with adytum.plugin.json + index.ts',
-          ),
-        );
         return;
       }
 
@@ -264,23 +272,63 @@ program
             : skill.enabled
               ? chalk.green('●')
               : chalk.gray('●');
-        const statusLabel = skill.status === 'disabled' ? 'disabled' : skill.status;
-        console.log(`  ${marker} ${chalk.white(skill.name)} ${chalk.dim(`(${skill.id})`)}`);
+
+        const installMarker = (skill.install?.length || 0) > 0 ? chalk.blue(' [installable]') : '';
+        console.log(
+          `  ${marker} ${chalk.white(skill.name)} ${chalk.dim(`(${skill.id})`)}${installMarker}`,
+        );
         if (skill.description) {
           console.log(`    ${chalk.dim(skill.description)}`);
         }
-        console.log(`    ${chalk.dim(`status: ${statusLabel}`)}`);
         if (skill.error) {
-          console.log(`    ${chalk.red(skill.error)}`);
+          console.log(`    ${chalk.red(`Error: ${skill.error}`)}`);
+        } else if (!skill.enabled && skill.missing) {
+          const missing = [];
+          if (skill.missing.bins.length > 0) missing.push(`bins: ${skill.missing.bins.join(', ')}`);
+          if (skill.missing.env.length > 0) missing.push(`env: ${skill.missing.env.join(', ')}`);
+          if (skill.missing.config.length > 0)
+            missing.push(`config: ${skill.missing.config.join(', ')}`);
+          console.log(`    ${chalk.yellow(`Missing: ${missing.join('; ')}`)}`);
         }
       }
-    } else if (action === 'install' && url) {
-      console.log(chalk.yellow(`Installing skill from ${url}...`));
-      // TODO: Git clone + validation in Phase 3
-      console.log(chalk.dim('  Skill installation from Git will be available in Phase 3.'));
+    } else if (action === 'check') {
+      console.log(chalk.bold('\nSkill Diagnostic Check:\n'));
+      const results = loader.checkAll();
+      for (const res of results) {
+        const marker = res.enabled ? chalk.green('✓') : chalk.red('✗');
+        console.log(`  ${marker} ${chalk.white(res.id)} [${res.status}]`);
+        if (!res.enabled && res.missing) {
+          if (res.missing.bins.length > 0)
+            console.log(`    ${chalk.dim('Missing Bins:')} ${res.missing.bins.join(', ')}`);
+          if (res.missing.env.length > 0)
+            console.log(`    ${chalk.dim('Missing Env:')} ${res.missing.env.join(', ')}`);
+          if (res.missing.config.length > 0)
+            console.log(`    ${chalk.dim('Missing Config:')} ${res.missing.config.join(', ')}`);
+        }
+        if (res.installable && !res.enabled) {
+          console.log(
+            `    ${chalk.cyan(`Tip: Run "adytum skill install ${res.id}" to resolve dependencies.`)}`,
+          );
+        }
+      }
+    } else if (action === 'install') {
+      if (!id) {
+        console.log(
+          chalk.red('Error: Skill ID required for install. Usage: adytum skill install <id>'),
+        );
+        return;
+      }
+      console.log(chalk.cyan(`\n🛠  Running installation for skill: ${id}...`));
+      const res = await loader.executeInstallSteps(id);
+      if (res.ok) {
+        console.log(chalk.green(`✓ Skill ${id} dependencies installed.`));
+      } else {
+        console.error(chalk.red(`❌ Installation failed: ${res.error}`));
+      }
     } else {
-      console.log(chalk.dim('Usage: adytum skill install <git-url>'));
-      console.log(chalk.dim('       adytum skill list'));
+      console.log(chalk.dim('Usage: adytum skill list'));
+      console.log(chalk.dim('       adytum skill check'));
+      console.log(chalk.dim('       adytum skill install <id>'));
     }
   });
 

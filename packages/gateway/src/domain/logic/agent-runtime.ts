@@ -37,6 +37,7 @@ export interface AgentRuntimeConfig {
   swarmManager: SwarmManager;
   swarmMessenger: SwarmMessenger; // [NEW]
   skillLoader: SkillLoader;
+  dispatchService: import('../../application/services/dispatch-service.js').DispatchService;
   graphContext: GraphContext;
   contextSoftLimit?: number;
   maxIterations: number;
@@ -179,6 +180,58 @@ export class AgentRuntime extends EventEmitter {
       agentMode?: 'reactive' | 'daemon' | 'scheduled';
     },
   ): Promise<AgentTurnResult> {
+    // Check for slash command dispatch
+    const dispatch = this.config.dispatchService.resolve(userMessage);
+    if (dispatch) {
+      const traceId = `dispatch-${uuid()}`;
+      this.emit('stream', {
+        traceId,
+        sessionId,
+        streamType: 'status',
+        delta: `Executing slash command via tool: ${dispatch.toolName}`,
+      });
+
+      const toolCall: ToolCall = {
+        id: traceId,
+        name: dispatch.toolName,
+        arguments: {
+          ...dispatch.args,
+          sessionId,
+          workspaceId: overrides?.workspaceId,
+        },
+      };
+
+      const result = await this.config.toolRegistry.execute(toolCall, {
+        sessionId,
+        agentId: overrides?.agentId || this.config.agentId,
+        workspaceId: overrides?.workspaceId || this.config.workspacePath,
+        agentMode: overrides?.agentMode || this.config.agentMode,
+      });
+
+      const response =
+        typeof result.result === 'string' ? result.result : JSON.stringify(result.result);
+
+      // Log to direct memory if not a background session
+      if (this.config.memoryDb && !this.isBackgroundSession(sessionId)) {
+        this.config.memoryDb.addMessage(sessionId, 'user', userMessage, overrides?.workspaceId);
+        this.config.memoryDb.addMessage(sessionId, 'assistant', response, overrides?.workspaceId);
+      }
+
+      return {
+        response,
+        trace: {
+          id: traceId,
+          sessionId,
+          startTime: Date.now(),
+          endTime: Date.now(),
+          initialGoal: userMessage,
+          status: result.isError ? 'failed' : 'completed',
+          outcome: response.slice(0, 200),
+        },
+        toolCalls: [toolCall],
+      };
+    }
+
     const isBackgroundSession = this.isBackgroundSession(sessionId);
     const context = isBackgroundSession
       ? this.createIsolatedContext(overrides?.agentId) // Pass agentId for background tasks too

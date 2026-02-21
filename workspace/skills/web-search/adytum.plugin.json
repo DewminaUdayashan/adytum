@@ -16,20 +16,10 @@
     }
   },
   "uiHints": {
-    "provider": {
-      "label": "Provider",
-      "help": "duckduckgo requires no API key. serper needs apiKey."
-    },
-    "apiKey": {
-      "label": "API Key",
-      "help": "Optional. Required for serper provider.",
-      "sensitive": true
-    },
+    "provider": { "label": "Provider", "help": "duckduckgo requires no API key. serper needs apiKey." },
+    "apiKey": { "label": "API Key", "help": "Optional. Required for serper provider.", "sensitive": true },
     "maxResults": { "label": "Max Results", "help": "How many results to fetch per search." },
-    "rotations": {
-      "label": "Surf Depth",
-      "help": "How many follow-up hops to fetch when surfing."
-    },
+    "rotations": { "label": "Surf Depth", "help": "How many follow-up hops to fetch when surfing." },
     "maxTokens": { "label": "Token Budget", "help": "Approx tokens to spend per search batch." }
   },
   "metadata": {
