@@ -16,6 +16,7 @@ import { GatewayServer } from './server.js';
 import { AgentRuntime, AgentRuntimeConfig } from './domain/logic/agent-runtime.js';
 import { SwarmManager } from './domain/logic/swarm-manager.js';
 import { SwarmMessenger } from './domain/logic/swarm-messenger.js';
+import { DispatchService } from './application/services/dispatch-service.js';
 import { createSwarmTools } from './tools/swarm-tools.js';
 import { ModelRouter } from './infrastructure/llm/model-router.js';
 import { ModelCatalog } from './infrastructure/llm/model-catalog.js';
@@ -214,6 +215,10 @@ export const startGateway = async (rootPath?: string) => {
   skillLoader.setSecrets(secretsStore.getAll());
   await skillLoader.init(toolRegistry);
 
+  const dispatchService = new DispatchService(skillLoader, toolRegistry);
+  container.register(DispatchService, { useValue: dispatchService });
+  dispatchService.refresh();
+
   /*
    * KnowledgeWatcher is now a Sensor and integrated via SensorManager in GatewayServer generally.
    * However, index.ts (CLI entry point) instantiates it manually for the standalone runtime loop.
@@ -293,6 +298,7 @@ export const startGateway = async (rootPath?: string) => {
     swarmManager,
     swarmMessenger,
     skillLoader,
+    dispatchService,
     graphContext,
     contextSoftLimit: config.contextSoftLimit,
     maxIterations: 20,
@@ -340,6 +346,7 @@ export const startGateway = async (rootPath?: string) => {
     skillLoader.updateConfig(latestConfig, projectRoot);
     skillLoader.setSecrets(secretsStore.getAll());
     await skillLoader.reload(agent);
+    dispatchService.refresh();
     agent.refreshSystemPrompt();
   };
 

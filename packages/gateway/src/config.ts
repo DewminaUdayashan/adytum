@@ -150,11 +150,11 @@ export function loadConfig(projectRoot?: string): AdytumConfig {
     userRole: fileConfig.userRole || process.env.ADYTUM_USER_ROLE,
     userPreferences: fileConfig.userPreferences || process.env.ADYTUM_USER_PREFS,
     workspacePath: resolve(
-      (fileConfig.workspacePath as string) ||
-        process.env.ADYTUM_WORKSPACE ||
-        join(root, 'workspace'),
+      root,
+      (fileConfig.workspacePath as string) || process.env.ADYTUM_WORKSPACE || 'workspace',
     ),
     dataPath: resolve(
+      root,
       (fileConfig.dataPath as string) || process.env.ADYTUM_DATA_DIR || DEFAULT_DATA_DIR,
     ),
     models: fileConfig.models || [],

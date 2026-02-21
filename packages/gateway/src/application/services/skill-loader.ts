@@ -6,6 +6,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
 import { createRequire } from 'node:module';
+import { execSync } from 'node:child_process';
 import { createJiti } from 'jiti';
 import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
@@ -28,6 +29,30 @@ const ENTRY_CANDIDATES = [
 
 export type SkillOrigin = 'workspace' | 'managed' | 'extra';
 
+export interface SkillMetadata {
+  name?: string;
+  description?: string;
+  version?: string;
+  skillKey?: string;
+  homepage?: string;
+  emoji?: string;
+  requires: {
+    bins: string[];
+    anyBins: string[];
+    env: string[];
+    config: string[];
+    os: string[];
+  };
+  primaryEnv?: string;
+  always?: boolean;
+  communication?: boolean;
+  dispatch?: {
+    kind?: string;
+    tool?: string;
+  };
+  install: Array<Record<string, unknown>>;
+}
+
 export interface SkillManifest {
   id: string;
   name?: string;
@@ -39,7 +64,7 @@ export interface SkillManifest {
   skills?: string[];
   uiHints?: Record<string, unknown>;
   configSchema: Record<string, unknown>;
-  metadata?: ReturnType<typeof resolveMetadata>;
+  metadata?: SkillMetadata;
 }
 
 export interface LoadedSkill {
@@ -174,7 +199,7 @@ const resolveStringArray = (value: unknown): string[] =>
  * Executes resolve metadata.
  * @param data - Data.
  */
-const resolveMetadata = (data: Record<string, unknown>) => {
+const resolveMetadata = (data: Record<string, unknown>): SkillMetadata => {
   const rawMeta = isRecord(data.metadata) ? (data.metadata as Record<string, unknown>) : {};
   const manifestBlock = isRecord(rawMeta.manifest)
     ? (rawMeta.manifest as Record<string, unknown>)
@@ -189,7 +214,9 @@ const resolveMetadata = (data: Record<string, unknown>) => {
       ? String(data.primaryEnv || oc.primaryEnv).trim()
       : undefined;
   const always =
-    typeof (data.always ?? oc.always) === 'boolean' ? (data.always ?? oc.always) : undefined;
+    typeof (data.always ?? oc.always) === 'boolean'
+      ? ((data.always ?? oc.always) as boolean)
+      : undefined;
   const installRaw = Array.isArray(oc.install)
     ? oc.install
     : Array.isArray(rawMeta.install)
@@ -212,7 +239,7 @@ const resolveMetadata = (data: Record<string, unknown>) => {
       : undefined;
   const communication =
     typeof (data.communication ?? oc.communication) === 'boolean'
-      ? (data.communication ?? oc.communication)
+      ? ((data.communication ?? oc.communication) as boolean)
       : undefined;
   return {
     name: typeof data.name === 'string' ? data.name.trim() : undefined,
@@ -231,6 +258,16 @@ const resolveMetadata = (data: Record<string, unknown>) => {
     primaryEnv,
     always,
     communication,
+    dispatch: {
+      kind:
+        typeof (data['command-dispatch'] || oc['command-dispatch']) === 'string'
+          ? String(data['command-dispatch'] || oc['command-dispatch']).trim()
+          : undefined,
+      tool:
+        typeof (data['command-tool'] || oc['command-tool']) === 'string'
+          ? String(data['command-tool'] || oc['command-tool']).trim()
+          : undefined,
+    },
     install,
   };
 };
@@ -309,6 +346,14 @@ export class SkillLoader {
   private dataPath: string;
   private config: AdytumConfig;
   private managedSkillsDir: string;
+  private skillCache: Map<
+    string,
+    {
+      mtime: number;
+      manifest: SkillManifest;
+      instructions: { instructions: string; files: string[] };
+    }
+  > = new Map();
 
   constructor(workspacePath: string, options: SkillLoaderOptions = {}) {
     this.skillsDir = join(workspacePath, 'skills');
@@ -345,32 +390,59 @@ export class SkillLoader {
     const discovered: Map<string, LoadedSkill & { priority: number }> = new Map();
 
     for (const candidate of candidates) {
-      const manifestResult = this.loadManifest(candidate.rootDir, candidate.hasSkillMd);
-      if (!manifestResult.ok) {
-        const fallbackId = basename(candidate.rootDir);
-        if (discovered.has(fallbackId)) continue;
-        discovered.set(fallbackId, {
-          id: fallbackId,
-          name: fallbackId,
-          path: candidate.rootDir,
-          source: candidate.source,
-          origin: candidate.origin,
-          enabled: false,
-          status: 'error',
-          error: manifestResult.error,
-          toolNames: [],
-          serviceIds: [],
-          instructions: '',
-          instructionFiles: [],
-          manifest: undefined,
-          priority: candidate.priority,
-          readonly: candidate.origin !== 'workspace',
-        });
-        continue;
+      const { rootDir, hasSkillMd } = candidate;
+      const manifestFile = join(rootDir, MANIFEST_FILE);
+      const skillMdFile = join(rootDir, SKILL_MD);
+
+      let mtime = 0;
+      try {
+        const s1 = existsSync(manifestFile) ? statSync(manifestFile).mtimeMs : 0;
+        const s2 = existsSync(skillMdFile) ? statSync(skillMdFile).mtimeMs : 0;
+        mtime = Math.max(s1, s2);
+      } catch {
+        /* ignore */
       }
 
-      const manifest = manifestResult.manifest;
-      const instructionBundle = this.collectSkillInstructions(candidate.rootDir, manifest);
+      const cacheKey = rootDir;
+      const cached = this.skillCache.get(cacheKey);
+
+      let manifest: SkillManifest | undefined;
+      let instructionBundle: { instructions: string; files: string[] };
+      let manifestPath: string | undefined;
+
+      if (cached && cached.mtime === mtime) {
+        manifest = cached.manifest;
+        instructionBundle = cached.instructions;
+        manifestPath = join(rootDir, hasSkillMd ? SKILL_MD : MANIFEST_FILE);
+      } else {
+        const manifestResult = this.loadManifest(rootDir, hasSkillMd);
+        if (!manifestResult.ok) {
+          const fallbackId = basename(rootDir);
+          if (discovered.has(fallbackId)) continue;
+          discovered.set(fallbackId, {
+            id: fallbackId,
+            name: fallbackId,
+            path: rootDir,
+            source: candidate.source,
+            origin: candidate.origin,
+            enabled: false,
+            status: 'error',
+            error: manifestResult.error,
+            toolNames: [],
+            serviceIds: [],
+            instructions: '',
+            instructionFiles: [],
+            manifest: undefined,
+            priority: candidate.priority,
+            readonly: candidate.origin !== 'workspace',
+          });
+          continue;
+        }
+        manifest = manifestResult.manifest;
+        manifestPath = manifestResult.manifestPath;
+        instructionBundle = this.collectSkillInstructions(rootDir, manifest);
+        this.skillCache.set(cacheKey, { mtime, manifest, instructions: instructionBundle });
+      }
 
       const existing = discovered.get(manifest.id);
       if (existing && existing.priority > candidate.priority) {
@@ -384,7 +456,7 @@ export class SkillLoader {
         version: manifest.version,
         path: candidate.rootDir,
         source: candidate.source,
-        manifestPath: manifestResult.manifestPath,
+        manifestPath,
         origin: candidate.origin,
         enabled: state.enabled,
         status: state.enabled ? 'discovered' : 'disabled',
@@ -589,9 +661,102 @@ export class SkillLoader {
     this.secrets = { ...this.secrets, [skillId]: { ...(env || {}) } };
   }
 
+  /**
+   * Executes installation steps for a skill.
+   * Supports 'brew' (macOS) and 'apt' (Linux).
+   */
+  async executeInstallSteps(skillId: string): Promise<{ ok: boolean; error?: string }> {
+    const skill = this.get(skillId);
+    if (!skill) return { ok: false, error: 'Skill not found' };
+    if (!skill.install || skill.install.length === 0) return { ok: true };
+
+    const platform = process.platform;
+    let installedCount = 0;
+
+    for (const step of skill.install) {
+      const kind = String(step.kind || '').toLowerCase();
+      const label = String(step.label || kind);
+
+      // Platform checks
+      if (kind === 'brew' && platform !== 'darwin') continue;
+      if (kind === 'apt' && platform !== 'linux') continue;
+
+      try {
+        if (kind === 'brew') {
+          const formula = String(step.formula || '');
+          if (!formula) continue;
+
+          // Check if already installed
+          try {
+            execSync(`brew list ${formula}`, { stdio: 'ignore' });
+            continue; // Already installed
+          } catch {
+            // Not installed, proceed
+          }
+
+          console.log(chalk.blue(`[SkillLoader] Installing ${label} via brew (${formula})...`));
+          execSync(`brew install ${formula}`, { stdio: 'inherit' });
+          installedCount++;
+        } else if (kind === 'apt') {
+          const pkg = String(step.package || '');
+          if (!pkg) continue;
+
+          // Check if already installed
+          try {
+            execSync(`dpkg -s ${pkg}`, { stdio: 'ignore' });
+            continue; // Already installed
+          } catch {
+            // Not installed
+          }
+
+          console.log(chalk.blue(`[SkillLoader] Installing ${label} via apt (${pkg})...`));
+          execSync(`sudo apt-get update && sudo apt-get install -y ${pkg}`, { stdio: 'inherit' });
+          installedCount++;
+        }
+      } catch (err: any) {
+        return {
+          ok: false,
+          error: `Installation failed for ${skillId} (${label}): ${err.message}`,
+        };
+      }
+    }
+
+    if (installedCount > 0) {
+      console.log(
+        chalk.green(
+          `[SkillLoader] Successfully installed ${installedCount} dependencies for ${skillId}.`,
+        ),
+      );
+      this.discover(); // Rescan to update enabled status
+    }
+
+    return { ok: true };
+  }
+
   /** Get all discovered skills (loaded + disabled + errored). */
   getAll(): LoadedSkill[] {
     return [...this.skills];
+  }
+
+  /**
+   * Performs a diagnostic check of all discovered skills.
+   */
+  checkAll(): Array<{
+    id: string;
+    status: string;
+    enabled: boolean;
+    error?: string;
+    missing?: SkillMissing;
+    installable: boolean;
+  }> {
+    return this.skills.map((s) => ({
+      id: s.id,
+      status: s.status,
+      enabled: s.enabled,
+      error: s.error,
+      missing: s.missing,
+      installable: (s.install?.length || 0) > 0,
+    }));
   }
 
   /** Lookup by id or display name. */
