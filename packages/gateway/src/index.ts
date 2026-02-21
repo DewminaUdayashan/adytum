@@ -20,6 +20,7 @@ import { DispatchService } from './application/services/dispatch-service.js';
 import { createSwarmTools } from './tools/swarm-tools.js';
 import { ModelRouter } from './infrastructure/llm/model-router.js';
 import { ModelCatalog } from './infrastructure/llm/model-catalog.js';
+import { SwarmSweeper } from './domain/logic/swarm-sweeper.js';
 
 import { setupContainer, container } from './container.js';
 import { SoulEngine } from './domain/logic/soul-engine.js';
@@ -290,6 +291,10 @@ export const startGateway = async (rootPath?: string) => {
 
   const swarmManager = new SwarmManager(config, eventBus, swarmMessenger, agentRegistry);
   container.register(SwarmManager, { useValue: swarmManager });
+
+  const swarmSweeper = new SwarmSweeper(swarmManager, logger);
+  container.register(SwarmSweeper, { useValue: swarmSweeper });
+  swarmSweeper.start();
 
   const agentRuntimeConfig: AgentRuntimeConfig = {
     modelRouter,
@@ -666,6 +671,8 @@ export const startGateway = async (rootPath?: string) => {
       permissionManager.stopWatching();
       await knowledgeWatcher.stop();
       await skillLoader.stop();
+      const sweeper = container.resolve(SwarmSweeper);
+      sweeper.stop();
       await server.stop();
       logger.info('Shutdown complete.');
       process.exit(0);

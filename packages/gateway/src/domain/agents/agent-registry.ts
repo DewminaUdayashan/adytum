@@ -26,6 +26,9 @@ export interface AgentProfile {
   topics?: string[];
   persistence: 'ephemeral' | 'persistent';
   createdAt: number;
+  startedAt?: number;
+  lastActivityAt?: number;
+  timeoutMs?: number;
 }
 
 export interface BirthParams {
@@ -53,6 +56,9 @@ export interface AgentRecord extends AgentMetadata {
   cronSchedule?: string;
   topics?: string[];
   persistence?: AgentProfile['persistence'];
+  startedAt?: number;
+  lastActivityAt?: number;
+  timeoutMs?: number;
 }
 
 /**
@@ -159,6 +165,9 @@ export class AgentRegistry extends EventEmitter {
       persistence: profile.persistence,
       status: profile.status,
       _activeSince: Math.floor(Date.now() / 1000),
+      startedAt: profile.startedAt,
+      lastActivityAt: profile.lastActivityAt,
+      timeoutMs: profile.timeoutMs,
     };
     this.registerInternal(record);
   }
@@ -176,10 +185,19 @@ export class AgentRegistry extends EventEmitter {
     if (agent) {
       agent.status = status;
       this.agents.set(id, agent);
-      // No save needed for transient status? Or maybe yes if we want to know current state on restart?
-      // For now, let's not save status excessively to disk to avoid IO churn, or maybe save only significant changes.
-      // But for dashboard to see it, it's in memory.
       this.emit('status_changed', { id, status });
+    }
+  }
+
+  /** Swarm Compatibility: Update Activity */
+  updateActivity(id: string): void {
+    const agent = this.agents.get(id);
+    if (agent) {
+      agent.lastActivityAt = Date.now();
+      this.agents.set(id, agent);
+      // We don't save to disk on every activity to avoid churn,
+      // but SwarmSweeper will use memory state.
+      this.emit('activity_updated', { id, lastActivityAt: agent.lastActivityAt });
     }
   }
 
@@ -333,6 +351,9 @@ export class AgentRegistry extends EventEmitter {
       avatar: r.avatar || '',
       persistence: r.persistence || 'persistent',
       createdAt: r.birthTime * 1000,
+      startedAt: r.startedAt,
+      lastActivityAt: r.lastActivityAt,
+      timeoutMs: r.timeoutMs,
     };
   }
 }

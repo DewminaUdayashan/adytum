@@ -334,6 +334,11 @@ ${knowledge}`,
           throw new Error('Session aborted by user or system.');
         }
 
+        // Update activity for Swarm Registry on each iteration
+        if (overrides?.agentId) {
+          this.config.swarmManager.updateActivity(overrides.agentId);
+        }
+
         iterations++;
 
         // Check for compaction
