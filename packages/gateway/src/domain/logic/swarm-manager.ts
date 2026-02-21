@@ -140,6 +140,19 @@ export class SwarmManager {
       style: 'capital',
     });
 
+    // ─── Max Children Protocol ───
+    if (parentId) {
+      const children = Array.from(this.activeAgents.values()).filter(
+        (a) => a.parentId === parentId,
+      );
+      const maxChildren = 5; // Configurable?
+      if (children.length >= maxChildren) {
+        throw new Error(
+          `Max children limit reached for parent ${parentId}. (Limit: ${maxChildren})`,
+        );
+      }
+    }
+
     const isRecurring = mode === 'daemon' || mode === 'scheduled';
 
     const newAgent: AdytumAgent = {
@@ -152,6 +165,8 @@ export class SwarmManager {
       status: 'spawning',
       isRecurring,
       createdAt: Date.now(),
+      startedAt: Date.now(),
+      lastActivityAt: Date.now(),
       tools: this.determineToolsForRole(role, inheritedTools),
       metadata: {
         mission,
@@ -177,6 +192,8 @@ export class SwarmManager {
       cronSchedule,
       persistence: 'persistent',
       createdAt: newAgent.createdAt,
+      startedAt: newAgent.startedAt,
+      lastActivityAt: newAgent.lastActivityAt,
     };
     this.agentRegistry.register(profile);
 
@@ -285,6 +302,57 @@ export class SwarmManager {
 
   public getAllAgents(): AdytumAgent[] {
     return Array.from(this.activeAgents.values());
+  }
+
+  /**
+   * Updates the activity timestamp for an agent.
+   */
+  public updateActivity(agentId: string): void {
+    const agent = this.activeAgents.get(agentId);
+    if (agent) {
+      agent.lastActivityAt = Date.now();
+      this.agentRegistry.updateActivity(agentId);
+    }
+  }
+
+  /**
+   * Notifies the swarm and parent of an agent failure.
+   */
+  public notifyFailure(agentId: string, error: string): void {
+    const agent = this.activeAgents.get(agentId);
+    if (agent) {
+      this.eventBus.publish(
+        SwarmEvents.AGENT_FAILED,
+        { id: agentId, error, parentId: agent.parentId },
+        'SwarmManager',
+      );
+
+      if (agent.parentId) {
+        // Inject failure message to parent's session if needed?
+        // SwarmMessenger would handle this content.
+        this.messenger.send(
+          'system',
+          agent.parentId,
+          `Sub-agent ${agent.name} (${agentId}) failed: ${error}`,
+          'alert',
+        );
+      }
+    }
+  }
+
+  /**
+   * Notifies the parent of an agent's successful task completion.
+   */
+  public notifyResult(agentId: string, result: string): void {
+    const agent = this.activeAgents.get(agentId);
+    if (agent && agent.parentId) {
+      this.messenger.send(
+        agentId,
+        agent.parentId,
+        `Task completed by ${agent.name} (${agentId}). Result: ${result}`,
+        'report',
+      );
+    }
   }
 
   public getGraveyard(): AdytumAgent[] {

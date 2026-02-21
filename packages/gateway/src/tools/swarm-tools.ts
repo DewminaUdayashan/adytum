@@ -37,6 +37,7 @@ export function createSwarmTools(
             'Number of workers to spawn. ONLY Managers (T2) can spawn multiple. Architects (T1) must spawn 1 manager at a time.',
           ),
         cronSchedule: z.string().optional().describe('CRON expression for scheduled agents.'),
+        timeoutMs: z.number().optional().describe('Inactivity timeout in ms (default: 1 hour).'),
         inheritTools: z
           .boolean()
           .optional()
@@ -56,6 +57,7 @@ export function createSwarmTools(
           tier?: number;
           count?: number;
           cronSchedule?: string;
+          timeoutMs?: number;
           inheritTools?: boolean;
           specificTools?: string[];
         },
@@ -110,6 +112,12 @@ export function createSwarmTools(
               cronSchedule: args.cronSchedule,
               inheritedTools,
             });
+
+            // Set timeout if provided
+            if (args.timeoutMs) {
+              agent.timeoutMs = args.timeoutMs;
+            }
+
             spawnedAgents.push(agent);
           }
 
@@ -144,6 +152,10 @@ export function createSwarmTools(
       parameters: z.object({
         to: z.string().describe('The unique ID of the agent to delegate to.'),
         goal: z.string().describe('The task instruction or goal for the agent.'),
+        timeoutMs: z
+          .number()
+          .optional()
+          .describe('Timeout for this specific delegation (default: 10 mins).'),
         background: z
           .boolean()
           .optional()
@@ -151,11 +163,18 @@ export function createSwarmTools(
             'If true, runs efficiently in background without waiting for full output. Default false (waits for result).',
           ),
       }),
-      execute: async (args: { to: string; goal: string; background?: boolean }, context: any) => {
+      execute: async (
+        args: { to: string; goal: string; timeoutMs?: number; background?: boolean },
+        context: any,
+      ) => {
         const agent = swarmManager.getAgent(args.to);
         if (!agent) {
           return `Error: Agent with ID "${args.to}" not found. Spawning a new agent might be required.`;
         }
+
+        // Update activity for both parent and child
+        if (context?.agentId) swarmManager.updateActivity(context.agentId);
+        swarmManager.updateActivity(args.to);
 
         // Create a dedicated session for this task
         const taskSessionId = `task-${uuidv4()}`;
@@ -164,18 +183,28 @@ export function createSwarmTools(
         if (args.background) {
           runtime
             .run(args.goal, taskSessionId, { agentId: args.to, workspaceId: context.workspaceId })
-            .catch((err) => console.error(`Background task failed for ${args.to}:`, err));
+            .catch((err) => {
+              swarmManager.notifyFailure(args.to, err.message);
+              console.error(`Background task failed for ${args.to}:`, err);
+            });
           return `Task delegated to ${agent.name} (${args.to}) in background session ${taskSessionId}. Check status later or wait for agent to report back.`;
         }
 
-        // Synchronous execution (blocking the caller until sub-agent finishes turn)
-        // Note: multiple turns might be needed. simple run() does one turn?
-        // AgentRuntime.run() allows maxIterations (loop). It returns when goal is satisfied or max iterations reached.
+        // Synchronous execution with timeout
         try {
-          const result = await runtime.run(args.goal, taskSessionId, {
+          const timeout = args.timeoutMs || 10 * 60_000;
+
+          const resultPromise = runtime.run(args.goal, taskSessionId, {
             agentId: args.to,
             workspaceId: context.workspaceId,
           });
+
+          // Implement Promise.race for timeout
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error(`Delegation timeout after ${timeout}ms`)), timeout);
+          });
+
+          const result: any = await Promise.race([resultPromise, timeoutPromise]);
 
           return `## Report from ${agent.name} (${agent.role})
 Outcome: ${result.trace.outcome}
@@ -184,8 +213,44 @@ Trace ID: ${result.trace.id}
 
 (Session ID: ${taskSessionId})`;
         } catch (error: any) {
+          swarmManager.notifyFailure(args.to, error.message);
           return `Delegation failed: ${error.message}`;
         }
+      },
+    },
+    {
+      name: 'agent_status',
+      description: 'Get detailed status and telemetry for a specific agent.',
+      parameters: z.object({
+        agentId: z.string().describe('The unique ID of the agent.'),
+      }),
+      execute: async (args: { agentId: string }) => {
+        const agent = swarmManager.getAgent(args.agentId);
+        if (!agent) {
+          // Check graveyard
+          const dead = swarmManager.getGraveyard().find((a) => a.id === args.agentId);
+          if (dead) {
+            return `Agent ${args.agentId} is in the GRAVEYARD.\nTerminated at: ${new Date(dead.terminatedAt || 0).toISOString()}\nReason: ${dead.metadata?.terminationReason || 'Unknown'}`;
+          }
+          return `Agent with ID "${args.agentId}" not found.`;
+        }
+
+        const now = Date.now();
+        const lastActivity = agent.lastActivityAt || agent.createdAt;
+        const idleTime = now - lastActivity;
+        const uptime = now - agent.createdAt;
+
+        return `## Agent Status: ${agent.name}
+ID: ${agent.id}
+Role: ${agent.role}
+Status: ${agent.status}
+Tier: ${agent.metadata?.tier}
+Mission: ${agent.metadata?.mission}
+Uptime: ${Math.floor(uptime / 1000)}s
+Idle Time: ${Math.floor(idleTime / 1000)}s
+Last Activity: ${new Date(lastActivity).toISOString()}
+Tools: ${agent.tools.join(', ')}
+Parent ID: ${agent.parentId || 'None'}`;
       },
     },
     {
@@ -193,27 +258,15 @@ Trace ID: ${result.trace.id}
       description: 'List all active agents in the swarm and their status.',
       parameters: z.object({}),
       execute: async () => {
-        const agents = swarmManager.getHierarchy();
-        // Format for readability
-        let output = '## Swarm Hierarchy\n';
+        const agents = swarmManager.getAllAgents();
+        if (agents.length === 0) return 'No active agents in the swarm.';
 
-        const formatAgent = (a: any, depth = 0) => {
-          const indent = '  '.repeat(depth);
-          output += `${indent}- **${a.name}** (${a.role}) [ID: ${a.id}] - ${a.status}\n`;
-          if (a.metadata?.mission) output += `${indent}  Mission: ${a.metadata.mission}\n`;
-
-          // If we had a hierarchy structure in return, we'd recurse.
-          // Currently properties aren't strictly nested in the Type definition (parentId is Ref).
-          // SwarmManager.getHierarchy() returns a flat list or tree?
-          // Let's assume flat list for now or check SwarmManager.
-        };
-
-        // SwarmManager.getHierarchy() isn't implemented in the snippet I saw?
-        // Wait, did I implement getHierarchy in SwarmManager?
-        // Let's check SwarmManager.ts again.
-
-        // If getHierarchy returns complex object, JSON stringify it for now.
-        return JSON.stringify(agents, null, 2);
+        let output = '## Active Swarm Agents\n';
+        for (const a of agents) {
+          output += `- **${a.name}** (${a.role}) [ID: ${a.id}] - ${a.status} (Tier ${a.metadata?.tier || '?'})\n`;
+          if (a.metadata?.mission) output += `  Mission: ${a.metadata.mission}\n`;
+        }
+        return output;
       },
     },
   ];
