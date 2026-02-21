@@ -42,6 +42,7 @@ export const SwarmEvents = {
   AGENT_UPDATED: 'agent:updated',
   AGENT_LOG: 'agent:log',
   AGENT_MESSAGE: 'agent:message',
+  AGENT_FAILED: 'agent:failed',
   AGENT_TERMINATED: 'agent:terminated',
 } as const;
 

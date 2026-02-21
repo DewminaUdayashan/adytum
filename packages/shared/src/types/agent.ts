@@ -16,7 +16,10 @@ export interface AdytumAgent {
   type: AgentType;
   isRecurring: boolean; // If true, goes to sleep instead of Graveyard
   createdAt: number; // Timestamp
+  startedAt?: number; // Last time the agent started a task
+  lastActivityAt?: number; // Last time the agent showed activity
   terminatedAt?: number; // Timestamp
+  timeoutMs?: number; // Per-agent timeout override
 
   // The Context
   systemPrompt?: string; // The "Soul" (optional mostly for transmission efficiency)
