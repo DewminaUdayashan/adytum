@@ -191,61 +191,127 @@ export class MemoryStore {
    * @param topK - Top k.
    * @returns The resulting collection of values.
    */
-  search(query: string, topK: number = 3): MemoryRecord[] {
-    return this.db.searchMemories(query, topK);
-  }
-
   /**
-   * Performs hybrid search (Semantic + Keyword).
-   * Currently implements a simple re-ranking or combination strategy.
+   * Performs hybrid search (Semantic + Keyword) with diversity re-ranking (MMR).
    */
   async searchHybrid(
     query: string,
     topK: number = 5,
-    filter?: { category?: string },
+    filter?: { category?: string; workspaceId?: string },
+    lambda: number = 0.5, // Diversity vs Relevance balance for MMR
   ): Promise<MemoryRecord[]> {
-    // 1. Get query embedding
-    const queryVector = await this.embeddingService.embed(query);
     const category = filter?.category || 'doc_chunk';
 
-    // 2. Fetch candidates: Combine Keyword results (BM25) and Recent results
-    // This ensures we get both semantically similar AND keyword-matching candidates
-    const keywordMatches = this.db.searchMemories(query, 100);
-    const recentMatches = this.db.getMemoriesFiltered([category], 1000);
+    // 1. Keyword search (FTS5) - High recall
+    const keywordMatches = this.db.searchMemories(query, 50);
 
-    const candidateMap = new Map<string, MemoryRow>();
-    [...keywordMatches, ...recentMatches].forEach((m) => {
-      if (m.category === category) candidateMap.set(m.id, m);
-    });
-    const candidates = Array.from(candidateMap.values());
+    // 2. Semantic search
+    const queryVector = await this.embeddingService.embed(query);
+    const recentCandidates = this.db.getMemoriesFiltered([category], 200);
 
-    if (candidates.length === 0) return [];
-
-    // 3. Score candidates
-    const scored = candidates.map((mem) => {
+    const scored = recentCandidates.map((mem) => {
       let score = 0;
       if (mem.embedding) {
         try {
-          // Buffer to Float32Array
           const memVector = new Float32Array(
             mem.embedding.buffer,
             mem.embedding.byteOffset,
             mem.embedding.byteLength / 4,
           );
           score = this.embeddingService.cosineSimilarity(queryVector, memVector);
-        } catch (err) {
-          // Unaligned buffer fallback
+        } catch {
           const memVector = new Float32Array(new Uint8Array(mem.embedding).buffer);
           score = this.embeddingService.cosineSimilarity(queryVector, memVector);
         }
       }
-      return { ...mem, score };
+      return { ...mem, semanticScore: score };
     });
 
-    // 4. Sort by score
-    scored.sort((a, b) => b.score - a.score);
+    // 3. Reciprocal Rank Fusion (Simple Version)
+    // Combine keyword rank and semantic rank
+    const fusedMap = new Map<string, MemoryRow & { fusedScore: number; semanticScore: number }>();
 
-    // 5. Return top K
-    return scored.slice(0, topK);
+    keywordMatches.forEach((m, idx) => {
+      const kRank = idx + 1;
+      const score = 1 / (60 + kRank); // Standard RRF formula
+      fusedMap.set(m.id, { ...m, fusedScore: score, semanticScore: 0 });
+    });
+
+    scored.forEach((m, idx) => {
+      const sRank = idx + 1;
+      const rrf = 1 / (60 + sRank);
+      if (fusedMap.has(m.id)) {
+        fusedMap.get(m.id)!.fusedScore += rrf;
+        fusedMap.get(m.id)!.semanticScore = m.semanticScore;
+      } else {
+        fusedMap.set(m.id, { ...m, fusedScore: rrf, semanticScore: m.semanticScore });
+      }
+    });
+
+    const candidates = Array.from(fusedMap.values());
+    candidates.sort((a, b) => b.fusedScore - a.fusedScore);
+
+    // 4. Maximal Marginal Relevance (MMR)
+    // Select results that are relevant AND diverse
+    if (candidates.length <= topK) return candidates;
+
+    const selected: Array<MemoryRow & { semanticScore: number }> = [];
+    const remaining = [...candidates].slice(0, Math.min(candidates.length, 25)); // Consider top candidates for MMR
+
+    while (selected.length < topK && remaining.length > 0) {
+      let bestIdx = -1;
+      let maxMMR = -Infinity;
+
+      for (let i = 0; i < remaining.length; i++) {
+        const doc = remaining[i];
+
+        // Calculate similarity to already selected docs for diversity penalty
+        let maxSimToSelected = 0;
+        if (selected.length > 0 && doc.embedding) {
+          try {
+            const docVec = new Float32Array(
+              doc.embedding.buffer,
+              doc.embedding.byteOffset,
+              doc.embedding.byteLength / 4,
+            );
+            for (const sel of selected) {
+              if (sel.embedding) {
+                const selVec = new Float32Array(
+                  sel.embedding.buffer,
+                  sel.embedding.byteOffset,
+                  sel.embedding.byteLength / 4,
+                );
+                const sim = this.embeddingService.cosineSimilarity(docVec, selVec);
+                if (sim > maxSimToSelected) maxSimToSelected = sim;
+              }
+            }
+          } catch {
+            // Fallback for unaligned or raw buffers
+            const docVec = new Float32Array(new Uint8Array(doc.embedding).buffer);
+            for (const sel of selected) {
+              if (sel.embedding) {
+                const selVec = new Float32Array(new Uint8Array(sel.embedding).buffer);
+                const sim = this.embeddingService.cosineSimilarity(docVec, selVec);
+                if (sim > maxSimToSelected) maxSimToSelected = sim;
+              }
+            }
+          }
+        }
+
+        const score = lambda * doc.semanticScore - (1 - lambda) * maxSimToSelected;
+        if (score > maxMMR) {
+          maxMMR = score;
+          bestIdx = i;
+        }
+      }
+
+      if (bestIdx !== -1) {
+        selected.push(remaining.splice(bestIdx, 1)[0]);
+      } else {
+        break;
+      }
+    }
+
+    return selected;
   }
 }

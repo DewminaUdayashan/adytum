@@ -52,7 +52,7 @@ export function createMemoryTools(memoryStore: MemoryStore): ToolDefinition[] {
       }),
       execute: async (args: any) => {
         const { query, topK } = args as { query: string; topK: number };
-        const results = memoryStore.search(query, topK);
+        const results = await memoryStore.searchHybrid(query, topK);
         return { query, results };
       },
     },
