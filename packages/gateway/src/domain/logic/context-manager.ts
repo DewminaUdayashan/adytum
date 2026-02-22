@@ -49,9 +49,10 @@ export class ContextManager {
   }
 
   /**
-   * Estimates the token count of the current context using a naive heuristic (4 chars ≈ 1 token).
-   * Used for quick checks against the soft limit to avoid expensive tokenization calls.
-   * @returns The estimated number of tokens.
+   * Estimates the token count of the current context.
+   * Note: This is a placeholder for external estimation if needed,
+   * but usually AgentRuntime will use the Compactor service.
+   * @returns The estimated number of tokens (naive character-based).
    */
   estimateTokenCount(): number {
     const text = this.messages
@@ -60,54 +61,27 @@ export class ContextManager {
         return JSON.stringify(m.content);
       })
       .join(' ');
-    // Include system prompt in estimation
     return Math.ceil((text.length + this.systemPrompt.length) / 4);
   }
 
   /**
-   * Checks if the context size has exceeded the configured soft limit.
-   * @returns True if compaction is needed, false otherwise.
+   * Checks if the context size has exceeded a limit.
+   * @param limit - Optional limit override. Returns true if exceeded.
    */
-  needsCompaction(): boolean {
-    return this.estimateTokenCount() > this.softLimit;
+  needsCompaction(limit?: number): boolean {
+    const activeLimit = limit || this.softLimit;
+    return this.estimateTokenCount() > activeLimit;
   }
 
   /**
-   * Generates a prompt for the model to summarize the older part of the conversation.
-   * Used when compaction is triggered.
-   * @returns A string prompt instructing the model to summarize the conversation.
+   * Sets the message history directly. Used by Compactor.
    */
-  buildCompactionPrompt(): string {
-    // Keep the last 6 messages intact to maintain recent context flow
-    const oldMessages = this.messages.slice(0, -6);
-    const text = oldMessages
-      .map(
-        (m) =>
-          `${(m as any).role}: ${typeof m.content === 'string' ? m.content : JSON.stringify(m.content)}`,
-      )
-      .join('\n');
-
-    return `Summarize the following conversation into a concise context summary that preserves all important technical details, decisions, file paths, error codes, and action items:\n\n${text}`;
+  setMessages(messages: OpenAI.ChatCompletionMessageParam[]): void {
+    this.messages = messages;
   }
 
   /**
-   * Applies the compaction result by replacing older messages with a summary system message.
-   * Retains the most recent 6 messages.
-   * @param summary - The generated summary of the older conversation.
-   */
-  applyCompaction(summary: string): void {
-    const recentMessages = this.messages.slice(-6);
-    this.messages = [
-      {
-        role: 'system',
-        content: `[Context Summary from previous conversation]\n${summary}`,
-      },
-      ...recentMessages,
-    ];
-  }
-
-  /**
-   * Clears all conversation history (except the system prompt which is stored separately).
+   * Clears all conversation history.
    */
   clear(): void {
     this.messages = [];

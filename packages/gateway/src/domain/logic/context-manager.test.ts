@@ -45,38 +45,15 @@ describe('ContextManager', () => {
     expect(contextManager.needsCompaction()).toBe(true);
   });
 
-  it('should not trigger compaction if small', () => {
-    contextManager.addMessage({ role: 'user', content: 'short' });
-    expect(contextManager.needsCompaction()).toBe(false);
+  it('should support dynamic limits in needsCompaction', () => {
+    contextManager.addMessage({ role: 'user', content: 'a'.repeat(200) }); // ~50 tokens
+    expect(contextManager.needsCompaction(10)).toBe(true);
+    expect(contextManager.needsCompaction(100)).toBe(false);
   });
 
-  it('should apply compaction correctly', () => {
-    // Pre-populate with messages.
-    // This part tests if messages are replaced by summary.
-    contextManager.addMessage({ role: 'user', content: 'one' });
-    contextManager.addMessage({ role: 'assistant', content: 'two' });
-    contextManager.addMessage({ role: 'user', content: 'three' });
-    contextManager.addMessage({ role: 'assistant', content: 'four' });
-    contextManager.addMessage({ role: 'user', content: 'five' });
-    contextManager.addMessage({ role: 'assistant', content: 'six' });
-    contextManager.addMessage({ role: 'user', content: 'seven' }); // 7th msg (not including system)
-
-    // applyCompaction logic: recentMessages = messages.slice(-6).
-    // so if existing length is 7, it keeps last 6.
-    // and adds summary message at index 0 (after system prompt in getMessages view).
-    // Wait, messages array itself stores internal messages.
-    // applyCompaction replaces this.messages with [system(summary), ...recent6].
-
-    const summary = 'Summary of old conversation';
-    contextManager.applyCompaction(summary);
-
-    const msgs = contextManager.getMessages();
-    // expected structure: [ {role:system, content: <original>}, {role:system, content: <summary>}, ...recent6 ]
-    // Wait, getMessages() prepends system prompt from property.
-    // applyCompaction pushes a system message with summary into messages array. This is strange (2 system messages?).
-    // Yes, that's what the implementation does.
-
-    expect(msgs.length).toBeGreaterThan(1);
-    expect(msgs[1]!.content as string).toContain(summary);
+  it('should allow setting messages directly', () => {
+    contextManager.setMessages([{ role: 'system', content: 'summarized' }]);
+    expect(contextManager.getMessages()).toHaveLength(2); // original system + new system
+    expect(contextManager.getMessages()[1].content).toBe('summarized');
   });
 });
