@@ -411,6 +411,13 @@ RULES:
     if (job.scheduleKind === 'cron') {
       this.schedule(job);
     }
+
+    if (job.enabled && job.wakeMode === 'now' && this.heartbeat) {
+      this.heartbeat
+        .runNow()
+        .catch((err) => console.error('[Cron] Failed to trigger heartbeat:', err));
+    }
+
     return job;
   }
 
@@ -433,6 +440,12 @@ RULES:
       if (updated.enabled && updated.scheduleKind === 'cron') {
         this.schedule(updated);
       }
+    }
+
+    if (updated.enabled && updated.wakeMode === 'now' && this.heartbeat) {
+      this.heartbeat
+        .runNow()
+        .catch((err) => console.error('[Cron] Failed to trigger heartbeat:', err));
     }
 
     return updated;

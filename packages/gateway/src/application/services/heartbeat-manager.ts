@@ -25,11 +25,24 @@ Your task is to check the file "HEARTBEAT.md" and execute any pending tasks.
  */
 export class HeartbeatManager {
   private task: cron.ScheduledTask | null = null;
+  private isRunning: boolean = false;
 
   constructor(
     private agent: AgentRuntime,
     private workspacePath: string,
   ) {}
+
+  /**
+   * Triggers an immediate heartbeat run if not already running.
+   */
+  async runNow(): Promise<void> {
+    if (this.isRunning) {
+      console.log('[Heartbeat] Already running, skipping runNow trigger.');
+      return;
+    }
+    console.log('[Heartbeat] Manual trigger: runNow');
+    return this.run();
+  }
 
   /**
    * Executes start.
@@ -74,33 +87,35 @@ export class HeartbeatManager {
    * Executes run.
    */
   async run(): Promise<void> {
-    const heartbeatFile = join(this.workspacePath, 'HEARTBEAT.md');
-    let hasHeartbeatFile = false;
-    let heartbeatContent = '';
-
-    if (existsSync(heartbeatFile)) {
-      heartbeatContent = readFileSync(heartbeatFile, 'utf-8').trim();
-      const meaningfulContent = heartbeatContent.replace(/^#.*$/gm, '').trim();
-      if (!meaningfulContent) {
-        console.log('[Heartbeat] Status: idle | Summary: HEARTBEAT.md has no actionable tasks.');
-        // Skip run to save tokens if nothing to do.
-        return;
-      }
-      hasHeartbeatFile = true;
-    } else {
-      console.log('[Heartbeat] Status: idle | Summary: HEARTBEAT.md file not found.');
-      return;
-    }
-
-    const session = 'system-heartbeat';
-
-    // Construct the actual prompt
-    let prompt = DEFAULT_PROMPT;
-    if (hasHeartbeatFile) {
-      prompt += `\n\n[CONTEXT] HEARTBEAT.md content:\n${heartbeatContent}`;
-    }
+    if (this.isRunning) return;
+    this.isRunning = true;
 
     try {
+      const heartbeatFile = join(this.workspacePath, 'HEARTBEAT.md');
+      let hasHeartbeatFile = false;
+      let heartbeatContent = '';
+
+      if (existsSync(heartbeatFile)) {
+        heartbeatContent = readFileSync(heartbeatFile, 'utf-8').trim();
+        const meaningfulContent = heartbeatContent.replace(/^#.*$/gm, '').trim();
+        if (!meaningfulContent) {
+          console.log('[Heartbeat] Status: idle | Summary: HEARTBEAT.md has no actionable tasks.');
+          return;
+        }
+        hasHeartbeatFile = true;
+      } else {
+        console.log('[Heartbeat] Status: idle | Summary: HEARTBEAT.md file not found.');
+        return;
+      }
+
+      const session = 'system-heartbeat';
+
+      // Construct the actual prompt
+      let prompt = DEFAULT_PROMPT;
+      if (hasHeartbeatFile) {
+        prompt += `\n\n[CONTEXT] HEARTBEAT.md content:\n${heartbeatContent}`;
+      }
+
       const result = await this.agent.run(prompt, session);
       const parsedStatus = result.response.match(/^\s*STATUS:\s*(.+)$/im)?.[1]?.trim();
       const parsedSummary = result.response.match(/^\s*SUMMARY:\s*(.+)$/im)?.[1]?.trim();
@@ -109,16 +124,17 @@ export class HeartbeatManager {
         console.log(
           `[Heartbeat] Status: ${parsedStatus ?? 'unknown'} | Summary: ${parsedSummary ?? 'No summary provided.'}`,
         );
-        return;
+      } else {
+        // Backward-compatible fallback if the model does not follow the structured format.
+        console.log(
+          '[Heartbeat] Activity:',
+          result.response.slice(0, 160) + (result.response.length > 160 ? '...' : ''),
+        );
       }
-
-      // Backward-compatible fallback if the model does not follow the structured format.
-      console.log(
-        '[Heartbeat] Activity:',
-        result.response.slice(0, 160) + (result.response.length > 160 ? '...' : ''),
-      );
     } catch (error) {
       console.error('Heartbeat run failed:', error);
+    } finally {
+      this.isRunning = false;
     }
   }
 }
