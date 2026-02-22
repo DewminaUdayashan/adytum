@@ -21,6 +21,7 @@ import { createSwarmTools } from './tools/swarm-tools.js';
 import { ModelRouter } from './infrastructure/llm/model-router.js';
 import { ModelCatalog } from './infrastructure/llm/model-catalog.js';
 import { SwarmSweeper } from './domain/logic/swarm-sweeper.js';
+import { Compactor } from './domain/logic/compactor.js';
 
 import { setupContainer, container } from './container.js';
 import { SoulEngine } from './domain/logic/soul-engine.js';
@@ -85,11 +86,6 @@ export const startGateway = async (rootPath?: string) => {
   // Initialize DI Container
   setupContainer();
 
-  // ... (imports)
-
-  // Initialize DI Container
-  setupContainer();
-
   console.log(chalk.dim(`\n  Starting ${config.agentName}...\n`));
 
   // ── Event Bus (Phase 2.1) ─────────────────────────────────
@@ -105,13 +101,16 @@ export const startGateway = async (rootPath?: string) => {
 
   const secretsStore = new SecretsStore(config.dataPath);
   const memoryDb = new MemoryDB(config.dataPath);
+  container.register('MemoryDB', { useValue: memoryDb });
 
   // Vector Embeddings Support
   const embeddingService = container.resolve(EmbeddingService);
 
   const memoryStore = new MemoryStore(memoryDb, embeddingService);
   memoryStore.setEventBus(eventBus);
+  container.register(MemoryStore, { useValue: memoryStore });
   const graphStore = new GraphStore(config.dataPath);
+  container.register(GraphStore, { useValue: graphStore });
 
   // ── Security Layer ────────────────────────────────────────
   const permissionManager = new PermissionManager(
@@ -120,9 +119,11 @@ export const startGateway = async (rootPath?: string) => {
     graphStore,
   );
   permissionManager.startWatching();
+  container.register(PermissionManager, { useValue: permissionManager });
 
   // ── Tool Registry ─────────────────────────────────────────
   const toolRegistry = new ToolRegistry();
+  container.register(ToolRegistry, { useValue: toolRegistry });
 
   // ─── Native Tools ──────────────────────────────────────────
   for (const fsTool of createFileSystemTools(permissionManager)) {
@@ -158,7 +159,6 @@ export const startGateway = async (rootPath?: string) => {
 
   // ─── Agent Runtime ─────────────────────────────────────────
   const modelCatalog = container.resolve(ModelCatalog);
-
   const modelRouter = new ModelRouter({
     litellmBaseUrl: `http://localhost:${config.litellmPort}/v1`,
     models: config.models,
@@ -167,11 +167,15 @@ export const startGateway = async (rootPath?: string) => {
     modelCatalog,
     routing: config.routing,
   });
+  container.register(ModelRouter, { useValue: modelRouter });
 
   const semanticProcessor = new SemanticProcessor(modelRouter, memoryStore);
+  container.register(SemanticProcessor, { useValue: semanticProcessor });
   const graphIndexer = new GraphIndexer(config.workspacePath, graphStore, semanticProcessor);
+  container.register(GraphIndexer, { useValue: graphIndexer });
   graphIndexer.setEventBus(eventBus);
-  const graphContext = new GraphContext(graphStore);
+  const graphContext = new GraphContext(graphStore, memoryStore);
+  container.register(GraphContext, { useValue: graphContext });
 
   for (const kTool of createKnowledgeTools(traversalService, graphIndexer, memoryStore)) {
     toolRegistry.register(kTool);
@@ -208,11 +212,13 @@ export const startGateway = async (rootPath?: string) => {
   console.log(chalk.green('  ✓ ') + chalk.white(`Providers: ${allModels.length} models loaded`));
 
   const soulEngine = new SoulEngine(config.workspacePath);
+  container.register(SoulEngine, { useValue: soulEngine });
   const skillLoader = new SkillLoader(config.workspacePath, {
     projectRoot,
     dataPath: config.dataPath,
     config,
   });
+  container.register(SkillLoader, { useValue: skillLoader });
   skillLoader.setSecrets(secretsStore.getAll());
   await skillLoader.init(toolRegistry);
 
@@ -306,6 +312,8 @@ export const startGateway = async (rootPath?: string) => {
     dispatchService,
     graphContext,
     contextSoftLimit: config.contextSoftLimit,
+    compactor: container.resolve(Compactor),
+    modelCatalog,
     maxIterations: 20,
     defaultModelRole: 'thinking' as const,
     agentName: config.agentName,
