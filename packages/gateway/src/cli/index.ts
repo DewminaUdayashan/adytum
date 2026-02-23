@@ -126,23 +126,55 @@ program
     // 1. Start Gateway in this process
     try {
       const { startGateway } = await import('../index.js');
+      const { loadConfig } = await import('../config.js');
+      const config = loadConfig(workspaceRoot);
 
       // Start Dashboard in background
       const dashboardProcess = spawn('npm', ['run', 'start', '--workspace=packages/dashboard'], {
         cwd: sourceRoot,
-        stdio: 'inherit',
+        stdio: ['ignore', 'inherit', 'inherit'],
         shell: true,
+        detached: true, // Allow killing the entire process group
+        env: {
+          ...process.env,
+          PORT: String(config.dashboardPort),
+          GATEWAY_PORT: String(config.gatewayPort),
+        },
       });
 
       dashboardProcess.on('error', (err) => {
         console.error(chalk.red(`\n  ❌ Dashboard failed to start: ${err.message}`));
       });
 
+      // Ensure the child process is killed when the parent exits
+      const killDashboard = () => {
+        if (dashboardProcess.pid && !dashboardProcess.killed) {
+          try {
+            // Kill entire process group
+            process.kill(-dashboardProcess.pid, 'SIGTERM');
+          } catch (e) {
+            // ignore
+          }
+        }
+      };
+
+      process.on('exit', killDashboard);
+      process.on('SIGINT', () => {
+        killDashboard();
+        process.exit(0);
+      });
+      process.on('SIGTERM', () => {
+        killDashboard();
+        process.exit(0);
+      });
+
       // Open browser after a short delay to let things boot
       if (options.browser !== false) {
         setTimeout(async () => {
-          console.log(chalk.dim('\n   Opening dashboard at http://localhost: 7432...'));
-          await open('http://localhost: 7432');
+          console.log(
+            chalk.dim(`\n   Opening dashboard at http://localhost:${config.dashboardPort}...`),
+          );
+          await open(`http://localhost:${config.dashboardPort}`);
         }, 3000);
       }
 
@@ -190,7 +222,7 @@ program
   .description('Show gateway status, model config, and token usage')
   .action(async () => {
     try {
-      const response = await fetch('http://localhost: 7431/api/health');
+      const response = await fetch('http://localhost:7431/api/health');
       const data = (await response.json()) as any;
       console.log(chalk.green('●') + chalk.white(' Gateway is alive'));
       console.log(chalk.dim(`  Uptime: ${Math.floor(data.uptime)}s`));

@@ -124,12 +124,13 @@ export class GatewayServer extends EventEmitter {
       });
     }
 
+    const appConfig = loadConfig();
     await this.app.register(cors, {
       origin: [
         'http://localhost:3000',
         'http://127.0.0.1:3000',
-        'http://localhost: 7432',
-        'http://127.0.0.1: 7432',
+        `http://localhost:${appConfig.dashboardPort}`,
+        `http://127.0.0.1:${appConfig.dashboardPort}`,
       ],
       methods: ['GET', 'POST', 'PUT', 'DELETE'],
     });

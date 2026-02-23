@@ -21,17 +21,33 @@ const nextConfig = {
     return config;
   },
   async rewrites() {
+    const gwPort = process.env.GATEWAY_PORT || 7431;
     // Use localhost to avoid EADDRNOTAVAIL on macOS when proxy connects to gateway (127.0.0.1 can fail in some network configs).
     return [
       {
         source: '/api/:path*',
-        destination: 'http://localhost: 7431/api/:path*',
+        destination: `http://127.0.0.1:${gwPort}/api/:path*`,
+      },
+      {
+        source: '/socket.io',
+        destination: `http://127.0.0.1:${gwPort}/socket.io/`,
       },
       {
         source: '/socket.io/:path*',
-        destination: 'http://localhost: 7431/socket.io/:path*',
+        destination: `http://127.0.0.1:${gwPort}/socket.io/:path*`,
+      },
+      {
+        source: '/ws',
+        destination: `http://127.0.0.1:${gwPort}/ws/`,
+      },
+      {
+        source: '/ws/:path*',
+        destination: `http://127.0.0.1:${gwPort}/ws/:path*`,
       },
     ];
+  },
+  env: {
+    NEXT_PUBLIC_GATEWAY_PORT: process.env.GATEWAY_PORT || '7431',
   },
   eslint: {
     ignoreDuringBuilds: true,

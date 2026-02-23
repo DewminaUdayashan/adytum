@@ -66,7 +66,7 @@ export function Sidebar() {
         <div className="flex items-center gap-3.5">
           <div className="relative flex h-10 w-10 items-center justify-center rounded-xl overflow-hidden shadow-lg shadow-accent-primary/20 ring-1 ring-white/10">
             <img
-              src="/avatars/prometheus.png"
+              src="/avatars/prometheus-face.png"
               alt="Prometheus"
               className="w-full h-full object-cover"
               onError={(e) =>

@@ -64,9 +64,9 @@ node packages/gateway/dist/cli/index.js start
 
 Defaults:
 
-- gateway: `http://localhost: 7431`
-- dashboard: `http://localhost: 7432`
-- websocket: `ws://localhost: 7431/ws`
+- gateway: `http://localhost:7431`
+- dashboard: `http://localhost:7432`
+- websocket: `ws://localhost:7431/ws`
 
 ### Run dashboard only (dev mode)
 
@@ -149,7 +149,7 @@ Quick path:
 ## Dashboard not connecting
 
 - ensure dashboard runs on `7432`
-- ensure gateway WS endpoint is reachable (`ws://localhost: 7431/ws`)
+- ensure gateway WS endpoint is reachable (`ws://localhost:7431/ws`)
 
 ## Skill not loading
 
