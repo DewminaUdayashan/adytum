@@ -27,7 +27,7 @@ The fastest way to get Adytum up and running is our zero-config setup script. It
 ### Mac / Linux
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/dewminaudayashan/adytum/main/install.sh | bash
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/dewminaudayashan/adytum/main/install.sh)"
 ```
 
 ### Windows (PowerShell)
