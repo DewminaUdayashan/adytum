@@ -158,7 +158,10 @@ function humanize(label: string): string {
     .replace(/[_.-]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-    .replace(/^./, (c) => c.toUpperCase());
+    .toLowerCase()
+    .split(' ')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
 }
 
 function getAtPath(obj: Record<string, unknown> | undefined, path: string[]): unknown {
@@ -841,7 +844,7 @@ export default function SkillsPage() {
                       >
                         <div className="flex items-center justify-between gap-2">
                           <p className="truncate text-sm font-semibold text-text-primary">
-                            {skill.name}
+                            {humanize(skill.name || skill.id)}
                           </p>
                           <Badge
                             variant={
@@ -884,7 +887,7 @@ export default function SkillsPage() {
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <h2 className="text-lg font-semibold text-text-primary">
-                              {skill.name}
+                              {humanize(skill.name || skill.id)}
                             </h2>
                             <Badge
                               variant={
