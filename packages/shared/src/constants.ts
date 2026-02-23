@@ -8,8 +8,8 @@
 export const ADYTUM_VERSION = '0.4.0';
 
 export const DEFAULT_PORTS = {
-  gateway: 3001,
-  dashboard: 3002,
+  gateway: 7431,
+  dashboard: 7432,
   litellm: 4000,
   ollama: 11434,
 } as const;

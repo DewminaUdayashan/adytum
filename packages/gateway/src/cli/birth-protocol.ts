@@ -481,8 +481,8 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
     `ADYTUM_AGENT_NAME=${agentName}`,
     `ADYTUM_USER_NAME=${userName}`,
     `ADYTUM_USER_ROLE=${userRole}`,
-    `GATEWAY_PORT=3001`,
-    `DASHBOARD_PORT=3002`,
+    `GATEWAY_PORT=7431`,
+    `DASHBOARD_PORT=7432`,
     '',
   ];
 
@@ -517,8 +517,8 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
       },
       { thinking: [], fast: [], local: [] },
     ),
-    gatewayPort: 3001,
-    dashboardPort: 3002,
+    gatewayPort: 7431,
+    dashboardPort: 7432,
     contextSoftLimit: 40000,
     heartbeatIntervalMinutes: 30,
     skills: {
