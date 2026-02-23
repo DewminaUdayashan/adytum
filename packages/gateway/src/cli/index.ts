@@ -126,12 +126,19 @@ program
     // 1. Start Gateway in this process
     try {
       const { startGateway } = await import('../index.js');
+      const { loadConfig } = await import('../config.js');
+      const config = loadConfig(workspaceRoot);
 
       // Start Dashboard in background
       const dashboardProcess = spawn('npm', ['run', 'start', '--workspace=packages/dashboard'], {
         cwd: sourceRoot,
         stdio: 'inherit',
         shell: true,
+        env: {
+          ...process.env,
+          PORT: String(config.dashboardPort),
+          GATEWAY_PORT: String(config.gatewayPort),
+        },
       });
 
       dashboardProcess.on('error', (err) => {
@@ -141,8 +148,10 @@ program
       // Open browser after a short delay to let things boot
       if (options.browser !== false) {
         setTimeout(async () => {
-          console.log(chalk.dim('\n   Opening dashboard at http://localhost:7432...'));
-          await open('http://localhost:7432');
+          console.log(
+            chalk.dim(`\n   Opening dashboard at http://localhost:${config.dashboardPort}...`),
+          );
+          await open(`http://localhost:${config.dashboardPort}`);
         }, 3000);
       }
 

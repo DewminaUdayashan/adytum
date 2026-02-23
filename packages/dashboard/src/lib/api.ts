@@ -4,7 +4,9 @@
  */
 
 const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || '/api';
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:7431/ws';
+const WS_URL =
+  process.env.NEXT_PUBLIC_WS_URL ||
+  (typeof window !== 'undefined' ? `ws://${window.location.host}/ws` : '');
 
 function joinGatewayPath(base: string, path: string): string {
   const normalizedBase = base.replace(/\/+$/, '');
