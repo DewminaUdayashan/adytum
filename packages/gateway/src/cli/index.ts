@@ -134,6 +134,7 @@ program
         cwd: sourceRoot,
         stdio: ['ignore', 'inherit', 'inherit'],
         shell: true,
+        detached: true, // Allow killing the entire process group
         env: {
           ...process.env,
           PORT: String(config.dashboardPort),
@@ -147,7 +148,14 @@ program
 
       // Ensure the child process is killed when the parent exits
       const killDashboard = () => {
-        if (!dashboardProcess.killed) dashboardProcess.kill('SIGTERM');
+        if (dashboardProcess.pid && !dashboardProcess.killed) {
+          try {
+            // Kill entire process group
+            process.kill(-dashboardProcess.pid, 'SIGTERM');
+          } catch (e) {
+            // ignore
+          }
+        }
       };
 
       process.on('exit', killDashboard);

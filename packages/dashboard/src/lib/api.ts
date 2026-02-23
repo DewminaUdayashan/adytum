@@ -60,20 +60,32 @@ export async function gatewayFetch<T = unknown>(path: string, options?: RequestI
 }
 
 export function getWebSocketUrl(): string {
+  if (process.env.NEXT_PUBLIC_WS_URL) return process.env.NEXT_PUBLIC_WS_URL;
+
+  // Bypass Next.js proxy for WebSocket stability by connecting directly to Gateway
+  if (typeof window !== 'undefined') {
+    const gwPort = process.env.NEXT_PUBLIC_GATEWAY_PORT || '7431';
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${window.location.hostname}:${gwPort}/ws`;
+  }
+
   return WS_URL;
 }
 
 export function getSocketIOUrl(): string {
   // If we have an absolute WS_URL (likely), use that as the base for Socket.IO
-  if (WS_URL.startsWith('ws')) {
-    const url = WS_URL.replace('ws://', 'http://').replace('wss://', 'https://');
-    // Remove the /ws suffix if it exists, as Socket.IO uses its own path config
+  if (process.env.NEXT_PUBLIC_WS_URL) {
+    const url = process.env.NEXT_PUBLIC_WS_URL.replace('ws://', 'http://').replace(
+      'wss://',
+      'https://',
+    );
     return url.split('/ws')[0]!;
   }
 
-  // Fallback to relative proxying if we really have to
-  if (typeof window !== 'undefined' && GATEWAY_URL.startsWith('/')) {
-    return window.location.origin;
+  // Bypass Next.js proxy for WebSocket stability by connecting directly to Gateway
+  if (typeof window !== 'undefined') {
+    const gwPort = process.env.NEXT_PUBLIC_GATEWAY_PORT || '7431';
+    return `${window.location.protocol}//${window.location.hostname}:${gwPort}`;
   }
 
   return WS_URL;
