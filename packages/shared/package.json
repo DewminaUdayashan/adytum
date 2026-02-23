@@ -1,6 +1,6 @@
 {
   "name": "@adytum/shared",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
@@ -9,7 +9,7 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
-      "main": "dist/index.js"
+      "main": "./dist/index.js"
     }
   },
   "scripts": {
