@@ -8,7 +8,7 @@ import { AgentDetail } from '@/components/swarm/AgentDetail';
 import { GraveyardList } from '@/components/swarm/GraveyardList';
 import { Activity, RefreshCw } from 'lucide-react';
 
-const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:3001';
+const GATEWAY_URL = process.env.NEXT_PUBLIC_GATEWAY_URL || 'http://localhost:7431';
 
 export default function SwarmPage() {
   const [activeTab, setActiveTab] = useState<'swarm' | 'graveyard'>('swarm');

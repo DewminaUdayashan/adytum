@@ -141,8 +141,8 @@ program
       // Open browser after a short delay to let things boot
       if (options.browser !== false) {
         setTimeout(async () => {
-          console.log(chalk.dim('\n   Opening dashboard at http://localhost:3002...'));
-          await open('http://localhost:3002');
+          console.log(chalk.dim('\n   Opening dashboard at http://localhost:7432...'));
+          await open('http://localhost:7432');
         }, 3000);
       }
 
@@ -190,7 +190,7 @@ program
   .description('Show gateway status, model config, and token usage')
   .action(async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/health');
+      const response = await fetch('http://localhost:7431/api/health');
       const data = (await response.json()) as any;
       console.log(chalk.green('●') + chalk.white(' Gateway is alive'));
       console.log(chalk.dim(`  Uptime: ${Math.floor(data.uptime)}s`));

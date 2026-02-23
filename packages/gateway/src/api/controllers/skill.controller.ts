@@ -295,7 +295,7 @@ export class SkillController {
   private resolvePublicBaseUrl(request: FastifyRequest): string {
     const forwardedProto = cleanText(request.headers['x-forwarded-proto']);
     const forwardedHost = cleanText(request.headers['x-forwarded-host']);
-    const host = forwardedHost || cleanText(request.headers.host) || '127.0.0.1:3001';
+    const host = forwardedHost || cleanText(request.headers.host) || '127.0.0.1:7431';
     const proto = forwardedProto || request.protocol || 'http';
     return `${proto}://${host}`;
   }

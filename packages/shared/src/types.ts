@@ -344,8 +344,8 @@ export const AdytumConfigSchema = z.object({
       autoUpdate: z.boolean().default(true),
     })
     .default({ autoUpdate: true }),
-  gatewayPort: z.number().default(3001),
-  dashboardPort: z.number().default(3002),
+  gatewayPort: z.number().default(7431),
+  dashboardPort: z.number().default(7432),
   contextSoftLimit: z.number().default(40000),
   heartbeatIntervalMinutes: z.number().default(30),
   dreamerIntervalMinutes: z.number().default(30),
