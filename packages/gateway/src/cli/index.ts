@@ -98,19 +98,23 @@ program
   .description('Start the Adytum gateway and dashboard')
   .option('--no-browser', 'Do not open the dashboard in the browser')
   .action(async (options) => {
-    const projectRoot = process.cwd();
+    const workspaceRoot = process.cwd();
 
-    if (!existsSync(join(projectRoot, 'adytum.config.yaml'))) {
+    if (!existsSync(join(workspaceRoot, 'adytum.config.yaml'))) {
       console.log(chalk.red('✗  No adytum.config.yaml found.'));
       console.log(chalk.dim('   Run `adytum init` first to set up your agent.\n'));
       process.exit(1);
     }
 
+    // Find the project root relative to this script, not just cwd
+    const scriptDir = dirname(fileURLToPath(import.meta.url));
+    const sourceRoot = findProjectRoot(scriptDir);
+
     // Check if built
-    if (!existsSync(join(projectRoot, 'packages/gateway/dist/index.js'))) {
+    if (!existsSync(join(sourceRoot, 'packages/gateway/dist/index.js'))) {
       console.log(chalk.yellow('⚠  Project not built. Running build first...'));
       try {
-        execSync('npm run build', { stdio: 'inherit', cwd: projectRoot });
+        execSync('npm run build', { stdio: 'inherit', cwd: sourceRoot });
       } catch {
         console.error(chalk.red('❌ Build failed. Please run `npm run build` manually.'));
         process.exit(1);
@@ -125,7 +129,7 @@ program
 
       // Start Dashboard in background
       const dashboardProcess = spawn('npm', ['run', 'start', '--workspace=packages/dashboard'], {
-        cwd: projectRoot,
+        cwd: sourceRoot,
         stdio: 'inherit',
         shell: true,
       });
@@ -142,7 +146,7 @@ program
         }, 3000);
       }
 
-      await startGateway(projectRoot);
+      await startGateway(workspaceRoot);
     } catch (err: any) {
       console.error(chalk.red(`\n  ❌ Gateway failed to start: ${err.message}`));
       if (process.env.DEBUG) console.error(err);
