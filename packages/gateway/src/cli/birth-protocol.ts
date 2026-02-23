@@ -414,7 +414,6 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
     `ADYTUM_USER_NAME=${userName}`,
     `ADYTUM_USER_ROLE=${userRole}`,
     `GATEWAY_PORT=3001`,
-    `LITELLM_PORT=4000`,
     `DASHBOARD_PORT=3002`,
     '',
   ];
@@ -450,7 +449,6 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
       },
       { thinking: [], fast: [], local: [] },
     ),
-    litellmPort: 4000,
     gatewayPort: 3001,
     dashboardPort: 3002,
     contextSoftLimit: 40000,
@@ -464,19 +462,6 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
     },
   };
   writeFileSync(join(projectRoot, 'adytum.config.yaml'), stringifyYaml(yamlConfig), 'utf-8');
-
-  // Generate litellm_config.yaml
-  const litellmConfig = {
-    model_list: models.map((m) => ({
-      model_name: m.role,
-      litellm_params: {
-        model: m.provider === 'ollama' ? `ollama/${m.model}` : `${m.provider}/${m.model}`,
-        ...(m.apiKey ? { api_key: `os.environ/${m.provider.toUpperCase()}_API_KEY` } : {}),
-        ...(m.baseUrl ? { api_base: m.baseUrl } : {}),
-      },
-    })),
-  };
-  writeFileSync(join(projectRoot, 'litellm_config.yaml'), stringifyYaml(litellmConfig), 'utf-8');
 
   // ── Final Message ───────────────────────────────────────
   console.log();
@@ -497,9 +482,6 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
     chalk.green('✓ ') + chalk.white('Config saved to ') + chalk.cyan('adytum.config.yaml'),
   );
   console.log(chalk.green('✓ ') + chalk.white('Environment saved to ') + chalk.cyan('.env'));
-  console.log(
-    chalk.green('✓ ') + chalk.white('LiteLLM config saved to ') + chalk.cyan('litellm_config.yaml'),
-  );
   console.log();
   console.log(
     chalk.yellow('Next: Run ') + chalk.bold.white('adytum start') + chalk.yellow(' to wake me up.'),

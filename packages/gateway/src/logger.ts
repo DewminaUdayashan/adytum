@@ -17,7 +17,7 @@ export class Logger {
 
   constructor() {
     this.pino = pino({
-      level: process.env.LOG_LEVEL || 'info',
+      level: process.env.LOG_LEVEL || 'warn',
       transport: isDev
         ? {
             target: 'pino-pretty',

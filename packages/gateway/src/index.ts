@@ -160,7 +160,6 @@ export const startGateway = async (rootPath?: string) => {
   // ─── Agent Runtime ─────────────────────────────────────────
   const modelCatalog = container.resolve(ModelCatalog);
   const modelRouter = new ModelRouter({
-    litellmBaseUrl: `http://localhost:${config.litellmPort}/v1`,
     models: config.models,
     modelChains: config.modelChains,
     taskOverrides: config.taskOverrides,

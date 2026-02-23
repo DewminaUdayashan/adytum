@@ -1,3 +1,4 @@
+import { logger } from '../../logger.js';
 /**
  * @file packages/gateway/src/application/services/skill-loader.ts
  * @description Implements application-level service logic and coordination.
@@ -489,22 +490,22 @@ export class SkillLoader {
     this.services = [];
     this.discover();
 
-    console.log(chalk.dim(`  Discovered ${this.skills.length} total skills.`));
+    logger.debug(chalk.dim(`  Discovered ${this.skills.length} total skills.`));
 
     const enabled = this.skills.filter((s) => s.enabled && s.status === 'discovered');
     if (enabled.length > 0) {
-      console.log(
+      logger.debug(
         chalk.dim(
           `  Initializing ${enabled.length} enabled skills: ${enabled.map((s) => s.id).join(', ')}...`,
         ),
       );
     } else {
-      console.log(
+      logger.debug(
         chalk.yellow(`  No enabled skills found to initialize (status === 'discovered').`),
       );
       const allEnabled = this.skills.filter((s) => s.enabled);
       if (allEnabled.length > 0) {
-        console.log(
+        logger.debug(
           chalk.dim(
             `  Note: ${allEnabled.length} skills are enabled but have status: ${allEnabled.map((s) => `${s.id}(${s.status})`).join(', ')}`,
           ),
@@ -513,7 +514,7 @@ export class SkillLoader {
     }
 
     for (const skill of enabled) {
-      console.log(
+      logger.debug(
         chalk.blue(`    → Loading skill: ${skill.id} from ${skill.source || 'instructions'}`),
       );
       this.applyEnvOverrides(skill);
@@ -694,7 +695,7 @@ export class SkillLoader {
             // Not installed, proceed
           }
 
-          console.log(chalk.blue(`[SkillLoader] Installing ${label} via brew (${formula})...`));
+          logger.debug(chalk.blue(`[SkillLoader] Installing ${label} via brew (${formula})...`));
           execSync(`brew install ${formula}`, { stdio: 'inherit' });
           installedCount++;
         } else if (kind === 'apt') {
@@ -709,7 +710,7 @@ export class SkillLoader {
             // Not installed
           }
 
-          console.log(chalk.blue(`[SkillLoader] Installing ${label} via apt (${pkg})...`));
+          logger.debug(chalk.blue(`[SkillLoader] Installing ${label} via apt (${pkg})...`));
           execSync(`sudo apt-get update && sudo apt-get install -y ${pkg}`, { stdio: 'inherit' });
           installedCount++;
         }
@@ -722,7 +723,7 @@ export class SkillLoader {
     }
 
     if (installedCount > 0) {
-      console.log(
+      logger.debug(
         chalk.green(
           `[SkillLoader] Successfully installed ${installedCount} dependencies for ${skillId}.`,
         ),
@@ -809,7 +810,7 @@ export class SkillLoader {
 
     const result = lines.join('\n');
     if (result.includes('discord')) {
-      console.log(
+      logger.debug(
         chalk.magenta(
           `[SkillLoader] Context for discord injected: ${result.includes('defaultUserId')}`,
         ),
@@ -1441,10 +1442,10 @@ export class SkillLoader {
     const prefix = chalk.dim(`[skill:${skillId}]`);
     return {
       debug: (message: string) => {
-        if (process.env.DEBUG) console.log(prefix, chalk.gray(message));
+        if (process.env.DEBUG) logger.debug(prefix, chalk.gray(message));
       },
       info: (message: string) => {
-        console.log(prefix, message);
+        logger.debug(prefix, message);
       },
       warn: (message: string) => {
         console.warn(prefix, chalk.yellow(message));

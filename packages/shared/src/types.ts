@@ -344,7 +344,6 @@ export const AdytumConfigSchema = z.object({
       autoUpdate: z.boolean().default(true),
     })
     .default({ autoUpdate: true }),
-  litellmPort: z.number().default(4000),
   gatewayPort: z.number().default(3001),
   dashboardPort: z.number().default(3002),
   contextSoftLimit: z.number().default(40000),

@@ -1,3 +1,4 @@
+import { logger } from '../../logger.js';
 /**
  * @file packages/gateway/src/infrastructure/events/event-bus.ts
  * @description Central event bus service for Adytum.
@@ -41,7 +42,7 @@ export class EventBusService extends EventEmitter {
     // Simple robust logging (avoid circular JSON errors with complex payloads)
     try {
       // Only log high-level info unless debug mode
-      // console.log(`[EventBus] ${type} from ${source}`);
+      // logger.debug(`[EventBus] ${type} from ${source}`);
     } catch {
       // ignore logging errors
     }

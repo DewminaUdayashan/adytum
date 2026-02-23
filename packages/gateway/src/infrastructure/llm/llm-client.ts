@@ -344,20 +344,3 @@ function sanitizeHistoricalContext(content: string): string {
   // Match one or more occurrences of the historical context block
   return content.replace(/\[Historical context:.*?\]/gs, '').trim();
 }
-
-// ─── Proxy Detection ──────────────────────────────────────────
-
-/**
- * Check if the LiteLLM proxy is reachable.
- */
-export async function isLiteLLMAvailable(proxyUrl: string): Promise<boolean> {
-  try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 2000);
-    const res = await fetch(`${proxyUrl}/health`, { signal: controller.signal });
-    clearTimeout(timeout);
-    return res.ok;
-  } catch {
-    return false;
-  }
-}

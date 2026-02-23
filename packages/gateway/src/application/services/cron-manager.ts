@@ -1,3 +1,4 @@
+import { logger } from '../../logger.js';
 /**
  * @file packages/gateway/src/application/services/cron-manager.ts
  * @description Hardened cron job scheduler with exponential backoff, error tracking,
@@ -118,7 +119,7 @@ export class CronManager {
         }
       }
 
-      console.log(`[Cron] Loaded ${parsed.length} jobs.`);
+      logger.debug(`[Cron] Loaded ${parsed.length} jobs.`);
     } catch (error) {
       console.error('[Cron] Failed to load cron jobs:', error);
     }
@@ -154,14 +155,14 @@ export class CronManager {
 
       // ── Run-in-progress guard ───────────────────────────
       if (current.state.runningAtMs) {
-        console.log(`[Cron] Job "${current.name}" is already running, skipping tick.`);
+        logger.debug(`[Cron] Job "${current.name}" is already running, skipping tick.`);
         return;
       }
 
       // ── Backoff guard ───────────────────────────────────
       if (this.isInBackoff(current)) {
         const remaining = this.backoffRemainingMs(current);
-        console.log(
+        logger.debug(
           `[Cron] Job "${current.name}" in backoff (${current.state.consecutiveErrors} consecutive errors, ` +
             `${Math.ceil(remaining / 1000)}s remaining). Skipping.`,
         );
@@ -207,7 +208,7 @@ export class CronManager {
     job.state.lastError = undefined;
     this.save();
 
-    console.log(`[Cron] ▶ Running job: ${job.name}`);
+    logger.debug(`[Cron] ▶ Running job: ${job.name}`);
 
     let status: CronJobState['lastStatus'] = 'ok';
     let error: string | undefined;
@@ -242,7 +243,7 @@ export class CronManager {
     if (status === 'error' || status === 'timeout') {
       job.state.consecutiveErrors = (job.state.consecutiveErrors || 0) + 1;
       const backoff = errorBackoffMs(job.state.consecutiveErrors);
-      console.log(
+      logger.debug(
         `[Cron] Job "${job.name}" — ${job.state.consecutiveErrors} consecutive errors. ` +
           `Next retry in ${Math.ceil(backoff / 1000)}s.`,
       );
@@ -255,7 +256,7 @@ export class CronManager {
     if (job.scheduleKind === 'at') {
       if (job.deleteAfterRun && status === 'ok') {
         this.removeJob(job.id);
-        console.log(`[Cron] One-shot job "${job.name}" completed and deleted.`);
+        logger.debug(`[Cron] One-shot job "${job.name}" completed and deleted.`);
         return summary;
       } else {
         // Disable one-shot jobs after any terminal status
@@ -361,7 +362,7 @@ When done, reply with a brief summary: status (OK/failed), what was done, any er
       );
     }
 
-    console.log(`[Cron] Manual trigger for job: ${job.name}`);
+    logger.debug(`[Cron] Manual trigger for job: ${job.name}`);
     return this.executeAndApply(job);
   }
 

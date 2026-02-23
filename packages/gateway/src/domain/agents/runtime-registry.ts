@@ -1,3 +1,4 @@
+import { logger } from '../../logger.js';
 import { singleton } from 'tsyringe';
 import type { AgentRuntime } from '../logic/agent-runtime.js';
 
@@ -52,7 +53,7 @@ export class RuntimeRegistry {
   abortSession(sessionId: string) {
     const runtime = this.sessions.get(sessionId);
     if (runtime) {
-      console.log(`[RuntimeRegistry] Aborting session: ${sessionId}`);
+      logger.debug(`[RuntimeRegistry] Aborting session: ${sessionId}`);
       runtime.abort(sessionId);
     }
   }
@@ -61,7 +62,7 @@ export class RuntimeRegistry {
    * Aborts a session and all its descendants (sub-agents).
    */
   abortHierarchy(rootSessionId: string) {
-    console.log(`[RuntimeRegistry] Aborting hierarchy for root: ${rootSessionId}`);
+    logger.debug(`[RuntimeRegistry] Aborting hierarchy for root: ${rootSessionId}`);
 
     // 1. Abort the root itself
     this.abortSession(rootSessionId);

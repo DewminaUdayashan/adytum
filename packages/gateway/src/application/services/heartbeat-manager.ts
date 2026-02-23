@@ -1,3 +1,4 @@
+import { logger } from '../../logger.js';
 /**
  * @file packages/gateway/src/application/services/heartbeat-manager.ts
  * @description Implements application-level service logic and coordination.
@@ -37,10 +38,10 @@ export class HeartbeatManager {
    */
   async runNow(): Promise<void> {
     if (this.isRunning) {
-      console.log('[Heartbeat] Already running, skipping runNow trigger.');
+      logger.debug('[Heartbeat] Already running, skipping runNow trigger.');
       return;
     }
-    console.log('[Heartbeat] Manual trigger: runNow');
+    logger.debug('[Heartbeat] Manual trigger: runNow');
     return this.run();
   }
 
@@ -76,7 +77,7 @@ export class HeartbeatManager {
       cronExpr = hours < 24 ? `0 */${hours} * * *` : `0 0 * * *`;
     }
 
-    console.log(`[Heartbeat] Scheduling interval: ${safeMinutes}m -> ${cronExpr}`);
+    logger.debug(`[Heartbeat] Scheduling interval: ${safeMinutes}m -> ${cronExpr}`);
 
     this.task = cron.schedule(cronExpr, () => {
       this.run().catch((err) => console.error('[Heartbeat] Error:', err));
@@ -99,12 +100,12 @@ export class HeartbeatManager {
         heartbeatContent = readFileSync(heartbeatFile, 'utf-8').trim();
         const meaningfulContent = heartbeatContent.replace(/^#.*$/gm, '').trim();
         if (!meaningfulContent) {
-          console.log('[Heartbeat] Status: idle | Summary: HEARTBEAT.md has no actionable tasks.');
+          logger.debug('[Heartbeat] Status: idle | Summary: HEARTBEAT.md has no actionable tasks.');
           return;
         }
         hasHeartbeatFile = true;
       } else {
-        console.log('[Heartbeat] Status: idle | Summary: HEARTBEAT.md file not found.');
+        logger.debug('[Heartbeat] Status: idle | Summary: HEARTBEAT.md file not found.');
         return;
       }
 
@@ -121,12 +122,12 @@ export class HeartbeatManager {
       const parsedSummary = result.response.match(/^\s*SUMMARY:\s*(.+)$/im)?.[1]?.trim();
 
       if (parsedStatus || parsedSummary) {
-        console.log(
+        logger.debug(
           `[Heartbeat] Status: ${parsedStatus ?? 'unknown'} | Summary: ${parsedSummary ?? 'No summary provided.'}`,
         );
       } else {
         // Backward-compatible fallback if the model does not follow the structured format.
-        console.log(
+        logger.debug(
           '[Heartbeat] Activity:',
           result.response.slice(0, 160) + (result.response.length > 160 ? '...' : ''),
         );
