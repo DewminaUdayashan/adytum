@@ -181,8 +181,9 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
 
   // ── Stage 3: Identity ───────────────────────────────────
   const agentName = await input({
-    message: chalk.cyan('Give me a name:'),
+    message: chalk.white.bold('Give me a name:'),
     default: 'Prometheus',
+    transformer: (val) => chalk.yellow(val),
   });
 
   console.log();
@@ -193,36 +194,78 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
   console.log();
 
   const userName = await input({
-    message: chalk.cyan('And what is your name?'),
+    message: chalk.white.bold('And what is your name?'),
     validate: (value) =>
       value.trim().length > 0 || 'Please tell me your name so I know who I am working with.',
+    transformer: (val) => chalk.yellow(val),
   });
 
   console.log();
   await typewrite(
     chalk.cyan.italic(
-      `"Nice to meet you, ${userName}. I'm curious, what are you working on mostly?"`,
+      `"Nice to meet you, ${userName}. I'm curious, what is your role or background?"`,
     ),
   );
   console.log();
 
-  const userRole = await input({
-    message: chalk.cyan('Your primary focus:'),
-    default: 'Building cool things',
+  const userRoleRaw = await select({
+    message: chalk.white.bold('Select your role:'),
+    choices: [
+      { name: 'Student', value: 'Student' },
+      { name: 'Software Engineer', value: 'Software Engineer' },
+      { name: 'Entrepreneur', value: 'Entrepreneur' },
+      { name: 'Researcher', value: 'Researcher' },
+      { name: 'Content Creator', value: 'Content Creator' },
+      { name: 'Other', value: 'other' },
+    ],
   });
+
+  let userRole = userRoleRaw;
+  if (userRoleRaw === 'other') {
+    userRole = await input({
+      message: chalk.white.bold('Tell me your role:'),
+      transformer: (val) => chalk.yellow(val),
+    });
+  }
+
+  console.log();
+  await typewrite(chalk.cyan.italic(`"Got it. And what are you working on mostly?"`));
+  console.log();
+
+  const primaryFocusRaw = await select({
+    message: chalk.white.bold('Your primary focus:'),
+    choices: [
+      { name: 'Building software & applications', value: 'Building software' },
+      { name: 'Learning new skills/technologies', value: 'Learning new things' },
+      { name: 'Project management & coordination', value: 'Managing projects' },
+      { name: 'Creative writing & content creation', value: 'Creative writing' },
+      { name: 'Personal productivity & organization', value: 'Personal productivity' },
+      { name: 'Other', value: 'other' },
+    ],
+  });
+
+  let primaryFocus = primaryFocusRaw;
+  if (primaryFocusRaw === 'other') {
+    primaryFocus = await input({
+      message: chalk.white.bold('Mention your focus:'),
+      transformer: (val) => chalk.yellow(val),
+    });
+  }
 
   console.log();
   await typewrite(
-    chalk.cyan.italic('"Got it. And how should I generally behave? What\'s our vibe?"'),
+    chalk.cyan.italic('"Understood. And how should I generally behave? What\'s our vibe?"'),
   );
   console.log();
 
   const interactionStyle = await select({
-    message: chalk.cyan('How should I work with you?'),
+    message: chalk.white.bold('How should I work with you?'),
     choices: [
       { name: 'Professional (Concise, formal, objective)', value: 'professional' },
       { name: 'Casual (Friendly, relaxed, uses emojis)', value: 'casual' },
       { name: 'Extra Casual (Gen-Z slang, very chill)', value: 'extra-casual' },
+      { name: 'Creative (Inspiring, brainstorming-focused)', value: 'creative' },
+      { name: 'Minimalist (Ultra-brief, strictly facts)', value: 'minimalist' },
       { name: 'Custom (I will define it)', value: 'custom' },
     ],
   });
@@ -230,14 +273,16 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
   let customStyle = '';
   if (interactionStyle === 'custom') {
     customStyle = await input({
-      message: chalk.cyan('Describe my personality:'),
+      message: chalk.white.bold('Describe my personality:'),
       default: 'A helpful, witty assistant.',
+      transformer: (val) => chalk.yellow(val),
     });
   }
 
   const additionalThoughts = await input({
-    message: chalk.cyan('Any additional thoughts or specific things I should know?'),
+    message: chalk.white.bold('Any additional thoughts or specific things I should know?'),
     default: 'None',
+    transformer: (val) => chalk.yellow(val),
   });
 
   // Define SOUL persona based on choices
@@ -254,6 +299,13 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
     case 'extra-casual':
       soulPersona =
         '- I am very chill, using Gen-Z slang and keeping things low-key.\n- I am like a cool tech-savvy friend.';
+      break;
+    case 'creative':
+      soulPersona =
+        '- I am inspiring and brainstorming-focused.\n- I encourage outside-the-box thinking and artistic exploration.';
+      break;
+    case 'minimalist':
+      soulPersona = '- I am ultra-brief and strictly fact-based.\n- I avoid fluff and extra words.';
       break;
     case 'custom':
       soulPersona = `- ${customStyle}`;
@@ -294,7 +346,7 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
     // Provider selection
     const provider = (await select({
       message:
-        chalk.yellow(`[${role.toUpperCase()}] Select provider:`) +
+        chalk.white.bold(`[${role.toUpperCase()}] Select provider:`) +
         chalk.dim(`\n   ${MODEL_ROLE_DESCRIPTIONS[role]}\n`),
       choices: [
         ...providers.map((p) => ({ value: p, name: p })),
@@ -307,11 +359,15 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
     let baseUrl: string | undefined;
 
     if (provider === 'custom') {
-      const customModelName = await input({ message: chalk.yellow('Model ID:') });
+      const customModelName = await input({
+        message: chalk.white.bold('Model ID:'),
+        transformer: (val) => chalk.yellow(val),
+      });
       model = customModelName;
       baseUrl = await input({
-        message: chalk.yellow('Base URL:'),
+        message: chalk.white.bold('Base URL:'),
         default: 'http://localhost:8080/v1',
+        transformer: (val) => chalk.yellow(val),
       });
     } else {
       // Filter models for this provider
@@ -321,12 +377,15 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
 
       if (providerModels.length > 0) {
         model = (await select({
-          message: chalk.yellow(`[${role.toUpperCase()}] Select model:`),
+          message: chalk.white.bold(`[${role.toUpperCase()}] Select model:`),
           choices: providerModels.map((m) => ({ value: m.model, name: m.name })),
         })) as string;
       } else {
         // Fallback if no models known for provider (shouldn't happen with pi-ai usually)
-        model = await input({ message: chalk.yellow('Model ID:') });
+        model = await input({
+          message: chalk.white.bold('Model ID:'),
+          transformer: (val) => chalk.yellow(val),
+        });
       }
 
       // Find selected entry to see if we have defaults
@@ -336,21 +395,23 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
       }
     }
 
-    // Ask for API key if it's a cloud provider (heuristic: not ollama/lmstudio/vllm/local)
-    // or if we decide all providers might need keys except strictly local ones.
+    // Ask for API key if it's a cloud provider
     const isLocal = ['ollama', 'lmstudio', 'vllm', 'local'].includes(provider);
     if (!isLocal && provider !== 'custom') {
-      // Custom might need key too but usually we ask base url
       apiKey = await input({
-        message: chalk.yellow(`API key for ${provider}:`),
+        message: chalk.white.bold(`API key for ${provider}:`),
+        transformer: (val) => chalk.yellow(val),
       });
     } else if (provider === 'custom') {
       const needKey = await confirm({
-        message: 'Does this endpoint require an API key?',
+        message: chalk.white.bold('Does this endpoint require an API key?'),
         default: false,
       });
       if (needKey) {
-        apiKey = await input({ message: chalk.yellow('API Key:') });
+        apiKey = await input({
+          message: chalk.white.bold('API Key:'),
+          transformer: (val) => chalk.yellow(val),
+        });
       }
     }
 
@@ -394,7 +455,7 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
     agentName,
     userName,
     userRole,
-    // userPreferences no longer used directly, but we can pass interactionStyle or just rely on soulPersona
+    userPreferences: primaryFocus,
     soulPersona,
     additionalThoughts,
   });

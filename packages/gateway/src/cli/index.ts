@@ -12,6 +12,7 @@ import { ADYTUM_VERSION } from '@adytum/shared';
 import { runBirthProtocol } from './birth-protocol.js';
 import { existsSync, rmSync } from 'node:fs';
 import { join, dirname, basename } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { confirm } from '@inquirer/prompts';
 import { ModelCatalog } from '../infrastructure/llm/model-catalog.js';
 import { spawn, execSync } from 'node:child_process';
@@ -154,8 +155,12 @@ program
   .command('update')
   .description('Update Adytum to the latest version')
   .action(async () => {
-    const projectRoot = process.cwd();
+    // Find the project root relative to this script, not just cwd
+    const scriptDir = dirname(fileURLToPath(import.meta.url));
+    const projectRoot = findProjectRoot(scriptDir);
+
     console.log(chalk.cyan('\n🔄 Checking for updates...'));
+    console.log(chalk.dim(`   Project root: ${projectRoot}`));
 
     try {
       console.log(chalk.dim('   Pulling latest changes...'));

@@ -5,7 +5,7 @@
 
 // ─── Adytum Constants ─────────────────────────────────────────
 
-export const ADYTUM_VERSION = '0.1.0';
+export const ADYTUM_VERSION = '0.4.0';
 
 export const DEFAULT_PORTS = {
   gateway: 3001,
