@@ -167,8 +167,8 @@ export function loadConfig(projectRoot?: string): AdytumConfig {
     soul: {
       autoUpdate: (fileConfig.soul as any)?.autoUpdate ?? true,
     },
-    gatewayPort: Number(fileConfig.gatewayPort || process.env.GATEWAY_PORT || 3001),
-    dashboardPort: Number(fileConfig.dashboardPort || process.env.DASHBOARD_PORT || 3002),
+    gatewayPort: Number(fileConfig.gatewayPort || process.env.GATEWAY_PORT || 7431),
+    dashboardPort: Number(fileConfig.dashboardPort || process.env.DASHBOARD_PORT || 7432),
     contextSoftLimit: Number(fileConfig.contextSoftLimit || 40000),
     heartbeatIntervalMinutes: Number(fileConfig.heartbeatIntervalMinutes || 30),
     dreamerIntervalMinutes: Number(fileConfig.dreamerIntervalMinutes || 30),

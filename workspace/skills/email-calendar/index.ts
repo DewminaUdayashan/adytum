@@ -38,8 +38,8 @@ const PluginConfigSchema = z.object({
   clientSecret: z.string().optional(),
   clientSecretEnv: z.string().default('ADYTUM_EMAIL_CALENDAR_CLIENT_SECRET'),
   tokenUrl: z.string().default('https://oauth2.googleapis.com/token'),
-  gatewayBaseUrl: z.string().default('http://127.0.0.1:3001'),
-  dashboardBaseUrl: z.string().default('http://localhost:3002'),
+  gatewayBaseUrl: z.string().default('http://127.0.0.1: 7431'),
+  dashboardBaseUrl: z.string().default('http://localhost: 7432'),
   gmailBaseUrl: z.string().default('https://gmail.googleapis.com/gmail/v1'),
   calendarBaseUrl: z.string().default('https://www.googleapis.com/calendar/v3'),
   defaultCalendarId: z.string().default('primary'),
@@ -635,11 +635,11 @@ class GoogleWorkspaceGateway {
   }
 
   async connectGoogleAccount(args: z.infer<typeof ConnectGoogleAccountSchema>) {
-    const gatewayBase = stripTrailingSlash(this.config.gatewayBaseUrl || 'http://127.0.0.1:3001');
+    const gatewayBase = stripTrailingSlash(this.config.gatewayBaseUrl || 'http://127.0.0.1: 7431');
     const callbackBase =
       toNullableString(args.callbackBaseUrl) ||
       toNullableString(this.config.dashboardBaseUrl) ||
-      'http://localhost:3002';
+      'http://localhost: 7432';
     const response = await this.fetchJson(
       `${gatewayBase}/api/skills/email-calendar/oauth/google/start`,
       {

@@ -98,19 +98,23 @@ program
   .description('Start the Adytum gateway and dashboard')
   .option('--no-browser', 'Do not open the dashboard in the browser')
   .action(async (options) => {
-    const projectRoot = process.cwd();
+    const workspaceRoot = process.cwd();
 
-    if (!existsSync(join(projectRoot, 'adytum.config.yaml'))) {
+    if (!existsSync(join(workspaceRoot, 'adytum.config.yaml'))) {
       console.log(chalk.red('✗  No adytum.config.yaml found.'));
       console.log(chalk.dim('   Run `adytum init` first to set up your agent.\n'));
       process.exit(1);
     }
 
+    // Find the project root relative to this script, not just cwd
+    const scriptDir = dirname(fileURLToPath(import.meta.url));
+    const sourceRoot = findProjectRoot(scriptDir);
+
     // Check if built
-    if (!existsSync(join(projectRoot, 'packages/gateway/dist/index.js'))) {
+    if (!existsSync(join(sourceRoot, 'packages/gateway/dist/index.js'))) {
       console.log(chalk.yellow('⚠  Project not built. Running build first...'));
       try {
-        execSync('npm run build', { stdio: 'inherit', cwd: projectRoot });
+        execSync('npm run build', { stdio: 'inherit', cwd: sourceRoot });
       } catch {
         console.error(chalk.red('❌ Build failed. Please run `npm run build` manually.'));
         process.exit(1);
@@ -125,7 +129,7 @@ program
 
       // Start Dashboard in background
       const dashboardProcess = spawn('npm', ['run', 'start', '--workspace=packages/dashboard'], {
-        cwd: projectRoot,
+        cwd: sourceRoot,
         stdio: 'inherit',
         shell: true,
       });
@@ -137,12 +141,12 @@ program
       // Open browser after a short delay to let things boot
       if (options.browser !== false) {
         setTimeout(async () => {
-          console.log(chalk.dim('\n   Opening dashboard at http://localhost:3002...'));
-          await open('http://localhost:3002');
+          console.log(chalk.dim('\n   Opening dashboard at http://localhost: 7432...'));
+          await open('http://localhost: 7432');
         }, 3000);
       }
 
-      await startGateway(projectRoot);
+      await startGateway(workspaceRoot);
     } catch (err: any) {
       console.error(chalk.red(`\n  ❌ Gateway failed to start: ${err.message}`));
       if (process.env.DEBUG) console.error(err);
@@ -186,7 +190,7 @@ program
   .description('Show gateway status, model config, and token usage')
   .action(async () => {
     try {
-      const response = await fetch('http://localhost:3001/api/health');
+      const response = await fetch('http://localhost: 7431/api/health');
       const data = (await response.json()) as any;
       console.log(chalk.green('●') + chalk.white(' Gateway is alive'));
       console.log(chalk.dim(`  Uptime: ${Math.floor(data.uptime)}s`));
