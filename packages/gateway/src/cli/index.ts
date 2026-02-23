@@ -145,6 +145,21 @@ program
         console.error(chalk.red(`\n  ❌ Dashboard failed to start: ${err.message}`));
       });
 
+      // Ensure the child process is killed when the parent exits
+      const killDashboard = () => {
+        if (!dashboardProcess.killed) dashboardProcess.kill('SIGTERM');
+      };
+
+      process.on('exit', killDashboard);
+      process.on('SIGINT', () => {
+        killDashboard();
+        process.exit(0);
+      });
+      process.on('SIGTERM', () => {
+        killDashboard();
+        process.exit(0);
+      });
+
       // Open browser after a short delay to let things boot
       if (options.browser !== false) {
         setTimeout(async () => {
