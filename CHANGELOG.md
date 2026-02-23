@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.4.0] - 2026-02-23
+
+### Added
+
+- **Hierarchical Swarm Intelligence**: Implemented a multi-tiered agent architecture. The Architect can now dynamically spawn specialized Managers and Workers to handle parallel tasks and complex delegations.
+- **One-Click Multi-Platform Setup**: Completely redesigned the installation process. Added `install.sh` (Mac/Linux) and `install.ps1` (Windows) with automatic Node.js (>=22) detection and installation.
+- **Advanced Memory & Structured Extraction**: Implemented Phase 3 memory systems with enhanced structured data extraction and long-term context retention.
+- **Skill Dependency & Diagnostics**: New CLI diagnostics and dependency management for skills, including `adytum skill check` and `adytum skill install`.
+- **Cron Resilience**: Added Phase 1 cron resilience with error backoff and hardening for background tasks.
+- **Enhanced LLM Connectivity**: Improved provider discovery and connectivity management for seamless transitions between local and cloud models.
+- **Dashboard Improvements**: Added a new "Graveyard" tab for tracking failed/finished agent sessions and enhanced list views.
+
+### Changed
+
+- **Installation Loop**: Simplified the "Birth Protocol" to be part of a single-command setup experience.
+- **Swarm Hardening**: Improved rate limiting, tool usage safeguards, and swarming logic stability.
+
+### Fixed
+
+- **Memory Context Leaks**: Resolved issues where cross-agent memory could contaminate context windows.
+- **Skill Loading**: Fixed edge cases in skill discovery when running from non-standard project roots.
+
 ## [0.3.0] - 2026-02-15
 
 ### Added
