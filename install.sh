@@ -13,11 +13,14 @@ NC='\033[0m'
 
 echo -e "${CYAN}🚀 Initializing Adytum Setup...${NC}"
 
-# 1. Handle Remote Execution / Cloning
+# 1. Handle Remote Execution / Cloning / Updating
 if [ ! -f "package.json" ] || ! grep -q '"name": "adytum"' package.json; then
     if [ -d "adytum" ]; then
-        echo -e "${YELLOW}📂 Found 'adytum' directory. Entering...${NC}"
+        echo -e "${YELLOW}📂 Found 'adytum' directory. Synchronizing...${NC}"
         cd adytum
+        if [ -d ".git" ]; then
+            git pull
+        fi
     else
         echo -e "${CYAN}📂 Cloning Adytum repository...${NC}"
         if ! command -v git &> /dev/null; then
@@ -26,6 +29,12 @@ if [ ! -f "package.json" ] || ! grep -q '"name": "adytum"' package.json; then
         fi
         git clone https://github.com/dewminaudayashan/adytum.git
         cd adytum
+    fi
+else
+    # We are already in the project root
+    if [ -d ".git" ]; then
+        echo -e "${CYAN}🔄 Pulling latest updates...${NC}"
+        git pull
     fi
 fi
 
