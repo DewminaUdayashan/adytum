@@ -51,7 +51,7 @@ export class ModelCatalog implements ModelRepository {
   constructor(@inject(Logger) private logger: Logger) {
     this.config = loadConfig();
     this.catalogPath = join(this.config.workspacePath || process.cwd(), 'models.json');
-    this.logger.info('ModelCatalog initialized');
+    this.logger.debug('ModelCatalog initialized');
     this.load();
   }
 
@@ -126,7 +126,7 @@ export class ModelCatalog implements ModelRepository {
       this.aliases.set(alias.toLowerCase().trim(), target);
     }
 
-    this.logger.info(
+    this.logger.debug(
       {
         implicitProviders,
         discoveredProviders,
@@ -144,7 +144,7 @@ export class ModelCatalog implements ModelRepository {
     // Initialize fallback manager
     this.fallbackManager = new FallbackManager(config.fallback ?? {});
 
-    this.logger.info('Selection and fallback engines initialized');
+    this.logger.debug('Selection and fallback engines initialized');
   }
 
   /**
@@ -252,7 +252,7 @@ export class ModelCatalog implements ModelRepository {
           }
         }
       }
-      this.logger.info(
+      this.logger.debug(
         { providerCount: Object.keys(config.modelProviders.providers).length },
         'Loaded models from modelProviders config',
       );
@@ -423,7 +423,7 @@ export class ModelCatalog implements ModelRepository {
       }
     }
 
-    this.logger.info({ count: discovered.length }, 'Local model scan complete');
+    this.logger.debug({ count: discovered.length }, 'Local model scan complete');
     return discovered;
   }
 

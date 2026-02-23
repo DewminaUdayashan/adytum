@@ -11,9 +11,9 @@ import { select, input, confirm } from '@inquirer/prompts';
 import { MODEL_ROLES, MODEL_ROLE_DESCRIPTIONS, ADYTUM_VERSION } from '@adytum/shared';
 import { SoulEngine } from '../domain/logic/soul-engine.js';
 import { ModelCatalog } from '../infrastructure/llm/model-catalog.js';
-import { saveConfig } from '../config.js';
+import { Logger } from '../logger.js';
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import { stringify as stringifyYaml } from 'yaml';
 
 /**
@@ -268,6 +268,13 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
   // We make a temporary catalog just for this wizard
   const { setupContainer, container } = await import('../container.js');
   setupContainer();
+
+  // Silence logger during setup to avoid UI interference
+  const loggerInstance = container.resolve(Logger);
+  if (loggerInstance && (loggerInstance as any).pino) {
+    (loggerInstance as any).pino.level = 'silent';
+  }
+
   const catalog = container.resolve(ModelCatalog);
   // Scan for local models too
   await catalog.scanLocalModels();
@@ -284,11 +291,11 @@ export async function runBirthProtocol(projectRoot: string): Promise<void> {
   }> = [];
 
   for (const role of MODEL_ROLES) {
-    console.log(chalk.dim(`\n${MODEL_ROLE_DESCRIPTIONS[role]}`));
-
     // Provider selection
     const provider = (await select({
-      message: chalk.yellow(`[${role.toUpperCase()}] Select provider:`),
+      message:
+        chalk.yellow(`[${role.toUpperCase()}] Select provider:`) +
+        chalk.dim(`\n   ${MODEL_ROLE_DESCRIPTIONS[role]}\n`),
       choices: [
         ...providers.map((p) => ({ value: p, name: p })),
         { value: 'custom', name: 'Custom (OpenAI Compatible)' },

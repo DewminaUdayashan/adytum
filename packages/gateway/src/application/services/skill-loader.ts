@@ -573,7 +573,7 @@ export class SkillLoader {
       try {
         await registration.service.start(ctx);
         registration.started = true;
-        registration.logger.info(`service started (${registration.service.id})`);
+        registration.logger.debug(`service started (${registration.service.id})`);
       } catch (err: any) {
         const msg = err?.message || String(err);
         const details =

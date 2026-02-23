@@ -217,7 +217,7 @@ export class SkillService {
     }
 
     writeFileSync(fullPath, content, 'utf-8');
-    this.logger.info(`Updated instructions for skill ${id}: ${relativePath}`);
+    this.logger.debug(`Updated instructions for skill ${id}: ${relativePath}`);
     await this.reloadSkills();
   }
 
@@ -244,7 +244,7 @@ export class SkillService {
     saveConfig({
       skills: { ...skills, entries } as unknown as AdytumConfig['skills'],
     });
-    this.logger.info(`Updated config for skill ${id}`);
+    this.logger.debug(`Updated config for skill ${id}`);
     await this.reloadSkills();
   }
 
@@ -260,7 +260,7 @@ export class SkillService {
       this.secretsStore.setSkillSecret(id, key, cleaned);
     }
     this.loader.setSkillSecrets(id, this.secretsStore.getSkillEnv(id));
-    this.logger.info(`Updated secrets for skill ${id}`);
+    this.logger.debug(`Updated secrets for skill ${id}`);
     await this.reloadSkills();
   }
 
@@ -600,7 +600,7 @@ export class SkillService {
     if (!changed) return;
 
     this.updateEmailCalendarSkillConfig(mutable as EmailCalendarSkillConfig);
-    this.logger.info('Removed legacy email-calendar config fields (accounts, activeAccountId).');
+    this.logger.debug('Removed legacy email-calendar config fields (accounts, activeAccountId).');
     await this.reloadSkills();
   }
 

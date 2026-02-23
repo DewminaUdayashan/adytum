@@ -128,7 +128,7 @@ export class GraphIndexer {
 
     // 4. Handle Deep Indexing (Semantic Analysis)
     if (options.mode === 'deep' && this.semanticProcessor) {
-      logger.info(`Performing deep semantic analysis (skipLLM: ${options.skipLLM === true})...`);
+      logger.debug(`Performing deep semantic analysis (skipLLM: ${options.skipLLM === true})...`);
 
       // Only process nodes that were updated or are missing semantic metadata
       const nodesToProcess = graph.nodes.filter((n) => {
@@ -142,17 +142,17 @@ export class GraphIndexer {
       });
 
       if (nodesToProcess.length > 0) {
-        logger.info(`Processing ${nodesToProcess.length} pending/changed nodes...`);
+        logger.debug(`Processing ${nodesToProcess.length} pending/changed nodes...`);
         await this.semanticProcessor.process(nodesToProcess, { skipLLM: options.skipLLM });
       } else {
-        logger.info('All nodes are already up to date semantically.');
+        logger.debug('All nodes are already up to date semantically.');
       }
     }
 
     this.store.save(graph, workspaceId);
 
     const duration = Date.now() - startTime;
-    logger.info(
+    logger.debug(
       `Scan [${options.mode}] completed in ${duration}ms. Total nodes: ${graph.nodes.length}, Edges: ${graph.edges.length}`,
     );
 

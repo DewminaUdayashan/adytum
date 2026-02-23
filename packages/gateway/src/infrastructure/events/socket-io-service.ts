@@ -24,7 +24,7 @@ export class SocketIOService extends EventEmitter {
     });
 
     this.io.on('connection', (socket: Socket) => {
-      logger.info(`Client connected: ${socket.id}`);
+      logger.debug(`Client connected: ${socket.id}`);
 
       socket.on('message', (data: any) => {
         // Forward to subscribers (GatewayServer)
@@ -32,7 +32,7 @@ export class SocketIOService extends EventEmitter {
       });
 
       socket.on('disconnect', () => {
-        logger.info(`Client disconnected: ${socket.id}`);
+        logger.debug(`Client disconnected: ${socket.id}`);
       });
     });
 
@@ -48,7 +48,7 @@ export class SocketIOService extends EventEmitter {
       }
     });
 
-    logger.info('Socket.IO Service initialized and bridged to Event Bus.');
+    logger.debug('Socket.IO Service initialized and bridged to Event Bus.');
   }
 
   broadcast(event: string, payload: any) {
@@ -59,10 +59,10 @@ export class SocketIOService extends EventEmitter {
 
   async stop() {
     if (this.io) {
-      logger.info('Stopping Socket.IO Service...');
+      logger.debug('Stopping Socket.IO Service...');
       return new Promise<void>((resolve) => {
         void this.io!.close(() => {
-          logger.info('Socket.IO Service stopped.');
+          logger.debug('Socket.IO Service stopped.');
           this.io = null;
           resolve();
         });

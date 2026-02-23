@@ -50,7 +50,7 @@ export class ConfigService {
     saveConfig(updates);
     // Reload internal state
     this.config = { ...this.config, ...updates } as AdytumConfig;
-    this.logger.info('Config updated', Object.keys(updates));
+    this.logger.debug('Config updated', Object.keys(updates));
   }
 
   /**

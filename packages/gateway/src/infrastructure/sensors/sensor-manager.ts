@@ -21,11 +21,11 @@ export class SensorManager {
   }
 
   async startAll(): Promise<void> {
-    logger.info('Starting all sensors...');
+    logger.debug('Starting all sensors...');
     const promises = Array.from(this.sensors.values()).map(async (sensor) => {
       try {
         await sensor.start();
-        logger.info(`Sensor started: ${sensor.name}`);
+        logger.debug(`Sensor started: ${sensor.name}`);
       } catch (err) {
         logger.error({ err, sensor: sensor.id }, 'Failed to start sensor');
       }
@@ -34,11 +34,11 @@ export class SensorManager {
   }
 
   async stopAll(): Promise<void> {
-    logger.info('Stopping all sensors...');
+    logger.debug('Stopping all sensors...');
     const promises = Array.from(this.sensors.values()).map(async (sensor) => {
       try {
         await sensor.stop();
-        logger.info(`Sensor stopped: ${sensor.name}`);
+        logger.debug(`Sensor stopped: ${sensor.name}`);
       } catch (err) {
         logger.error({ err, sensor: sensor.id }, 'Failed to stop sensor');
       }

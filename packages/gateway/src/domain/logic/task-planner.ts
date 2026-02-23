@@ -12,7 +12,7 @@ export class TaskPlanner {
   constructor(@inject(ModelRouter) private modelRouter: ModelRouter) {}
 
   async plan(goal: string, context: string = ''): Promise<Plan> {
-    logger.info({ goal }, 'TaskPlanner: Generating plan');
+    logger.debug({ goal }, 'TaskPlanner: Generating plan');
 
     const prompt = `
 You are an expert autonomous agent planner.
