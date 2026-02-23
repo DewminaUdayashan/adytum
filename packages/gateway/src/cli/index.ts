@@ -132,7 +132,7 @@ program
       // Start Dashboard in background
       const dashboardProcess = spawn('npm', ['run', 'start', '--workspace=packages/dashboard'], {
         cwd: sourceRoot,
-        stdio: 'inherit',
+        stdio: ['ignore', 'inherit', 'inherit'],
         shell: true,
         env: {
           ...process.env,
