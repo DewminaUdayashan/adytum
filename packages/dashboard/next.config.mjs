@@ -26,15 +26,15 @@ const nextConfig = {
     return [
       {
         source: '/api/:path*',
-        destination: `http://localhost:${gwPort}/api/:path*`,
+        destination: `http://127.0.0.1:${gwPort}/api/:path*`,
       },
       {
         source: '/socket.io/:path*',
-        destination: `http://localhost:${gwPort}/socket.io/:path*`,
+        destination: `http://127.0.0.1:${gwPort}/socket.io/:path*`,
       },
       {
         source: '/ws/:path*',
-        destination: `http://localhost:${gwPort}/ws/:path*`,
+        destination: `http://127.0.0.1:${gwPort}/ws/:path*`,
       },
     ];
   },
