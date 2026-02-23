@@ -26,7 +26,7 @@ export class ApprovalService {
   private pending = new Map<string, PendingApproval>();
 
   constructor(@inject(Logger) private logger: Logger) {
-    this.logger.info('ApprovalService initialized');
+    this.logger.debug('ApprovalService initialized');
   }
 
   /**
@@ -61,7 +61,7 @@ export class ApprovalService {
 
     return new Promise<boolean>((resolve, reject) => {
       this.pending.set(id, { resolve, reject, expiresAt, payload });
-      this.logger.info(`Approval requested [${id}]: ${payload.description}`);
+      this.logger.debug(`Approval requested [${id}]: ${payload.description}`);
 
       // Auto-expire after 60s
       setTimeout(() => {
@@ -85,7 +85,7 @@ export class ApprovalService {
     if (!item) return false;
     this.pending.delete(id);
     item.resolve(approved);
-    this.logger.info(`Approval [${id}] resolved as ${approved}`);
+    this.logger.debug(`Approval [${id}] resolved as ${approved}`);
     return true;
   }
 
@@ -132,7 +132,7 @@ export class ApprovalService {
 
     return new Promise<string>((resolve, reject) => {
       this.pendingInputs.set(id, { resolve, reject, expiresAt, payload: { description } });
-      this.logger.info(`Input requested [${id}]: ${description}`);
+      this.logger.debug(`Input requested [${id}]: ${description}`);
 
       setTimeout(() => {
         if (this.pendingInputs.has(id)) {
@@ -152,7 +152,7 @@ export class ApprovalService {
     if (!item) return false;
     this.pendingInputs.delete(id);
     item.resolve(value);
-    this.logger.info(`Input request [${id}] resolved`);
+    this.logger.debug(`Input request [${id}] resolved`);
     return true;
   }
 }

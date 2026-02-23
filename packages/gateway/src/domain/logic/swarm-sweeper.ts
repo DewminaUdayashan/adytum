@@ -26,7 +26,7 @@ export class SwarmSweeper {
    */
   public start(): void {
     if (this.interval) return;
-    this.logger.info('[SwarmSweeper] Starting stale agent reaper...');
+    this.logger.debug('[SwarmSweeper] Starting stale agent reaper...');
     this.interval = setInterval(() => this.sweep(), SWEEP_INTERVAL_MS);
   }
 

@@ -1,3 +1,4 @@
+import { logger } from '../../logger.js';
 /**
  * @file packages/gateway/src/domain/logic/swarm-manager.ts
  * @description Manages the lifecycle of the Adytum Swarm (Agents).
@@ -64,7 +65,7 @@ export class SwarmManager {
 
   private hydrateFromRegistry() {
     const records = this.agentRegistry.getAllRecords();
-    console.log(`[SwarmManager] Hydrating from Registry: ${records.length} records found.`);
+    logger.debug(`[SwarmManager] Hydrating from Registry: ${records.length} records found.`);
 
     for (const record of records) {
       // If already in activeAgents (like the architect), skip
@@ -97,7 +98,7 @@ export class SwarmManager {
         }
 
         this.activeAgents.set(agent.id, agent);
-        console.log(`[SwarmManager] Restored active agent: ${agent.name} (${agent.id})`);
+        logger.debug(`[SwarmManager] Restored active agent: ${agent.name} (${agent.id})`);
       }
     }
   }
@@ -256,7 +257,7 @@ export class SwarmManager {
   private freezeAgent(agent: AdytumAgent) {
     this.frozenAgents.set(agent.id, agent);
     this.persistCryostasis();
-    console.log(`[SwarmManager] Agent ${agent.name} (${agent.id}) frozen to cryostasis.`);
+    logger.debug(`[SwarmManager] Agent ${agent.name} (${agent.id}) frozen to cryostasis.`);
   }
 
   /**
@@ -265,7 +266,7 @@ export class SwarmManager {
   private thawAllAgents() {
     if (this.frozenAgents.size === 0) return;
 
-    console.log(`[SwarmManager] Thawing ${this.frozenAgents.size} agents from cryostasis...`);
+    logger.debug(`[SwarmManager] Thawing ${this.frozenAgents.size} agents from cryostasis...`);
     for (const [id, agent] of this.frozenAgents) {
       agent.status = 'idle'; // Reset status on thaw
       this.activeAgents.set(id, agent);

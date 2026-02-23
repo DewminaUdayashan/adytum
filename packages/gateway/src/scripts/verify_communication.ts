@@ -1,3 +1,4 @@
+import { logger } from '../logger.js';
 import 'reflect-metadata';
 import { container } from 'tsyringe';
 import { v4 as uuid } from 'uuid';
@@ -9,12 +10,12 @@ import { LogbookService } from '../application/services/logbook-service.js';
 
 // Mock Dependencies
 const mockLogbook = {
-  append: (entry: any) => console.log(`[Logbook] ${entry.event}: ${entry.detail}`),
+  append: (entry: any) => logger.debug(`[Logbook] ${entry.event}: ${entry.detail}`),
 };
 
 const mockServer = {
   requestInput: async (desc: string) => {
-    console.log(`[Server] Input requested: ${desc}`);
+    logger.debug(`[Server] Input requested: ${desc}`);
     return 'User Answer';
   },
 };
@@ -28,7 +29,7 @@ const mockAgentRuntime = {
 };
 
 async function verify() {
-  console.log('🧪 Verifying Communication Services...');
+  logger.debug('🧪 Verifying Communication Services...');
 
   // Setup Registry Mocks
   const agentRegistry = {
@@ -48,11 +49,11 @@ async function verify() {
     mockLogbook as any,
   );
 
-  console.log('Testing sendMessage...');
+  logger.debug('Testing sendMessage...');
   const result = await messagingService.sendMessage('sender-id', 'Recipient', 'Hello World');
 
   if (result.success && result.response?.includes('Echo')) {
-    console.log('✅ sendMessage success:', result.response);
+    logger.debug('✅ sendMessage success:', result.response);
   } else {
     console.error('❌ sendMessage failed:', result);
   }
@@ -60,11 +61,11 @@ async function verify() {
   // 2. Test UserInteractionService
   const interactionService = new UserInteractionService(mockServer as any, mockLogbook as any);
 
-  console.log('Testing askUser...');
+  logger.debug('Testing askUser...');
   const answer = await interactionService.askUser('agent-id', 'How are you?');
 
   if (answer === 'User Answer') {
-    console.log('✅ askUser success:', answer);
+    logger.debug('✅ askUser success:', answer);
   } else {
     console.error('❌ askUser failed:', answer);
   }

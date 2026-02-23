@@ -20,14 +20,33 @@ const baseUsage = {
 
 function createRuntime(chatMock: any, toolRegistry: ToolRegistry): AgentRuntime {
   const modelRouter = { chat: chatMock } as any;
-  const soulEngine = { getSoulPrompt: () => 'You are test runtime.' } as any;
+  const soulEngine = {
+    getSoulPrompt: () => 'You are test runtime.',
+    getArchitectPreamble: () => 'Architect preamble',
+    getManagerPreamble: () => 'Manager preamble',
+  } as any;
   const skillLoader = { getSkillsContext: () => '' } as any;
+  const compactor = {
+    guardLargeMessage: async (res: any) => res,
+    applyCompaction: async (ctx: any) => ctx.getMessages(),
+  } as any;
+  const modelCatalog = { get: async () => ({ contextWindow: 32000 }) } as any;
+  const dispatchService = { resolve: () => null } as any;
+  const runtimeRegistry = { register: () => {}, unregister: () => {} } as any;
+  const swarmManager = { updateActivity: () => {} } as any;
+  const swarmMessenger = { getMessages: () => [] } as any;
 
   return new AgentRuntime({
     modelRouter,
     toolRegistry,
     soulEngine,
     skillLoader,
+    compactor,
+    modelCatalog,
+    dispatchService,
+    runtimeRegistry,
+    swarmManager,
+    swarmMessenger,
     contextSoftLimit: 10000,
     maxIterations: 10,
     defaultModelRole: 'thinking',

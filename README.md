@@ -20,30 +20,23 @@ Adytum isn't just a tool—it's a **digital companion**.
 
 ---
 
-## 🚀 One-Click Setup (Mac/Linux)
+## 🚀 One-Click Setup
 
-The fastest way to get Adytum up and running is our zero-config setup script:
+The fastest way to get Adytum up and running is our zero-config setup script. It will automatically check for Node.js (>=22), install it if missing, clone the repository, and guide you through the **Birth Protocol**.
 
-1.  **Clone the Repository**:
+### Mac / Linux
 
-    ```bash
-    git clone https://github.com/dewminaudayashan/adytum.git
-    cd adytum
-    ```
+```bash
+curl -sSL https://raw.githubusercontent.com/dewminaudayashan/adytum/main/install.sh | bash
+```
 
-2.  **Run the Installer**:
+### Windows (PowerShell)
 
-    ```bash
-    sh install.sh
-    ```
+```powershell
+iex (iwr -useb https://raw.githubusercontent.com/dewminaudayashan/adytum/main/install.ps1).Content
+```
 
-    _This script will install dependencies, build the ecosystem, and guide you through the **Birth Protocol** (initial configuration)._
-
-3.  **Start the Ecosystem**:
-    ```bash
-    adytum start
-    ```
-    _This will launch the AI Gateway, the Web Dashboard, and open your browser automatically to `http://localhost:3002`._
+_Note: If you already have the repository cloned, you can simply run `sh install.sh` or `./install.ps1` locally._
 
 ---
 

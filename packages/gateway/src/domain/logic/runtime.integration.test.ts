@@ -1,6 +1,6 @@
 /**
  * @file packages/gateway/src/domain/logic/runtime.integration.test.ts
- * @description Contains domain logic and core business behavior.
+ * @description Integration tests for AgentRuntime with mocks.
  */
 
 import 'reflect-metadata';
@@ -24,6 +24,11 @@ describe('AgentRuntime Integration', () => {
   let mockToolRegistry: any;
   let mockSoulEngine: any;
   let mockSkillLoader: any;
+  let mockCompactor: any;
+  let mockModelCatalog: any;
+  let mockDispatchService: any;
+  let mockRuntimeRegistry: any;
+  let mockMessenger: any;
 
   beforeEach(() => {
     // Reset mocks
@@ -31,12 +36,43 @@ describe('AgentRuntime Integration', () => {
 
     mockModelRouter = new ModelRouter({} as any);
     mockToolRegistry = new ToolRegistry();
-    mockSoulEngine = new SoulEngine('');
-    mockSkillLoader = new SkillLoader('', {} as any);
+
+    mockSoulEngine = {
+      getSoulPrompt: vi.fn(() => 'You are a helpful assistant.'),
+      getArchitectPreamble: vi.fn(() => 'Architect preamble'),
+      getManagerPreamble: vi.fn(() => 'Manager preamble'),
+      reload: vi.fn(),
+    };
+
+    mockSkillLoader = {
+      getSkillsContext: vi.fn().mockReturnValue(''),
+      start: vi.fn().mockResolvedValue(undefined),
+    };
+
+    mockCompactor = {
+      compactContext: vi.fn(),
+      guardLargeMessage: vi.fn((m) => m),
+      estimateTokens: vi.fn((m) => 10),
+    };
+
+    mockModelCatalog = {
+      get: vi.fn().mockResolvedValue({ contextWindow: 32000 }),
+    };
+
+    mockDispatchService = {
+      resolve: vi.fn().mockReturnValue(null),
+    };
+
+    mockRuntimeRegistry = {
+      register: vi.fn(),
+      unregister: vi.fn(),
+    };
+
+    mockMessenger = {
+      getMessages: vi.fn().mockReturnValue([]),
+    };
 
     // Setup basic mock responses
-    mockSoulEngine.getSoulPrompt.mockReturnValue('You are a helpful assistant.');
-    mockSkillLoader.getSkillsContext.mockReturnValue('');
     mockToolRegistry.toOpenAITools.mockReturnValue([]);
     mockModelRouter.chat.mockResolvedValue({
       message: { role: 'assistant', content: 'Hello there!' },
@@ -46,8 +82,18 @@ describe('AgentRuntime Integration', () => {
     runtime = new AgentRuntime({
       modelRouter: mockModelRouter,
       toolRegistry: mockToolRegistry,
-      soulEngine: mockSoulEngine,
-      skillLoader: mockSkillLoader,
+      soulEngine: mockSoulEngine as any,
+      skillLoader: mockSkillLoader as any,
+      compactor: mockCompactor as any,
+      modelCatalog: mockModelCatalog as any,
+      dispatchService: mockDispatchService as any,
+      runtimeRegistry: mockRuntimeRegistry as any,
+      swarmManager: {
+        updateActivity: vi.fn(),
+      } as any,
+      swarmMessenger: mockMessenger as any,
+      graphContext: {} as any,
+      workspacePath: '',
       contextSoftLimit: 1000,
       maxIterations: 5,
       defaultModelRole: 'thinking',
@@ -56,9 +102,15 @@ describe('AgentRuntime Integration', () => {
   });
 
   it('should initialize and build system prompt', () => {
-    expect(mockSoulEngine.getSoulPrompt).toHaveBeenCalled();
-    // Access private helper to inspect the generated system prompt in a live context
+    // Run a turn to trigger context creation
+    // (getOrCreateContext is usually called inside run)
+    // Wait, getOrCreateContext is internal.
+
+    // Check that soulEngine was used during some internal setup if any
+    // or just run a turn.
+
     const context: ContextManager = (runtime as any).getOrCreateContext('bootstrap');
+    expect(mockSoulEngine.getSoulPrompt).toHaveBeenCalled();
     const msgs = context.getMessages();
     expect(msgs[0].role).toBe('system');
     expect(msgs[0].content).toContain('You are a helpful assistant.');

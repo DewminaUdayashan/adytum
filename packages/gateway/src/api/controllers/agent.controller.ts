@@ -68,7 +68,7 @@ export class AgentController {
       }
 
       this.connections.set(id, socket);
-      this.logger.info(`Client connected: ${id}`);
+      this.logger.debug(`Client connected: ${id}`);
 
       // Send initial history
       try {
@@ -178,7 +178,7 @@ export class AgentController {
 
       socket.on('close', () => {
         this.connections.delete(id);
-        this.logger.info(`Client disconnected: ${id}`);
+        this.logger.debug(`Client disconnected: ${id}`);
       });
     } catch (err: any) {
       this.logger.error(`WebSocket setup failed for ${id}: ${err.message}`);

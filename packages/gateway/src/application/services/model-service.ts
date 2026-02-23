@@ -86,7 +86,7 @@ export class ModelService {
     }
 
     saveConfig({ models: existingModels });
-    this.logger.info({ modelId: entry.id }, 'Model synced to adytum.config.yaml');
+    this.logger.debug({ modelId: entry.id }, 'Model synced to adytum.config.yaml');
   }
 
   /**

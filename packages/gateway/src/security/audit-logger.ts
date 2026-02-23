@@ -41,7 +41,7 @@ export class AuditLogger extends EventEmitter {
     };
 
     // Log to Pino for observability
-    logger.info(
+    logger.debug(
       {
         traceId: full.traceId,
         action: full.actionType,

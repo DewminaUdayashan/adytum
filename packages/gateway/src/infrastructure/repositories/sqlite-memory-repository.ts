@@ -24,7 +24,7 @@ export class SqliteMemoryRepository implements MemoryRepository {
     @inject(Logger) private logger: Logger,
   ) {
     const dataPath = this.config.get('dataPath');
-    this.logger.info(`Initializing SqliteMemoryRepository at ${dataPath}`);
+    this.logger.debug(`Initializing SqliteMemoryRepository at ${dataPath}`);
     this.db = new MemoryDB(dataPath);
   }
 

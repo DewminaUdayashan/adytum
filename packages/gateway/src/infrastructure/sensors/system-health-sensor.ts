@@ -23,7 +23,7 @@ export class SystemHealthSensor implements Sensor {
   async start(): Promise<void> {
     if (this.interval) return;
 
-    logger.info(`Starting SystemHealthSensor (Interval: ${this.checkIntervalMs}ms)`);
+    logger.debug(`Starting SystemHealthSensor (Interval: ${this.checkIntervalMs}ms)`);
 
     // Initial check immediately
     this.checkHealth();

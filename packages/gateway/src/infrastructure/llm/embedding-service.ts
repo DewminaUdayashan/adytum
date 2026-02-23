@@ -1,3 +1,4 @@
+import { logger } from '../../logger.js';
 import { pipeline } from '@xenova/transformers';
 import { singleton } from 'tsyringe';
 
@@ -13,9 +14,9 @@ export class EmbeddingService {
   async initialize(): Promise<void> {
     if (this.extractor) return;
     try {
-      console.log(`[EmbeddingService] Loading local model: ${this.modelName}...`);
+      logger.debug(`[EmbeddingService] Loading local model: ${this.modelName}...`);
       this.extractor = await pipeline('feature-extraction', this.modelName);
-      console.log('[EmbeddingService] Model loaded successfully.');
+      logger.debug('[EmbeddingService] Model loaded successfully.');
     } catch (error) {
       console.error('[EmbeddingService] Failed to load embedding model:', error);
       throw error;

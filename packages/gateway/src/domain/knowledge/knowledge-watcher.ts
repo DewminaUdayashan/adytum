@@ -28,7 +28,7 @@ export class KnowledgeWatcher implements Sensor {
   async start(): Promise<void> {
     if (this.watcher) return;
 
-    logger.info(`Starting KnowledgeWatcher on ${this.workspacePath}`);
+    logger.debug(`Starting KnowledgeWatcher on ${this.workspacePath}`);
 
     // Simple recursive watch using node:fs
     // Note: Recursive is supported on macOS and Windows, which matches USER's OS (mac).

@@ -27,6 +27,8 @@ import { ToolErrorHandler } from './tool-error-handler.js';
 
 import { SwarmManager } from './swarm-manager.js';
 import { SwarmMessenger } from './swarm-messenger.js';
+import { Compactor } from './compactor.js';
+import { ModelCatalog } from '../../infrastructure/llm/model-catalog.js';
 
 // ...
 
@@ -40,6 +42,8 @@ export interface AgentRuntimeConfig {
   dispatchService: import('../../application/services/dispatch-service.js').DispatchService;
   graphContext: GraphContext;
   contextSoftLimit?: number;
+  compactor: Compactor;
+  modelCatalog: ModelCatalog;
   maxIterations: number;
   defaultModelRole: ModelRole;
   agentName: string;
@@ -263,7 +267,7 @@ export class AgentRuntime extends EventEmitter {
 
     // Inject workspace-specific graph context if available
     if (overrides?.workspaceId && this.config.graphContext) {
-      const knowledge = this.config.graphContext.getRelatedContext(
+      const knowledge = await this.config.graphContext.getRelatedContext(
         userMessage,
         overrides.workspaceId,
       );
@@ -341,12 +345,17 @@ ${knowledge}`,
 
         iterations++;
 
-        // Check for compaction
-        if (context.needsCompaction()) {
+        // Check for compaction with model-aware limits
+        const roleToUse = overrides?.modelRole || this.config.defaultModelRole;
+        const currentModelId = overrides?.modelId || roleToUse;
+        const modelEntry = await this.config.modelCatalog.get(currentModelId);
+        // Use a safe default limit (32k) or 80% of model's context window
+        const windowLimit = modelEntry?.contextWindow || 32000;
+        const softLimit = Math.floor(windowLimit * 0.82);
+
+        if (context.needsCompaction(softLimit)) {
           await this.compactContext(context, traceId, sessionId);
         }
-
-        const roleToUse = overrides?.modelRole || this.config.defaultModelRole;
 
         // Call the model
         auditLogger.logModelCall(traceId, roleToUse, context.getMessageCount());
@@ -580,12 +589,21 @@ ${knowledge}`,
               metadata: { result: result.result },
             });
 
-            // Add tool result to context
+            // Add tool result to context with Oversized Message Guard
+            let finalResult =
+              typeof result.result === 'string' ? result.result : JSON.stringify(result.result);
+
+            // Guard against massive tool outputs
+            finalResult = await this.config.compactor.guardLargeMessage(
+              finalResult,
+              windowLimit,
+              sessionId,
+            );
+
             context.addMessage({
               role: 'tool',
               tool_call_id: tc.id,
-              content:
-                typeof result.result === 'string' ? result.result : JSON.stringify(result.result),
+              content: finalResult,
             });
           }
 
@@ -733,6 +751,20 @@ ${knowledge}`,
 
     this.emit('trace_end', trace);
 
+    // Index the turn into episodic memory
+    if (this.config.memoryStore && finalResponse) {
+      this.config.memoryStore
+        .add(
+          `[USER]: ${userMessage}\n[ASSISTANT]: ${finalResponse}`,
+          'system',
+          ['episodic', 'turn'],
+          { sessionId, traceId },
+          'episodic_raw',
+          overrides?.workspaceId,
+        )
+        .catch((err) => console.error('[Runtime] Failed to index turn:', err));
+    }
+
     // Cleanup
     this.config.runtimeRegistry.unregister(sessionId);
     this.abortControllers.delete(sessionId);
@@ -758,34 +790,31 @@ ${knowledge}`,
       traceId,
       sessionId,
       streamType: 'status',
-      delta: 'Context limit approaching — compacting memory...',
+      delta: 'Context limit approaching — performing model-aware compaction...',
     });
 
-    const compactionPrompt = context.buildCompactionPrompt();
+    const currentMessages = context.getMessages();
+    const compacted = await this.config.compactor.compactContext(currentMessages, sessionId);
 
-    // Use 'fast' model for compaction
-    const { message, usage } = await this.config.modelRouter.chat(
-      'fast',
-      [{ role: 'user', content: compactionPrompt }],
-      { temperature: 0.3, fallbackRole: 'fast' as any },
-    );
+    context.setMessages(compacted);
 
-    this.trackTokenUsage(usage, sessionId);
+    if (this.config.memoryStore) {
+      // Find the summary just for logging/memory
+      const summary =
+        compacted[0].role === 'system' && typeof compacted[0].content === 'string'
+          ? compacted[0].content
+          : 'Context compacted';
 
-    if (message.content) {
-      context.applyCompaction(message.content);
-      if (this.config.memoryStore) {
-        await this.config.memoryStore.add(
-          message.content,
-          'compaction',
-          ['summary'],
-          {
-            traceId,
-            sessionId,
-          },
-          'episodic_summary',
-        );
-      }
+      await this.config.memoryStore.add(
+        summary,
+        'compaction',
+        ['summary'],
+        {
+          traceId,
+          sessionId,
+        },
+        'episodic_summary',
+      );
     }
   }
 

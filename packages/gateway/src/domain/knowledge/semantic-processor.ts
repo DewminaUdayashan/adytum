@@ -22,7 +22,7 @@ export class SemanticProcessor {
    * Injects summaries and extracts key concepts (entities/tags).
    */
   async process(nodes: GraphNode[], options: { skipLLM?: boolean } = {}): Promise<GraphNode[]> {
-    logger.info(
+    logger.debug(
       `Starting semantic analysis on ${nodes.length} nodes (skipLLM: ${options.skipLLM})...`,
     );
 

@@ -1,8 +1,4 @@
-/**
- * @file packages/gateway/src/infrastructure/llm/model-router.spec.ts
- * @description Implements infrastructure adapters and external integrations.
- */
-
+import 'reflect-metadata';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ModelRouter } from './model-router.js';
 import { LLMClient } from './llm-client.js';

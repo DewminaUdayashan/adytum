@@ -13,7 +13,7 @@ export class ParallelExecutor {
   ) {}
 
   async execute(plan: Plan, context: any = {}): Promise<Record<string, any>> {
-    logger.info({ goal: plan.goal }, 'ParallelExecutor: Starting execution');
+    logger.debug({ goal: plan.goal }, 'ParallelExecutor: Starting execution');
 
     const results: Record<string, any> = {};
     const pending = new Set<PlanStep>(plan.steps);

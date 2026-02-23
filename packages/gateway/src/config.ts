@@ -167,7 +167,6 @@ export function loadConfig(projectRoot?: string): AdytumConfig {
     soul: {
       autoUpdate: (fileConfig.soul as any)?.autoUpdate ?? true,
     },
-    litellmPort: Number(fileConfig.litellmPort || process.env.LITELLM_PORT || 4000),
     gatewayPort: Number(fileConfig.gatewayPort || process.env.GATEWAY_PORT || 3001),
     dashboardPort: Number(fileConfig.dashboardPort || process.env.DASHBOARD_PORT || 3002),
     contextSoftLimit: Number(fileConfig.contextSoftLimit || 40000),
