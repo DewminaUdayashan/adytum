@@ -10,6 +10,7 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces",
+    "prebuild": "node scripts/sync-version.js",
     "dev": "npm run dev --workspace=packages/gateway",
     "dev:dashboard": "npm run dev --workspace=packages/dashboard",
     "test": "npm run test --workspaces --if-present",
