@@ -103,12 +103,12 @@ chmod +x "$ADYTUM_BIN"
 
 # 6. Run initialization
 echo -e "${GREEN}✨ Starting Birth Protocol (Configuration)...${NC}"
-node "$ADYTUM_BIN" init
+node "$ADYTUM_BIN" init < /dev/tty
 
 # 7. Ask to start
 echo -e "\n${GREEN}🎉 Setup complete!${NC}"
 echo -e "Try running Adytum now? (y/n)"
-read -r run_start
+read -r run_start < /dev/tty
 
 if [[ "$run_start" =~ ^[Yy]$ ]]; then
     node "$ADYTUM_BIN" start
