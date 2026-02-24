@@ -3,15 +3,15 @@
  * @description Implements application-level service logic and coordination.
  */
 
-import { randomBytes, createHash } from 'node:crypto';
-import { relative, join } from 'node:path';
-import { readFileSync, writeFileSync } from 'node:fs';
-import { singleton, inject } from 'tsyringe';
-import { Logger } from '../../logger.js';
-import { loadConfig, saveConfig } from '../../config.js';
-import { SkillLoader, type LoadedSkill as Skill } from '../services/skill-loader.js';
-import { SecretsStore } from '../../security/secrets-store.js';
 import type { AdytumConfig } from '@adytum/shared';
+import { createHash, randomBytes } from 'node:crypto';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join, relative } from 'node:path';
+import { inject, singleton } from 'tsyringe';
+import { loadConfig, saveConfig } from '../../config.js';
+import { Logger } from '../../logger.js';
+import { SecretsStore } from '../../security/secrets-store.js';
+import { SkillLoader, type LoadedSkill as Skill } from '../services/skill-loader.js';
 
 const EMAIL_CALENDAR_SKILL_ID = 'email-calendar';
 const EMAIL_CALENDAR_SECRETS_KEY = 'ADYTUM_EMAIL_CALENDAR_ACCOUNTS_JSON';
@@ -542,6 +542,13 @@ export class SkillService {
       return { status: 'disconnected', qr: null };
     }
     return (service as any).getStatus();
+  }
+
+  /**
+   * Triggers WhatsApp connection/pairing.
+   */
+  public async connectWhatsApp() {
+    await this.loader.reconnectService('whatsapp-service');
   }
 
   /**

@@ -4,17 +4,17 @@ import { logger } from '../../logger.js';
  * @description Implements application-level service logic and coordination.
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
-import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
-import { createRequire } from 'node:module';
-import { execSync } from 'node:child_process';
-import { createJiti } from 'jiti';
-import { fileURLToPath } from 'node:url';
-import chalk from 'chalk';
-import { parse as parseYaml } from 'yaml';
 import type { AdytumConfig, ToolDefinition } from '@adytum/shared';
-import type { ToolRegistry } from '../../tools/registry.js';
+import chalk from 'chalk';
+import { createJiti } from 'jiti';
+import { execSync } from 'node:child_process';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { createRequire } from 'node:module';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { parse as parseYaml } from 'yaml';
 import type { AgentRuntime } from '../../domain/logic/agent-runtime.js';
+import type { ToolRegistry } from '../../tools/registry.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const MANIFEST_FILE = 'adytum.plugin.json';
@@ -771,6 +771,38 @@ export class SkillLoader {
   /** Get a registered service by its ID. */
   getService(serviceId: string): AdytumSkillService | undefined {
     return this.services.find((s) => s.service.id === serviceId)?.service;
+  }
+
+  /** Force restart a skill service. */
+  async reconnectService(serviceId: string): Promise<void> {
+    const registration = this.services.find((s) => s.service.id === serviceId);
+    if (!registration || !this.activeAgent || !this.toolRegistry) {
+      throw new Error(`Service ${serviceId} not found or agent not ready.`);
+    }
+
+    const ctx: SkillServiceContext = {
+      agent: this.activeAgent,
+      toolRegistry: this.toolRegistry,
+      workspacePath: this.config.workspacePath,
+      dataPath: this.config.dataPath,
+      projectRoot: this.projectRoot,
+      config: this.config,
+      pluginConfig: registration.pluginConfig,
+      logger: registration.logger,
+    };
+
+    // Try to stop first if it was started
+    if (registration.started && registration.service.stop) {
+      try {
+        await registration.service.stop(ctx);
+      } catch (err) {
+        registration.logger.warn(`Failed to stop service before reconnect: ${String(err)}`);
+      }
+    }
+
+    registration.started = false;
+    await registration.service.start(ctx);
+    registration.started = true;
   }
 
   /** Build system prompt context for enabled skills. */
