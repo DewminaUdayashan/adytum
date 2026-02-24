@@ -3,21 +3,18 @@
  * @description Native WhatsApp skill for Adytum using @whiskeysockets/baileys.
  */
 
-import { join } from 'node:path';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { z } from 'zod';
-import pino from 'pino';
+import type { Boom } from '@hapi/boom';
 import makeWASocket, {
   DisconnectReason,
-  useMultiFileAuthState,
   fetchLatestBaileysVersion,
-  type WASocket,
-  type AuthenticationState,
+  useMultiFileAuthState,
+  type WASocket
 } from '@whiskeysockets/baileys';
-// @ts-expect-error missing types for qrcode-terminal
-import qrcodeTerminal from 'qrcode-terminal';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import pino from 'pino';
 import qrcode from 'qrcode';
-import type { Boom } from '@hapi/boom';
+import { z } from 'zod';
 
 const WHATSAPP_ACTIONS = [
   'send_message',
@@ -125,7 +122,7 @@ class AdytumWhatsAppStore {
         if (!jid) continue;
         if (!this.messages[jid]) this.messages[jid] = [];
         this.messages[jid].push(message);
-        if (this.messages[jid].length > 100) this.messages[jid].shift();
+        if (this.messages[jid].length > 20) this.messages[jid].shift();
       }
     });
 
@@ -149,8 +146,23 @@ class AdytumWhatsAppStore {
 
   writeToFile(path: string) {
     try {
+      // Aggressive pruning before write to keep memory/file size low
+      // Limit to last 500 contacts
+      const contactKeys = Object.keys(this.contacts);
+      if (contactKeys.length > 500) {
+        const toRemove = contactKeys.slice(0, contactKeys.length - 500);
+        for (const k of toRemove) delete this.contacts[k];
+      }
+
+      // Limit to last 50 chats in messages map
+      const messageKeys = Object.keys(this.messages);
+      if (messageKeys.length > 50) {
+        const toRemove = messageKeys.slice(0, messageKeys.length - 50);
+        for (const k of toRemove) delete this.messages[k];
+      }
+
       const data = {
-        chats: Array.from(this.chatsMap.values()),
+        chats: Array.from(this.chatsMap.values()).slice(-100), // Only keep last 100 chats
         contacts: this.contacts,
         messages: this.messages,
       };
@@ -164,9 +176,25 @@ class AdytumWhatsAppStore {
     try {
       if (existsSync(path)) {
         const data = JSON.parse(readFileSync(path, 'utf8'));
-        if (data.chats) for (const c of data.chats) this.chatsMap.set(c.id, c);
-        if (data.contacts) Object.assign(this.contacts, data.contacts);
-        if (data.messages) Object.assign(this.messages, data.messages);
+        if (data.chats) {
+          const chats = Array.isArray(data.chats) ? data.chats : [];
+          for (const c of chats.slice(-100)) this.chatsMap.set(c.id, c);
+        }
+        if (data.contacts) {
+          const keys = Object.keys(data.contacts);
+          const limit = 500;
+          for (const k of keys.slice(-limit)) {
+            this.contacts[k] = data.contacts[k];
+          }
+        }
+        if (data.messages) {
+          const keys = Object.keys(data.messages);
+          const limit = 50;
+          for (const k of keys.slice(-limit)) {
+            const msgs = Array.isArray(data.messages[k]) ? data.messages[k] : [];
+            this.messages[k] = msgs.slice(-20); // Keep only 20 msgs per chat on load
+          }
+        }
       }
     } catch (err) {
       this.logger.error('Failed to read store: ' + err);
@@ -255,14 +283,14 @@ class WhatsAppService {
       this.logger.error('Failed to read WhatsApp store from file: ' + err);
     }
 
-    // Save store every 10 seconds
+    // Save store every 60 seconds to reduce I/O and memory pressure
     const storeInterval = setInterval(() => {
       try {
         if (this.store) this.store.writeToFile(storeFile);
       } catch (err) {
         // quiet error during exit
       }
-    }, 10000);
+    }, 60000);
 
     const baileysLogger = pino({ level: 'warn' });
 
@@ -285,11 +313,7 @@ class WhatsAppService {
 
       if (qr) {
         this.connectionStatus = 'pairing';
-        this.latestQR = qr;
-        this.logger.info('WhatsApp QR Code generated. Scan it with your phone:');
-        qrcodeTerminal.generate(qr, { small: true });
-
-        // Also generate data URL for dashboard
+        // Generate data URL for dashboard but don't print to terminal
         try {
           this.latestQR = await qrcode.toDataURL(qr);
         } catch (err) {
@@ -333,6 +357,11 @@ class WhatsAppService {
     if (this.sock) {
       this.sock.end(undefined);
       this.sock = null;
+    }
+    if (this.store) {
+      const sessionDir = this.getSessionPath();
+      const storeFile = join(sessionDir, 'baileys_store_multi.json');
+      this.store.writeToFile(storeFile);
     }
     this.agent = null;
     this.isConnecting = false;

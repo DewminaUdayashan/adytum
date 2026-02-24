@@ -5,10 +5,10 @@
  * @description Defines route-level UI composition and page behavior.
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import { gatewayFetch } from '@/lib/api';
 import { Badge, Button, Card, Checkbox, EmptyState, Spinner } from '@/components/ui';
-import { Puzzle, Save, RefreshCw, Wrench, ShieldCheck } from 'lucide-react';
+import { gatewayFetch } from '@/lib/api';
+import { Puzzle, RefreshCw, Save, ShieldCheck, Wrench } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 
 type SkillUiHint = {
   label?: string;
@@ -428,6 +428,7 @@ export default function SkillsPage() {
     null,
   );
   const [whatsappStatusLoading, setWhatsappStatusLoading] = useState(false);
+  const [showWhatsappQR, setShowWhatsappQR] = useState(false);
 
   const loadSkills = async () => {
     try {
@@ -647,6 +648,7 @@ export default function SkillsPage() {
       return () => clearInterval(interval);
     } else {
       setWhatsappStatus(null);
+      setShowWhatsappQR(false);
     }
   }, [selectedSkillId]);
 
@@ -1172,19 +1174,33 @@ export default function SkillsPage() {
                           {whatsappStatus.status === 'pairing' && whatsappStatus.qr ? (
                             <div className="flex flex-col items-center gap-4 py-4">
                               <p className="text-center text-sm text-text-muted">
-                                Scan this QR code with your phone to link WhatsApp:
+                                {showWhatsappQR
+                                  ? 'Scan this QR code with your phone to link WhatsApp:'
+                                  : 'WhatsApp pairing is required.'}
                               </p>
-                              <div className="rounded-xl border-4 border-white bg-white p-2 shadow-lg">
-                                <img
-                                  src={whatsappStatus.qr}
-                                  alt="WhatsApp QR Code"
-                                  className="h-64 w-64"
-                                />
-                              </div>
-                              <p className="text-center text-xs text-text-muted">
-                                Code refreshes automatically. Pairing may take a few seconds after
-                                scan.
-                              </p>
+                              {showWhatsappQR ? (
+                                <>
+                                  <div className="rounded-xl border-4 border-white bg-white p-2 shadow-lg animate-scale-in">
+                                    <img
+                                      src={whatsappStatus.qr}
+                                      alt="WhatsApp QR Code"
+                                      className="h-64 w-64"
+                                    />
+                                  </div>
+                                  <p className="text-center text-xs text-text-muted">
+                                    Code refreshes automatically. Pairing may take a few seconds after
+                                    scan.
+                                  </p>
+                                </>
+                              ) : (
+                                <Button
+                                  variant="primary"
+                                  onClick={() => setShowWhatsappQR(true)}
+                                  className="mt-2"
+                                >
+                                  View QR Code
+                                </Button>
+                              )}
                             </div>
                           ) : whatsappStatus.status === 'connected' ? (
                             <div className="flex flex-col items-center gap-2 py-6 text-center">
