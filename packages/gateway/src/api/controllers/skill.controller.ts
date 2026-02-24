@@ -292,6 +292,19 @@ export class SkillController {
     return { success: true };
   }
 
+  /**
+   * Retrieves WhatsApp status.
+   * @param request - Request.
+   * @param reply - Reply.
+   */
+  public async getWhatsAppStatus(request: FastifyRequest, reply: FastifyReply) {
+    const { id } = request.params as { id: string };
+    if (id !== 'whatsapp') {
+      throw new AppError('WhatsApp status is supported only for whatsapp skill.', 400);
+    }
+    return this.skillService.getWhatsAppStatus();
+  }
+
   private resolvePublicBaseUrl(request: FastifyRequest): string {
     const forwardedProto = cleanText(request.headers['x-forwarded-proto']);
     const forwardedHost = cleanText(request.headers['x-forwarded-host']);

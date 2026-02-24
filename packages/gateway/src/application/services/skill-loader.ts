@@ -768,6 +768,11 @@ export class SkillLoader {
     );
   }
 
+  /** Get a registered service by its ID. */
+  getService(serviceId: string): AdytumSkillService | undefined {
+    return this.services.find((s) => s.service.id === serviceId)?.service;
+  }
+
   /** Build system prompt context for enabled skills. */
   getSkillsContext(): string {
     const active = this.skills.filter((s) => s.enabled && s.status !== 'error');

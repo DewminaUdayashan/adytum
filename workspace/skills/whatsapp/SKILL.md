@@ -11,8 +11,21 @@ This skill allows the Adytum agent to interact directly with WhatsApp using the 
 
 - **Inbound Messaging**: The agent can listen to incoming messages from WhatsApp users (and optionally groups) and reply intelligently.
 - **Outbound Messaging**: Proactively send text, images, and documents.
+- **Message History**: The agent can read past message history for any contact.
+- **Chat Browsing**: List recent conversations, check unread counts, and find contacts.
 - **No API Fees**: Uses your existing personal or business account.
 - **Privacy**: Messaging happens through your own linked device session.
+
+## Tools
+
+The WhatsApp skill provides the following tools for the agent:
+
+- `whatsapp_send`: Send a text message to a contact or group.
+- `whatsapp_list_chats`: List recent conversations and unread counts.
+- `whatsapp_get_messages`: Fetch message history for a specific contact.
+- `whatsapp_search_contacts`: Search for contacts or groups by name.
+- `whatsapp_mark_read`: Mark a chat as read.
+- `whatsapp_action`: Perform advanced actions like sending images or documents.
 
 ## Setup Instructions
 

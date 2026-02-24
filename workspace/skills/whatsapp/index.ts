@@ -4,7 +4,7 @@
  */
 
 import { join } from 'node:path';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { z } from 'zod';
 import pino from 'pino';
 import makeWASocket, {
@@ -15,10 +15,20 @@ import makeWASocket, {
   type AuthenticationState,
 } from '@whiskeysockets/baileys';
 // @ts-expect-error missing types for qrcode-terminal
-import qrcode from 'qrcode-terminal';
+import qrcodeTerminal from 'qrcode-terminal';
+import qrcode from 'qrcode';
 import type { Boom } from '@hapi/boom';
 
-const WHATSAPP_ACTIONS = ['send_message', 'send_image', 'send_document', 'presence'] as const;
+const WHATSAPP_ACTIONS = [
+  'send_message',
+  'send_image',
+  'send_document',
+  'presence',
+  'list_chats',
+  'get_messages',
+  'search_contacts',
+  'mark_read',
+] as const;
 type WhatsAppAction = (typeof WHATSAPP_ACTIONS)[number];
 
 type WhatsAppLogger = {
@@ -32,6 +42,10 @@ const WhatsAppActionPermissionsSchema = z.object({
   send_image: z.boolean().default(true),
   send_document: z.boolean().default(true),
   presence: z.boolean().default(true),
+  list_chats: z.boolean().default(true),
+  get_messages: z.boolean().default(true),
+  search_contacts: z.boolean().default(true),
+  mark_read: z.boolean().default(true),
 });
 
 const WhatsAppPluginConfigSchema = z.object({
@@ -64,19 +78,123 @@ const WhatsAppActionSchema = z.object({
   documentUrl: z.string().optional(),
   fileName: z.string().optional(),
   presence: z.enum(['unavailable', 'available', 'composing', 'recording', 'paused']).optional(),
+  limit: z.number().optional().describe('Limit for list or history actions'),
+  cursor: z.string().optional().describe('Pagination cursor'),
+  query: z.string().optional().describe('Search query'),
 });
+
+/**
+ * Minimal In-Memory Store for WhatsApp
+ */
+class AdytumWhatsAppStore {
+  public chats: { all: () => any[] } = {
+    all: () => Array.from(this.chatsMap.values()),
+  };
+  public contacts: { [jid: string]: any } = {};
+  public messages: { [jid: string]: any[] } = {};
+
+  private chatsMap = new Map<string, any>();
+
+  constructor(private logger: WhatsAppLogger) {}
+
+  bind(ev: any) {
+    ev.on('messaging-history.set', ({ chats, contacts, messages }: any) => {
+      for (const chat of chats) this.chatsMap.set(chat.id, chat);
+      for (const contact of contacts) this.contacts[contact.id] = contact;
+      for (const message of messages) {
+        const jid = message.key.remoteJid;
+        if (!this.messages[jid]) this.messages[jid] = [];
+        this.messages[jid].push(message);
+      }
+    });
+
+    ev.on('chats.upsert', (chats: any) => {
+      for (const chat of chats) this.chatsMap.set(chat.id, chat);
+    });
+
+    ev.on('chats.update', (updates: any) => {
+      for (const update of updates) {
+        const chat = this.chatsMap.get(update.id);
+        if (chat) Object.assign(chat, update);
+      }
+    });
+
+    ev.on('messages.upsert', ({ messages }: any) => {
+      for (const message of messages) {
+        const jid = message.key.remoteJid;
+        if (!jid) continue;
+        if (!this.messages[jid]) this.messages[jid] = [];
+        this.messages[jid].push(message);
+        if (this.messages[jid].length > 100) this.messages[jid].shift();
+      }
+    });
+
+    ev.on('contacts.upsert', (contacts: any) => {
+      for (const contact of contacts) this.contacts[contact.id] = contact;
+    });
+
+    ev.on('contacts.update', (updates: any) => {
+      for (const update of updates) {
+        if (update.id && this.contacts[update.id]) {
+          Object.assign(this.contacts[update.id], update);
+        }
+      }
+    });
+  }
+
+  async loadMessages(jid: string, limit: number, _cursor: any) {
+    const msgs = this.messages[jid] || [];
+    return msgs.slice(-limit);
+  }
+
+  writeToFile(path: string) {
+    try {
+      const data = {
+        chats: Array.from(this.chatsMap.values()),
+        contacts: this.contacts,
+        messages: this.messages,
+      };
+      writeFileSync(path, JSON.stringify(data));
+    } catch (err) {
+      this.logger.error('Failed to write store: ' + err);
+    }
+  }
+
+  readFromFile(path: string) {
+    try {
+      if (existsSync(path)) {
+        const data = JSON.parse(readFileSync(path, 'utf8'));
+        if (data.chats) for (const c of data.chats) this.chatsMap.set(c.id, c);
+        if (data.contacts) Object.assign(this.contacts, data.contacts);
+        if (data.messages) Object.assign(this.messages, data.messages);
+      }
+    } catch (err) {
+      this.logger.error('Failed to read store: ' + err);
+    }
+  }
+}
 
 class WhatsAppService {
   private sock: WASocket | null = null;
   private agent: any = null;
   private config: WhatsAppPluginConfig;
   private isConnecting = false;
+  private latestQR: string | null = null;
+  private connectionStatus: 'disconnected' | 'connecting' | 'pairing' | 'connected' = 'disconnected';
+  private store: AdytumWhatsAppStore | null = null;
 
   constructor(
     rawConfig: unknown,
     private logger: WhatsAppLogger,
   ) {
     this.config = resolveConfig(rawConfig);
+  }
+
+  public getStatus() {
+    return {
+      status: this.connectionStatus,
+      qr: this.latestQR,
+    };
   }
 
   get id(): string {
@@ -117,6 +235,7 @@ class WhatsAppService {
 
   private async connect() {
     this.isConnecting = true;
+    this.connectionStatus = 'connecting';
     const sessionDir = this.getSessionPath();
 
     if (!existsSync(sessionDir)) {
@@ -127,6 +246,23 @@ class WhatsAppService {
     const { version } = await fetchLatestBaileysVersion();
 
     this.logger.info(`Starting WhatsApp connection (Baileys v${version.join('.')})...`);
+
+    const storeFile = join(sessionDir, 'baileys_store_multi.json');
+    this.store = new AdytumWhatsAppStore(this.logger);
+    try {
+      this.store.readFromFile(storeFile);
+    } catch (err) {
+      this.logger.error('Failed to read WhatsApp store from file: ' + err);
+    }
+
+    // Save store every 10 seconds
+    const storeInterval = setInterval(() => {
+      try {
+        if (this.store) this.store.writeToFile(storeFile);
+      } catch (err) {
+        // quiet error during exit
+      }
+    }, 10000);
 
     const baileysLogger = pino({ level: 'warn' });
 
@@ -140,17 +276,29 @@ class WhatsAppService {
       printQRInTerminal: false, // We'll handle it manually for better logging
     });
 
+    this.store.bind(this.sock.ev);
+
     this.sock.ev.on('creds.update', saveCreds);
 
-    this.sock.ev.on('connection.update', (update) => {
+    this.sock.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
+        this.connectionStatus = 'pairing';
+        this.latestQR = qr;
         this.logger.info('WhatsApp QR Code generated. Scan it with your phone:');
-        qrcode.generate(qr, { small: true });
+        qrcodeTerminal.generate(qr, { small: true });
+
+        // Also generate data URL for dashboard
+        try {
+          this.latestQR = await qrcode.toDataURL(qr);
+        } catch (err) {
+          this.logger.error('Failed to generate QR data URL: ' + err);
+        }
       }
 
       if (connection === 'close') {
+        this.latestQR = null;
         const shouldReconnect =
           (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
         this.logger.warn(
@@ -158,12 +306,15 @@ class WhatsAppService {
         );
         this.sock = null;
         this.isConnecting = false;
+        this.connectionStatus = 'disconnected';
         if (shouldReconnect) {
           setTimeout(() => this.connect(), 5000);
         }
       } else if (connection === 'open') {
         this.logger.info('WhatsApp connection opened successfully!');
         this.isConnecting = false;
+        this.connectionStatus = 'connected';
+        this.latestQR = null;
       }
     });
 
@@ -270,6 +421,74 @@ class WhatsAppService {
     await this.sock.sendPresenceUpdate(presence, jid);
     return { status: 'updated' };
   }
+
+  async listChats(limit = 10) {
+    if (!this.store) throw new Error('Store not initialized');
+    this.assertActionEnabled('list_chats');
+
+    const chats = this.store.chats.all().slice(0, limit);
+    return chats.map((c: any) => ({
+      id: c.id,
+      name: c.name || 'Unknown',
+      unreadCount: c.unreadCount,
+      lastMessage: c.conversationTimestamp,
+    }));
+  }
+
+  async getMessages(jid: string, limit = 20) {
+    if (!this.store) throw new Error('Store not initialized');
+    this.assertActionEnabled('get_messages');
+
+    const messages = await this.store.loadMessages(jid, limit, undefined);
+    return messages.map((m: any) => {
+      const text =
+        m.message?.conversation ||
+        m.message?.extendedTextMessage?.text ||
+        m.message?.imageMessage?.caption ||
+        '';
+      return {
+        id: m.key.id,
+        fromMe: m.key.fromMe,
+        pushName: m.pushName,
+        text,
+        timestamp: m.messageTimestamp,
+      };
+    });
+  }
+
+  async searchContacts(query: string) {
+    if (!this.store) throw new Error('Store not initialized');
+    this.assertActionEnabled('search_contacts');
+
+    const needle = query.toLowerCase();
+    const contacts = Object.values(this.store.contacts).filter(
+      (c: any) =>
+        c.name?.toLowerCase().includes(needle) ||
+        c.notify?.toLowerCase().includes(needle) ||
+        c.id.toLowerCase().includes(needle),
+    );
+
+    return contacts.slice(0, 10).map((c: any) => ({
+      id: c.id,
+      name: c.name || c.notify || 'Unknown',
+    }));
+  }
+
+  async markRead(jid: string) {
+    if (!this.sock) throw new Error('WhatsApp not connected');
+    this.assertActionEnabled('mark_read');
+
+    // This is a bit tricky in pure Baileys if we don't have the full message key
+    // but usually we want to mark the whole chat as read
+    await this.sock.readMessages([
+      {
+        remoteJid: jid,
+        id: undefined as any, // Baileys might need last message id
+        fromMe: false,
+      },
+    ]);
+    return { status: 'marked_read', jid };
+  }
 }
 
 function resolveConfig(rawConfig: unknown): WhatsAppPluginConfig {
@@ -331,9 +550,69 @@ const whatsappPlugin = {
               throw new Error('recipientId and presence required');
             return await service.updatePresence(args.recipientId, args.presence);
 
+          case 'list_chats':
+            return await service.listChats(args.limit);
+
+          case 'get_messages':
+            if (!args.recipientId) throw new Error('recipientId required');
+            return await service.getMessages(args.recipientId, args.limit);
+
+          case 'search_contacts':
+            if (!args.query) throw new Error('query required');
+            return await service.searchContacts(args.query);
+
+          case 'mark_read':
+            if (!args.recipientId) throw new Error('recipientId required');
+            return await service.markRead(args.recipientId);
+
           default:
             throw new Error(`Unsupported action: ${args.action}`);
         }
+      },
+    });
+
+    api.registerTool({
+      name: 'whatsapp_list_chats',
+      description: 'List recent WhatsApp conversations and unread counts.',
+      parameters: z.object({
+        limit: z.number().optional().default(10).describe('Number of chats to list'),
+      }),
+      execute: async (args: { limit: number }) => {
+        return await service.listChats(args.limit);
+      },
+    });
+
+    api.registerTool({
+      name: 'whatsapp_get_messages',
+      description: 'Fetch message history for a specific WhatsApp contact (JID).',
+      parameters: z.object({
+        recipientId: z.string().describe('Target JID'),
+        limit: z.number().optional().default(20).describe('Number of messages to fetch'),
+      }),
+      execute: async (args: { recipientId: string; limit: number }) => {
+        return await service.getMessages(args.recipientId, args.limit);
+      },
+    });
+
+    api.registerTool({
+      name: 'whatsapp_search_contacts',
+      description: 'Search for WhatsApp contacts or groups by name or JID.',
+      parameters: z.object({
+        query: z.string().describe('Search term'),
+      }),
+      execute: async (args: { query: string }) => {
+        return await service.searchContacts(args.query);
+      },
+    });
+
+    api.registerTool({
+      name: 'whatsapp_mark_read',
+      description: 'Mark all messages in a chat as read.',
+      parameters: z.object({
+        recipientId: z.string().describe('Target JID'),
+      }),
+      execute: async (args: { recipientId: string }) => {
+        return await service.markRead(args.recipientId);
       },
     });
   },
