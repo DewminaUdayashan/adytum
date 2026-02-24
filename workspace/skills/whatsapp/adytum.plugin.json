@@ -1,0 +1,14 @@
+{
+  "id": "whatsapp",
+  "name": "WhatsApp",
+  "description": "WhatsApp integration via wacli CLI.",
+  "version": "0.1.0",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": { "type": "boolean", "default": true },
+      "wacliPath": { "type": "string", "default": "wacli" },
+      "storeDir": { "type": "string" }
+    }
+  }
+}
