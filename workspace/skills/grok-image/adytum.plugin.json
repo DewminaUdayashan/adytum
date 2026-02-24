@@ -1,0 +1,61 @@
+{
+  "id": "grok-image",
+  "name": "Grok Image",
+  "description": "Generate images using xAI's Grok Imagine model.",
+  "metadata": {
+    "primaryEnv": "XAI_API_KEY"
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": { "type": "boolean", "default": true },
+      "model": {
+        "type": "string",
+        "default": "grok-imagine-image",
+        "description": "xAI model to use for image generation."
+      },
+      "resolution": {
+        "type": "string",
+        "enum": ["1k", "2k"],
+        "default": "1k",
+        "description": "Output image resolution."
+      },
+      "aspect_ratio": {
+        "type": "string",
+        "enum": [
+          "1:1",
+          "16:9",
+          "9:16",
+          "4:3",
+          "3:4",
+          "3:2",
+          "2:3",
+          "2:1",
+          "1:2",
+          "19.5:9",
+          "9:19.5",
+          "20:9",
+          "9:20",
+          "auto"
+        ],
+        "default": "1:1",
+        "description": "Aspect ratio of the generated image."
+      }
+    }
+  },
+  "uiHints": {
+    "model": {
+      "label": "Model",
+      "help": "The Grok model ID for image generation."
+    },
+    "resolution": {
+      "label": "Resolution",
+      "help": "Select output resolution (1k or 2k)."
+    },
+    "aspect_ratio": {
+      "label": "Aspect Ratio",
+      "help": "Choose the dimensions of the generated image."
+    }
+  }
+}
