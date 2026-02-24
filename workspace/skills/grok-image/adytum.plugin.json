@@ -10,6 +10,10 @@
     "additionalProperties": false,
     "properties": {
       "enabled": { "type": "boolean", "default": true },
+      "apiKey": {
+        "type": "string",
+        "description": "Optional: override XAI_API_KEY if not set in secrets."
+      },
       "model": {
         "type": "string",
         "default": "grok-imagine-image",
