@@ -1,42 +1,43 @@
 ---
-name: whatsapp
-description: Send WhatsApp messages and search chat history via the wacli CLI.
-homepage: https://wacli.sh
-metadata:
-  {
-    'emoji': '📱',
-    'requires': { 'bins': ['wacli'] },
-    'install':
-      [
-        {
-          'id': 'brew',
-          'kind': 'brew',
-          'formula': 'steipete/tap/wacli',
-          'bins': ['wacli'],
-          'label': 'Install wacli (brew)',
-        },
-      ],
-  }
+name: WhatsApp
+description: Native WhatsApp skill for Adytum to send and receive messages without an official API.
 ---
 
-# WhatsApp
+# WhatsApp Skill (Native)
 
-This skill allows me to interact with WhatsApp via the `wacli` command-line interface. I can send text messages, group messages, and search through chat history.
+This skill allows the Adytum agent to interact directly with WhatsApp using the WhatsApp Web protocol (via `baileys`). It does not require a Business API or Twilio; instead, you link it as a "Linked Device" just like WhatsApp Web on your computer.
 
-## Support
+## Features
 
-- Sending text messages to individual contacts.
-- Sending messages to groups.
-- Searching chats and messages.
-- Listing active chats.
+- **Inbound Messaging**: The agent can listen to incoming messages from WhatsApp users (and optionally groups) and reply intelligently.
+- **Outbound Messaging**: Proactively send text, images, and documents.
+- **No API Fees**: Uses your existing personal or business account.
+- **Privacy**: Messaging happens through your own linked device session.
 
-## Prerequisites
+## Setup Instructions
 
-- `wacli` must be installed on the system.
-- Initial setup and authentication must be done via `wacli auth` in the terminal.
+### 1. Enable the Skill
 
-## Usage
+In the Adytum UI Dashboard, navigate to **Skills** > **WhatsApp** and ensure it is **Enabled**.
 
-Use this skill when you need to contact someone on WhatsApp or find information from WhatsApp conversations.
-Direct chats: `<number>@s.whatsapp.net`
-Groups: `<id>@g.us`
+### 2. Scan the QR Code
+
+Once enabled, Adytum will generate a QR code for linking.
+
+1. Check your **Adytum Gateway terminal/logs**.
+2. You will see a QR code printed in the console.
+3. Open WhatsApp on your phone.
+4. Go to **Settings** > **Linked Devices** > **Link a Device**.
+5. Scan the QR code shown in the terminal.
+
+### 3. Verification
+
+Once scanned, the terminal will log `WhatsApp connection opened successfully!`. Adytum is now connected.
+
+## Configuration Options
+
+- **Respond to Groups**: Disabled by default. Enable it if you want the agent to participate in group chats.
+- **Allowed Remote JIDs**: If you want to restrict the agent to only respond to specific phone numbers or groups, list their JIDs here (e.g., `1234567890@s.whatsapp.net`).
+- **Session Persistence**: Session data is stored locally in `~/.adytum/data/sessions/whatsapp` by default, so you won't need to scan the QR code every time the gateway restarts.
+
+> **Note**: To prevent being flagged for spam, avoid having the agent send a high volume of unsolicited messages. Always adhere to WhatsApp's Terms of Service.

@@ -1,14 +1,64 @@
 {
   "id": "whatsapp",
   "name": "WhatsApp",
-  "description": "WhatsApp integration via wacli CLI.",
-  "version": "0.1.0",
+  "description": "Native WhatsApp skill using Baileys. Scan the QR code in the gateway terminal to link your account.",
+  "metadata": {
+    "communication": true
+  },
   "configSchema": {
     "type": "object",
+    "additionalProperties": false,
     "properties": {
       "enabled": { "type": "boolean", "default": true },
-      "wacliPath": { "type": "string", "default": "wacli" },
-      "storeDir": { "type": "string" }
+      "sessionName": { "type": "string", "default": "adytum-whatsapp" },
+      "sessionPath": {
+        "type": "string",
+        "description": "Absolute path to store session data. Defaults to ~/.adytum/data/sessions/whatsapp"
+      },
+      "listenIncoming": { "type": "boolean", "default": true },
+      "respondToGroups": { "type": "boolean", "default": false },
+      "allowedRemoteJids": {
+        "type": "array",
+        "items": { "type": "string" },
+        "default": []
+      },
+      "actionPermissions": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "send_message": { "type": "boolean", "default": true },
+          "send_image": { "type": "boolean", "default": true },
+          "send_document": { "type": "boolean", "default": true },
+          "presence": { "type": "boolean", "default": true }
+        }
+      }
     }
+  },
+  "uiHints": {
+    "sessionName": {
+      "label": "Session Name",
+      "help": "Identifier for this WhatsApp session."
+    },
+    "sessionPath": {
+      "label": "Session Path",
+      "help": "Custom absolute path for session data (optional).",
+      "advanced": true
+    },
+    "listenIncoming": {
+      "label": "Listen to Incoming",
+      "help": "If enabled, Adytum will monitor and respond to WhatsApp messages.",
+      "advanced": true
+    },
+    "respondToGroups": {
+      "label": "Respond to Groups",
+      "help": "If enabled, Adytum will also respond to group messages.",
+      "advanced": true
+    },
+    "allowedRemoteJids": {
+      "label": "Allowed JIDs",
+      "help": "List of specific WhatsApp IDs (JIDs) allowed to interact with the bot.",
+      "advanced": true
+    },
+    "actionPermissions": { "advanced": true }
   }
 }
