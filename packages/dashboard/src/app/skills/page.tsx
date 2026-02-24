@@ -5,10 +5,10 @@
  * @description Defines route-level UI composition and page behavior.
  */
 
-import { useEffect, useMemo, useState } from 'react';
-import { gatewayFetch } from '@/lib/api';
 import { Badge, Button, Card, Checkbox, EmptyState, Spinner } from '@/components/ui';
-import { Puzzle, Save, RefreshCw, Wrench, ShieldCheck } from 'lucide-react';
+import { gatewayFetch } from '@/lib/api';
+import { Puzzle, RefreshCw, Save, ShieldCheck, Wrench } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 
 type SkillUiHint = {
   label?: string;
@@ -640,6 +640,20 @@ export default function SkillsPage() {
     }
   };
 
+  const connectWhatsapp = async (skillId: string) => {
+    try {
+      setWhatsappStatusLoading(true);
+      await gatewayFetch(`/api/skills/${skillId}/whatsapp/connect`, {
+        method: 'POST',
+      });
+      await loadWhatsappStatus(skillId);
+    } catch (err: any) {
+      setError(err.message || String(err));
+    } finally {
+      setWhatsappStatusLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (selectedSkillId === 'whatsapp') {
       loadWhatsappStatus(selectedSkillId);
@@ -1201,12 +1215,20 @@ export default function SkillsPage() {
                               </div>
                             </div>
                           ) : (
-                            <div className="flex flex-col items-center gap-2 py-6 text-center">
+                            <div className="flex flex-col items-center gap-4 py-6 text-center">
                               <p className="text-sm text-text-muted">
                                 {whatsappStatus.status === 'connecting'
                                   ? 'Initializing connection...'
-                                  : 'Disconnected. Ensure the skill is enabled and configured.'}
+                                  : 'Disconnected or logged out. Click the button below to start pairing.'}
                               </p>
+                              <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={() => connectWhatsapp(skill.id)}
+                                disabled={whatsappStatusLoading || whatsappStatus.status === 'connecting'}
+                              >
+                                {whatsappStatus.status === 'pairing' ? 'Get New QR' : 'Connect WhatsApp'}
+                              </Button>
                             </div>
                           )}
                         </div>

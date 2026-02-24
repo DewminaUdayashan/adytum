@@ -3,21 +3,19 @@
  * @description Native WhatsApp skill for Adytum using @whiskeysockets/baileys.
  */
 
-import { join } from 'node:path';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
-import { z } from 'zod';
-import pino from 'pino';
+import type { Boom } from '@hapi/boom';
 import makeWASocket, {
   DisconnectReason,
-  useMultiFileAuthState,
   fetchLatestBaileysVersion,
-  type WASocket,
-  type AuthenticationState,
+  useMultiFileAuthState,
+  type WASocket
 } from '@whiskeysockets/baileys';
-// @ts-expect-error missing types for qrcode-terminal
-import qrcodeTerminal from 'qrcode-terminal';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+import pino from 'pino';
 import qrcode from 'qrcode';
-import type { Boom } from '@hapi/boom';
+import qrcodeTerminal from 'qrcode-terminal';
+import { z } from 'zod';
 
 const WHATSAPP_ACTIONS = [
   'send_message',
@@ -183,11 +181,14 @@ class WhatsAppService {
   private connectionStatus: 'disconnected' | 'connecting' | 'pairing' | 'connected' = 'disconnected';
   private store: AdytumWhatsAppStore | null = null;
 
+  private storeInterval: NodeJS.Timeout | null = null;
+
   constructor(
     rawConfig: unknown,
     private logger: WhatsAppLogger,
   ) {
     this.config = resolveConfig(rawConfig);
+    this.store = new AdytumWhatsAppStore(this.logger);
   }
 
   public getStatus() {
@@ -217,7 +218,11 @@ class WhatsAppService {
   private getSessionPath(): string {
     if (this.config.sessionPath) return this.config.sessionPath;
     const home = process.env.HOME || process.env.USERPROFILE || '.';
-    return join(home, '.adytum', 'data', 'sessions', 'whatsapp', this.config.sessionName);
+    const sessionDir = join(home, '.adytum', 'data', 'sessions', 'whatsapp', this.config.sessionName);
+    if (!existsSync(sessionDir)) {
+      mkdirSync(sessionDir, { recursive: true });
+    }
+    return sessionDir;
   }
 
   async start(ctx: { agent: any }): Promise<void> {
@@ -228,41 +233,52 @@ class WhatsAppService {
       return;
     }
 
-    if (this.isConnecting || this.sock) return;
+    if (this.isConnecting || (this.sock && this.isReady())) {
+      this.logger.info('Already connecting or connected.');
+      return;
+    }
+
+    // Load store once at start
+    const sessionDir = this.getSessionPath();
+    const storeFile = join(sessionDir, 'baileys_store_multi.json');
+    try {
+      this.store!.readFromFile(storeFile);
+    } catch (err) {
+      this.logger.warn('Initial store read failed (might be first run): ' + err);
+    }
+
+    // Start save interval if not already running
+    if (!this.storeInterval) {
+      this.storeInterval = setInterval(() => {
+        try {
+          if (this.store) this.store.writeToFile(storeFile);
+        } catch (err) {
+          // ignore
+        }
+      }, 30000); // 30s is enough
+    }
 
     await this.connect();
   }
 
   private async connect() {
+    if (this.sock) {
+      try {
+        this.sock.end(undefined);
+      } catch {
+        // ignore
+      }
+      this.sock = null;
+    }
+
     this.isConnecting = true;
     this.connectionStatus = 'connecting';
     const sessionDir = this.getSessionPath();
-
-    if (!existsSync(sessionDir)) {
-      mkdirSync(sessionDir, { recursive: true });
-    }
 
     const { state, saveCreds } = await useMultiFileAuthState(sessionDir);
     const { version } = await fetchLatestBaileysVersion();
 
     this.logger.info(`Starting WhatsApp connection (Baileys v${version.join('.')})...`);
-
-    const storeFile = join(sessionDir, 'baileys_store_multi.json');
-    this.store = new AdytumWhatsAppStore(this.logger);
-    try {
-      this.store.readFromFile(storeFile);
-    } catch (err) {
-      this.logger.error('Failed to read WhatsApp store from file: ' + err);
-    }
-
-    // Save store every 10 seconds
-    const storeInterval = setInterval(() => {
-      try {
-        if (this.store) this.store.writeToFile(storeFile);
-      } catch (err) {
-        // quiet error during exit
-      }
-    }, 10000);
 
     const baileysLogger = pino({ level: 'warn' });
 
@@ -273,10 +289,10 @@ class WhatsAppService {
         creds: state.creds,
         keys: state.keys,
       },
-      printQRInTerminal: false, // We'll handle it manually for better logging
+      printQRInTerminal: true, // Restore terminal QR for backup
     });
 
-    this.store.bind(this.sock.ev);
+    this.store!.bind(this.sock.ev);
 
     this.sock.ev.on('creds.update', saveCreds);
 
@@ -298,23 +314,43 @@ class WhatsAppService {
       }
 
       if (connection === 'close') {
-        this.latestQR = null;
-        const shouldReconnect =
-          (lastDisconnect?.error as Boom)?.output?.statusCode !== DisconnectReason.loggedOut;
+        const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
+        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+        
         this.logger.warn(
-          `WhatsApp connection closed. Reason: ${lastDisconnect?.error}. Reconnecting: ${shouldReconnect}`,
+          `WhatsApp connection closed. Status: ${statusCode}. Error: ${lastDisconnect?.error}. Reconnecting: ${shouldReconnect}`,
         );
+        
         this.sock = null;
         this.isConnecting = false;
         this.connectionStatus = 'disconnected';
+
+        // Attempt to reconnect if not logged out
         if (shouldReconnect) {
+          this.logger.info('Attempting to reconnect in 5s...');
           setTimeout(() => this.connect(), 5000);
+        } else {
+          this.logger.error('WhatsApp logged out or permanent failure. Clearing session for re-pairing...');
+          this.latestQR = null;
+          
+          // Clear credentials on logout to force a new QR next time
+          try {
+            const sessionDir = this.getSessionPath();
+            const credsFile = join(sessionDir, 'creds.json');
+            if (existsSync(credsFile)) {
+              require('node:fs').unlinkSync(credsFile);
+            }
+          } catch (err) {
+            this.logger.error('Failed to clear credentials: ' + err);
+          }
+
+          this.logger.info('Please trigger a reconnection via the dashboard or wait for next start.');
         }
       } else if (connection === 'open') {
         this.logger.info('WhatsApp connection opened successfully!');
         this.isConnecting = false;
         this.connectionStatus = 'connected';
-        this.latestQR = null;
+        this.latestQR = null; // ONLY clear when connected
       }
     });
 
@@ -330,6 +366,10 @@ class WhatsAppService {
   }
 
   async stop(): Promise<void> {
+    if (this.storeInterval) {
+      clearInterval(this.storeInterval);
+      this.storeInterval = null;
+    }
     if (this.sock) {
       this.sock.end(undefined);
       this.sock = null;
@@ -613,6 +653,17 @@ const whatsappPlugin = {
       }),
       execute: async (args: { recipientId: string }) => {
         return await service.markRead(args.recipientId);
+      },
+    });
+
+    api.registerTool({
+      name: 'whatsapp_connect',
+      description: 'Trigger a WhatsApp connection or re-pairing attempt.',
+      parameters: z.object({}),
+      execute: async () => {
+        if (service.isReady()) return 'Already connected.';
+        await service.start({ agent: null });
+        return 'Connection attempt started. Check terminal or dashboard for QR code.';
       },
     });
   },
