@@ -42,4 +42,7 @@ export async function skillRoutes(app: FastifyInstance) {
   app.get('/api/skills/:id/whatsapp/status', (req, reply) =>
     controller.getWhatsAppStatus(req, reply),
   );
+  app.post('/api/skills/:id/whatsapp/connect', (req, reply) =>
+    controller.connectWhatsApp(req, reply),
+  );
 }

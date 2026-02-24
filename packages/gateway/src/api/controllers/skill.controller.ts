@@ -4,7 +4,7 @@
  */
 
 import { FastifyReply, FastifyRequest } from 'fastify';
-import { singleton, inject } from 'tsyringe';
+import { inject, singleton } from 'tsyringe';
 import { SkillService } from '../../application/services/skill-service.js';
 import { loadConfig } from '../../config.js';
 import { AppError } from '../../domain/errors/app-error.js';
@@ -303,6 +303,20 @@ export class SkillController {
       throw new AppError('WhatsApp status is supported only for whatsapp skill.', 400);
     }
     return this.skillService.getWhatsAppStatus();
+  }
+
+  /**
+   * Triggers WhatsApp connection.
+   * @param request - Request.
+   * @param reply - Reply.
+   */
+  public async connectWhatsApp(request: FastifyRequest, reply: FastifyReply) {
+    const { id } = request.params as { id: string };
+    if (id !== 'whatsapp') {
+      throw new AppError('WhatsApp connect is supported only for whatsapp skill.', 400);
+    }
+    await this.skillService.connectWhatsApp();
+    return { success: true };
   }
 
   private resolvePublicBaseUrl(request: FastifyRequest): string {
