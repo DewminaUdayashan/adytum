@@ -6,14 +6,15 @@
 import { join } from 'node:path';
 import { existsSync, mkdirSync } from 'node:fs';
 import { z } from 'zod';
+import pino from 'pino';
 import makeWASocket, {
   DisconnectReason,
   useMultiFileAuthState,
   fetchLatestBaileysVersion,
-  makeCacheableSignalKeyStore,
   type WASocket,
   type AuthenticationState,
 } from '@whiskeysockets/baileys';
+// @ts-expect-error missing types for qrcode-terminal
 import qrcode from 'qrcode-terminal';
 import type { Boom } from '@hapi/boom';
 
@@ -127,11 +128,14 @@ class WhatsAppService {
 
     this.logger.info(`Starting WhatsApp connection (Baileys v${version.join('.')})...`);
 
+    const baileysLogger = pino({ level: 'warn' });
+
     this.sock = makeWASocket({
       version,
+      logger: baileysLogger,
       auth: {
         creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, this.logger as any),
+        keys: state.keys,
       },
       printQRInTerminal: false, // We'll handle it manually for better logging
     });
@@ -255,6 +259,7 @@ class WhatsAppService {
       document: { url: params.documentUrl },
       fileName: params.fileName,
       caption: params.caption,
+      mimetype: 'application/octet-stream', // Generic fallback
     });
     return { status: 'sent', recipient: params.recipientId };
   }
