@@ -1,0 +1,59 @@
+{
+  "id": "telegram",
+  "name": "Telegram",
+  "description": "Native Telegram skill for inbound and outbound messaging.",
+  "metadata": {
+    "communication": true
+  },
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": { "type": "boolean", "default": true },
+      "botToken": { "type": "string" },
+      "tokenEnv": { "type": "string", "default": "ADYTUM_TELEGRAM_BOT_TOKEN" },
+      "defaultChatId": { "type": "string" },
+      "defaultChatIdEnv": { "type": "string", "default": "ADYTUM_TELEGRAM_DEFAULT_CHAT_ID" },
+      "allowedUserIds": {
+        "type": "array",
+        "items": { "type": "number" },
+        "default": []
+      },
+      "listenIncoming": { "type": "boolean", "default": true },
+      "actionPermissions": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "send_message": { "type": "boolean", "default": true },
+          "send_photo": { "type": "boolean", "default": true },
+          "send_document": { "type": "boolean", "default": true },
+          "send_poll": { "type": "boolean", "default": true },
+          "edit_message": { "type": "boolean", "default": true },
+          "delete_message": { "type": "boolean", "default": true }
+        }
+      }
+    }
+  },
+  "uiHints": {
+    "botToken": {
+      "label": "Bot Token",
+      "help": "Required. Paste your Telegram bot token from BotFather.",
+      "sensitive": true
+    },
+    "tokenEnv": { "advanced": true },
+    "defaultChatId": {
+      "label": "Default Chat ID",
+      "help": "Used when a send action has no target chat."
+    },
+    "defaultChatIdEnv": { "advanced": true },
+    "allowedUserIds": { "advanced": true },
+    "listenIncoming": { "advanced": true },
+    "actionPermissions": { "advanced": true },
+    "actionPermissions.send_message": { "advanced": true },
+    "actionPermissions.send_photo": { "advanced": true },
+    "actionPermissions.send_document": { "advanced": true },
+    "actionPermissions.send_poll": { "advanced": true },
+    "actionPermissions.edit_message": { "advanced": true },
+    "actionPermissions.delete_message": { "advanced": true }
+  }
+}

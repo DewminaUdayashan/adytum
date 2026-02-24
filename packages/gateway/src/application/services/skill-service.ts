@@ -533,6 +533,18 @@ export class SkillService {
   }
 
   /**
+   * Retrieves WhatsApp status.
+   * @returns WhatsApp status.
+   */
+  public getWhatsAppStatus() {
+    const service = this.loader.getService('whatsapp-service');
+    if (!service || typeof (service as any).getStatus !== 'function') {
+      return { status: 'disconnected', qr: null };
+    }
+    return (service as any).getStatus();
+  }
+
+  /**
    * Executes reload skills.
    */
   public async reloadSkills(): Promise<void> {

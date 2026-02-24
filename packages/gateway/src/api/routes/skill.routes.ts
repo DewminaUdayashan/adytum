@@ -39,4 +39,7 @@ export async function skillRoutes(app: FastifyInstance) {
   app.delete('/api/skills/:id/oauth/google/accounts/:accountId', (req, reply) =>
     controller.removeEmailCalendarAccount(req, reply),
   );
+  app.get('/api/skills/:id/whatsapp/status', (req, reply) =>
+    controller.getWhatsAppStatus(req, reply),
+  );
 }

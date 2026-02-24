@@ -158,7 +158,10 @@ function humanize(label: string): string {
     .replace(/[_.-]+/g, ' ')
     .replace(/\s+/g, ' ')
     .trim()
-    .replace(/^./, (c) => c.toUpperCase());
+    .toLowerCase()
+    .split(' ')
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(' ');
 }
 
 function getAtPath(obj: Record<string, unknown> | undefined, path: string[]): unknown {
@@ -421,6 +424,10 @@ export default function SkillsPage() {
   >({});
   const [oauthBusySkillId, setOauthBusySkillId] = useState<string | null>(null);
   const [oauthLabelDraftBySkill, setOauthLabelDraftBySkill] = useState<Record<string, string>>({});
+  const [whatsappStatus, setWhatsappStatus] = useState<{ status: string; qr: string | null } | null>(
+    null,
+  );
+  const [whatsappStatusLoading, setWhatsappStatusLoading] = useState(false);
 
   const loadSkills = async () => {
     try {
@@ -618,6 +625,30 @@ export default function SkillsPage() {
       setOauthBusySkillId((current) => (current === skillId ? null : current));
     }
   };
+
+  const loadWhatsappStatus = async (skillId: string) => {
+    try {
+      setWhatsappStatusLoading(true);
+      const res = await gatewayFetch<{ status: string; qr: string | null }>(
+        `/api/skills/${skillId}/whatsapp/status`,
+      );
+      setWhatsappStatus(res);
+    } catch (err: unknown) {
+      console.error('Failed to load WhatsApp status:', err);
+    } finally {
+      setWhatsappStatusLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedSkillId === 'whatsapp') {
+      loadWhatsappStatus(selectedSkillId);
+      const interval = setInterval(() => loadWhatsappStatus(selectedSkillId), 5000);
+      return () => clearInterval(interval);
+    } else {
+      setWhatsappStatus(null);
+    }
+  }, [selectedSkillId]);
 
   const removeOauthAccount = async (skillId: string, accountId: string) => {
     try {
@@ -841,7 +872,7 @@ export default function SkillsPage() {
                       >
                         <div className="flex items-center justify-between gap-2">
                           <p className="truncate text-sm font-semibold text-text-primary">
-                            {skill.name}
+                            {humanize(skill.name || skill.id)}
                           </p>
                           <Badge
                             variant={
@@ -884,7 +915,7 @@ export default function SkillsPage() {
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
                             <h2 className="text-lg font-semibold text-text-primary">
-                              {skill.name}
+                              {humanize(skill.name || skill.id)}
                             </h2>
                             <Badge
                               variant={
@@ -1116,6 +1147,70 @@ export default function SkillsPage() {
                         </div>
                       )}
 
+                      {skill.id === 'whatsapp' && whatsappStatus && (
+                        <div className="space-y-4 rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4">
+                          <div className="flex items-center justify-between">
+                            <h3 className="text-sm font-semibold text-text-primary">
+                              WhatsApp Connection
+                            </h3>
+                            <div className="flex items-center gap-2">
+                              {whatsappStatusLoading && <Spinner size="sm" />}
+                              <Badge
+                                variant={
+                                  whatsappStatus.status === 'connected'
+                                    ? 'success'
+                                    : whatsappStatus.status === 'pairing'
+                                      ? 'warning'
+                                      : 'error'
+                                }
+                              >
+                                {whatsappStatus.status.toUpperCase()}
+                              </Badge>
+                            </div>
+                          </div>
+
+                          {whatsappStatus.status === 'pairing' && whatsappStatus.qr ? (
+                            <div className="flex flex-col items-center gap-4 py-4">
+                              <p className="text-center text-sm text-text-muted">
+                                Scan this QR code with your phone to link WhatsApp:
+                              </p>
+                              <div className="rounded-xl border-4 border-white bg-white p-2 shadow-lg">
+                                <img
+                                  src={whatsappStatus.qr}
+                                  alt="WhatsApp QR Code"
+                                  className="h-64 w-64"
+                                />
+                              </div>
+                              <p className="text-center text-xs text-text-muted">
+                                Code refreshes automatically. Pairing may take a few seconds after
+                                scan.
+                              </p>
+                            </div>
+                          ) : whatsappStatus.status === 'connected' ? (
+                            <div className="flex flex-col items-center gap-2 py-6 text-center">
+                              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-success/20 text-success">
+                                <ShieldCheck className="h-6 w-6" />
+                              </div>
+                              <div>
+                                <p className="text-sm font-semibold text-text-primary">
+                                  WhatsApp is Connected
+                                </p>
+                                <p className="text-xs text-text-muted">
+                                  Your messages and tools are ready to use.
+                                </p>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex flex-col items-center gap-2 py-6 text-center">
+                              <p className="text-sm text-text-muted">
+                                {whatsappStatus.status === 'connecting'
+                                  ? 'Initializing connection...'
+                                  : 'Disconnected. Ensure the skill is enabled and configured.'}
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      )}
                       {canRenderConfig ? (
                         <div className="space-y-3 rounded-lg border border-border-primary/60 bg-bg-primary/30 p-4">
                           <h3 className="text-sm font-semibold text-text-primary">Configuration</h3>
