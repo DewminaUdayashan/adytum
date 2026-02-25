@@ -2,11 +2,20 @@
   "id": "nano-banana",
   "name": "Nano Banana",
   "description": "AI-driven image generation power by Google Gemini.",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "configSchema": {
     "type": "object",
     "properties": {
-      "model": { "type": "string", "default": "gemini-2.0-flash-image" }
+      "model": {
+        "type": "string",
+        "default": "gemini-2.0-flash-image",
+        "description": "The Gemini model to use for image generation."
+      },
+      "apiKey": {
+        "type": "string",
+        "format": "password",
+        "description": "Google Gemini API Key for this skill. If not provided, it will fallback to the global Google API key."
+      }
     }
   },
   "always": true
