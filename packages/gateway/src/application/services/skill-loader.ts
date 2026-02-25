@@ -1063,21 +1063,15 @@ export class SkillLoader {
     }
 
     const id = typeof raw.id === 'string' ? raw.id.trim() : '';
-    const configSchema = isRecord(raw.configSchema) ? raw.configSchema : null;
+    const configSchema = isRecord(raw.configSchema)
+      ? raw.configSchema
+      : { type: 'object', properties: {} };
 
     if (!id) {
       return {
         ok: false,
         manifestPath,
         error: 'Manifest requires non-empty "id"',
-      };
-    }
-
-    if (!configSchema) {
-      return {
-        ok: false,
-        manifestPath,
-        error: 'Manifest requires "configSchema" object',
       };
     }
 
