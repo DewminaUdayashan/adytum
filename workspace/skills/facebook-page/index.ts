@@ -26,25 +26,55 @@ class FacebookPageService {
   }
 
   get id(): string {
-    return 'facebook-page-service';
+    return 'facebook-page';
+  }
+
+  async start() {
+    this.logger.info('Facebook Page service started.');
+  }
+
+  async stop() {
+    this.logger.info('Facebook Page service stopped.');
   }
 
   private async request(path: string, options: RequestInit = {}) {
+    if (!path || path.includes('undefined')) {
+      throw new Error(
+        `Invalid Facebook API path: "${path}". Ensure all post/comment IDs are valid.`,
+      );
+    }
+
     const url = new URL(`${FACEBOOK_BASE_URL}/${path}`);
     url.searchParams.append('access_token', this.config.pageAccessToken);
 
+    const headers: Record<string, string> = {
+      ...((options.headers as Record<string, string>) || {}),
+    };
+
+    // Default to JSON if body is a plain object and no Content-Type is set
+    if (options.body && typeof options.body === 'string' && !headers['Content-Type']) {
+      headers['Content-Type'] = 'application/json';
+    }
+
     const response = await fetch(url.toString(), {
       ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
+      headers,
     });
 
     const data = await response.json();
     if (!response.ok) {
+      const errorMsg = data.error?.message || response.statusText;
+      const errorCode = data.error?.code;
+
       this.logger.error(`Facebook API error: ${JSON.stringify(data)}`);
-      throw new Error(`Facebook API error: ${data.error?.message || response.statusText}`);
+
+      if (errorCode === 200 && errorMsg.includes('publish_actions')) {
+        throw new Error(
+          `Facebook Permission Error: The token used lacks permission to post. This usually happens when using a **User Access Token** instead of a **Page Access Token**. Please verify your configuration in SKILL.md.`,
+        );
+      }
+
+      throw new Error(`Facebook API error: ${errorMsg} (Code: ${errorCode})`);
     }
     return data;
   }
@@ -57,12 +87,16 @@ class FacebookPageService {
   }
 
   async postPhoto(imageUrl: string, caption?: string) {
+    const params = new URLSearchParams();
+    params.append('url', imageUrl);
+    if (caption) params.append('caption', caption);
+
     return this.request(`${this.config.pageId}/photos`, {
       method: 'POST',
-      body: JSON.stringify({
-        url: imageUrl,
-        caption: caption,
-      }),
+      body: params.toString(),
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
     });
   }
 
