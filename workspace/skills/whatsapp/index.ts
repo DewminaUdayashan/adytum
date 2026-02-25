@@ -8,9 +8,9 @@ import makeWASocket, {
   DisconnectReason,
   fetchLatestBaileysVersion,
   useMultiFileAuthState,
-  type WASocket
+  type WASocket,
 } from '@whiskeysockets/baileys';
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import pino from 'pino';
 import qrcode from 'qrcode';
@@ -208,7 +208,8 @@ class WhatsAppService {
   private config: WhatsAppPluginConfig;
   private isConnecting = false;
   private latestQR: string | null = null;
-  private connectionStatus: 'disconnected' | 'connecting' | 'pairing' | 'connected' = 'disconnected';
+  private connectionStatus: 'disconnected' | 'connecting' | 'pairing' | 'connected' =
+    'disconnected';
   private store: AdytumWhatsAppStore | null = null;
 
   private storeInterval: NodeJS.Timeout | null = null;
@@ -248,7 +249,14 @@ class WhatsAppService {
   private getSessionPath(): string {
     if (this.config.sessionPath) return this.config.sessionPath;
     const home = process.env.HOME || process.env.USERPROFILE || '.';
-    const sessionDir = join(home, '.adytum', 'data', 'sessions', 'whatsapp', this.config.sessionName);
+    const sessionDir = join(
+      home,
+      '.adytum',
+      'data',
+      'sessions',
+      'whatsapp',
+      this.config.sessionName,
+    );
     if (!existsSync(sessionDir)) {
       mkdirSync(sessionDir, { recursive: true });
     }
@@ -318,15 +326,6 @@ class WhatsAppService {
       this.logger.error('Failed to read WhatsApp store from file: ' + err);
     }
 
-    // Save store every 60 seconds to reduce I/O and memory pressure
-    const storeInterval = setInterval(() => {
-      try {
-        if (this.store) this.store.writeToFile(storeFile);
-      } catch (err) {
-        // quiet error during exit
-      }
-    }, 60000);
-
     const baileysLogger = pino({ level: 'warn' });
 
     this.sock = makeWASocket({
@@ -336,7 +335,6 @@ class WhatsAppService {
         creds: state.creds,
         keys: state.keys,
       },
-      printQRInTerminal: true, // Restore terminal QR for backup
     });
 
     this.store!.bind(this.sock.ev);
@@ -358,36 +356,50 @@ class WhatsAppService {
 
       if (connection === 'close') {
         const statusCode = (lastDisconnect?.error as Boom)?.output?.statusCode;
-        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
-        
+        const errorText = String(lastDisconnect?.error || '');
+        const isQrTimeout =
+          statusCode === 408 || errorText.toLowerCase().includes('qr refs attempts ended');
+
+        // Only auto-reconnect if it's not a logout AND not a QR timeout AND we actually have a registered session
+        const isRegistered = !!(state.creds as any)?.me || !!(state.creds as any)?.registered;
+        const shouldReconnect =
+          statusCode !== DisconnectReason.loggedOut && !isQrTimeout && isRegistered;
+
         this.logger.warn(
-          `WhatsApp connection closed. Status: ${statusCode}. Error: ${lastDisconnect?.error}. Reconnecting: ${shouldReconnect}`,
+          `WhatsApp connection closed. Status: ${statusCode}. Error: ${errorText}. Reconnecting: ${shouldReconnect}`,
         );
-        
+
         this.sock = null;
         this.isConnecting = false;
         this.connectionStatus = 'disconnected';
 
-        // Attempt to reconnect if not logged out
+        // Attempt to reconnect only if we had an active session
         if (shouldReconnect) {
           this.logger.info('Attempting to reconnect in 5s...');
           setTimeout(() => this.connect(), 5000);
-        } else {
-          this.logger.error('WhatsApp logged out or permanent failure. Clearing session for re-pairing...');
+        } else if (isQrTimeout || !isRegistered) {
+          this.logger.info('WhatsApp not connected or pairing timed out. Stopping auto-reconnect.');
           this.latestQR = null;
-          
+        } else {
+          this.logger.error(
+            'WhatsApp logged out or permanent failure. Clearing session for re-pairing...',
+          );
+          this.latestQR = null;
+
           // Clear credentials on logout to force a new QR next time
           try {
             const sessionDir = this.getSessionPath();
             const credsFile = join(sessionDir, 'creds.json');
             if (existsSync(credsFile)) {
-              require('node:fs').unlinkSync(credsFile);
+              unlinkSync(credsFile);
             }
           } catch (err) {
             this.logger.error('Failed to clear credentials: ' + err);
           }
 
-          this.logger.info('Please trigger a reconnection via the dashboard or wait for next start.');
+          this.logger.info(
+            'Please trigger a reconnection via the dashboard or wait for next start.',
+          );
         }
       } else if (connection === 'open') {
         this.logger.info('WhatsApp connection opened successfully!');
