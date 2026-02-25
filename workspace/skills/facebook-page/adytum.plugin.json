@@ -1,0 +1,37 @@
+{
+  "id": "facebook-page",
+  "name": "Facebook Page",
+  "description": "Manage Facebook Pages: post content, list posts, and handle comments.",
+  "version": "1.0.0",
+  "configSchema": {
+    "type": "object",
+    "additionalProperties": false,
+    "properties": {
+      "enabled": { "type": "boolean", "default": true },
+      "pageId": { "type": "string", "description": "The unique ID of the Facebook Page." },
+      "pageAccessToken": {
+        "type": "string",
+        "description": "The Page Access Token with necessary permissions."
+      },
+      "facebookAppId": {
+        "type": "string",
+        "description": "Optional Facebook App ID for advanced features."
+      },
+      "facebookAppSecret": { "type": "string", "description": "Optional Facebook App Secret." }
+    },
+    "required": ["pageId", "pageAccessToken"]
+  },
+  "uiHints": {
+    "pageId": {
+      "label": "Page ID",
+      "help": "Found in Page Settings > About > Page ID"
+    },
+    "pageAccessToken": {
+      "label": "Page Access Token",
+      "help": "Get this from the Meta for Developers Graph API Explorer.",
+      "sensitive": true
+    },
+    "facebookAppId": { "advanced": true },
+    "facebookAppSecret": { "advanced": true, "sensitive": true }
+  }
+}
