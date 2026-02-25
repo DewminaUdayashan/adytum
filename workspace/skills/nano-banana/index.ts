@@ -3,18 +3,23 @@
  * @description Skill for AI-driven image generation using Google's Nano Banana (Gemini) models.
  */
 
-import { z } from 'zod';
-import { ModelRouter } from '@adytum/gateway/infrastructure/llm/model-router.js';
 import { container } from '@adytum/gateway/container.js';
-import { logger } from '@adytum/gateway/logger.js';
 import { ConfigService } from '@adytum/gateway/infrastructure/config/config-service.js';
 import { randomUUID } from 'node:crypto';
 import { promises as fs } from 'node:fs';
-import { join, dirname } from 'node:path';
+import { join } from 'node:path';
+import { z } from 'zod';
 
-export default {
-  tools: [
-    {
+const nanoBananaPlugin = {
+  id: 'nano-banana',
+  name: 'Nano Banana',
+  description: 'AI-driven image generation power by Google Gemini.',
+
+  async register(api: any) {
+    const skillConfig = api.pluginConfig || {};
+    const logger = api.logger;
+
+    api.registerTool({
       name: 'generate_image',
       description:
         'Generates an image based on a descriptive prompt using Nano Banana (Gemini 2.0+ Image).',
@@ -22,27 +27,32 @@ export default {
         prompt: z.string().describe('Detailed description of the image to generate.'),
         aspectRatio: z.enum(['1:1', '4:3', '16:9']).default('1:1'),
         quality: z.enum(['standard', 'high']).default('standard'),
+        model: z
+          .string()
+          .optional()
+          .describe('Override the default Gemini model for this request.'),
       }),
       async execute({
         prompt,
         aspectRatio,
         quality,
+        model: modelOverride,
       }: {
         prompt: string;
         aspectRatio: string;
         quality: string;
+        model?: string;
       }) {
-        // Nano Banana is implemented as a specialized LLM call or direct REST call
-        // Here we attempt to find a model configured for image generation or fallback to a standard Gemini 2.0 call with image instructions
-        const modelRouter = container.resolve(ModelRouter);
-
         try {
           const configService = container.resolve(ConfigService);
           const config = configService.getFullConfig();
 
-          // Find Google API Key
+          // Resolve API Key: Skill config > Global config > Env
+          const skillApiKey = skillConfig.apiKey;
           const googleConfig = (config.models as any[]).find((m) => m.provider === 'google');
-          const apiKey = googleConfig?.apiKey || process.env.GOOGLE_API_KEY;
+          const globalApiKey = googleConfig?.apiKey || process.env.GOOGLE_API_KEY;
+          const apiKey = skillApiKey || globalApiKey;
+
           const hasApiKey = !!apiKey && apiKey.startsWith('AIzaSy');
 
           if (!hasApiKey) {
@@ -55,7 +65,7 @@ export default {
               message: `Successfully generated simulated image for: "${prompt}" (Demo Mode: API Key not configured)`,
               image_url: `https://simulated-cdn.adytum.ai/gen/${randomUUID()}.png`,
               metadata: {
-                model: 'gemini-2.0-flash-image',
+                model: modelOverride || skillConfig.model || 'gemini-2.0-flash-image',
                 prompt: prompt,
                 aspectRatio,
                 quality,
@@ -63,13 +73,14 @@ export default {
                 is_simulation: true,
               },
               instructions:
-                'Configure a valid Gemini API key in adytum.config.yaml to enable real image generation.',
+                'Configure a valid Gemini API key in skill settings or adytum.config.yaml to enable real image generation.',
             };
           }
 
           const baseUrl =
             googleConfig?.baseUrl || 'https://generativelanguage.googleapis.com/v1beta';
-          const model = 'gemini-2.5-flash-image';
+          const model = modelOverride || skillConfig.model || 'gemini-2.0-flash-image';
+
           const apiUrl = `${baseUrl}/models/${model}:generateContent?key=${apiKey}`;
 
           logger.info(
@@ -106,7 +117,6 @@ export default {
           }
 
           const base64Data = imagePart.inlineData.data;
-          const mimeType = imagePart.inlineData.mimeType || 'image/png';
           const buffer = Buffer.from(base64Data, 'base64');
 
           // Ensure generated directory exists
@@ -140,8 +150,9 @@ Metadata: ${JSON.stringify(metadata)}`;
           return `Error generating image: ${error.message}`;
         }
       },
-    },
-    {
+    });
+
+    api.registerTool({
       name: 'edit_image',
       description: 'Edits an existing image based on instructions (In-painting/Out-painting).',
       parameters: z.object({
@@ -156,6 +167,8 @@ Metadata: ${JSON.stringify(metadata)}`;
           status: 'processing',
         };
       },
-    },
-  ],
+    });
+  },
 };
+
+export default nanoBananaPlugin;
