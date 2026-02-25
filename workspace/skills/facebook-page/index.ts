@@ -33,12 +33,18 @@ class FacebookPageService {
     const url = new URL(`${FACEBOOK_BASE_URL}/${path}`);
     url.searchParams.append('access_token', this.config.pageAccessToken);
 
+    const headers: Record<string, string> = {
+      ...((options.headers as Record<string, string>) || {}),
+    };
+
+    // Default to JSON if body is a plain object and no Content-Type is set
+    if (options.body && typeof options.body === 'string' && !headers['Content-Type']) {
+      headers['Content-Type'] = 'application/json';
+    }
+
     const response = await fetch(url.toString(), {
       ...options,
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
+      headers,
     });
 
     const data = await response.json();
@@ -57,12 +63,16 @@ class FacebookPageService {
   }
 
   async postPhoto(imageUrl: string, caption?: string) {
+    const params = new URLSearchParams();
+    params.append('url', imageUrl);
+    if (caption) params.append('caption', caption);
+
     return this.request(`${this.config.pageId}/photos`, {
       method: 'POST',
-      body: JSON.stringify({
-        url: imageUrl,
-        caption: caption,
-      }),
+      body: params.toString(),
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
     });
   }
 
