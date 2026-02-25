@@ -3,12 +3,12 @@
  * @description Implements application-level service logic and coordination.
  */
 
-import { mkdirSync, writeFileSync, appendFileSync, readFileSync, existsSync } from 'node:fs';
+import { appendFileSync, existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { auditLogger } from '../../security/audit-logger.js';
 import type { ModelRouter } from '../../infrastructure/llm/model-router.js';
 import type { MemoryDB } from '../../infrastructure/repositories/memory-db.js';
 import { redactSecrets, type MemoryStore } from '../../infrastructure/repositories/memory-store.js';
+import { auditLogger } from '../../security/audit-logger.js';
 
 import type { SoulEngine } from '../../domain/logic/soul-engine.js';
 
@@ -132,11 +132,19 @@ Instructions:
 
     try {
       if (message.content) {
-        extracted = JSON.parse(message.content);
+        let content = message.content.trim();
+        // Remove markdown code blocks if present
+        if (content.startsWith('```')) {
+          const match = content.match(/```(?:json)?\s*([\s\S]*?)\s*```/);
+          if (match && match[1]) {
+            content = match[1].trim();
+          }
+        }
+        extracted = JSON.parse(content);
       }
     } catch (e) {
       console.warn('[Dreamer] Failed to parse structured memory JSON', e);
-      // Fallback: simple text saving if JSON fails? No, better to skip than pollute DB.
+      console.debug(`Content that failed to parse: ${message.content}`);
     }
 
     // 3. Store Memories

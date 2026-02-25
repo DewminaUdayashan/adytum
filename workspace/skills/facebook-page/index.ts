@@ -26,10 +26,24 @@ class FacebookPageService {
   }
 
   get id(): string {
-    return 'facebook-page-service';
+    return 'facebook-page';
+  }
+
+  async start() {
+    this.logger.info('Facebook Page service started.');
+  }
+
+  async stop() {
+    this.logger.info('Facebook Page service stopped.');
   }
 
   private async request(path: string, options: RequestInit = {}) {
+    if (!path || path.includes('undefined')) {
+      throw new Error(
+        `Invalid Facebook API path: "${path}". Ensure all post/comment IDs are valid.`,
+      );
+    }
+
     const url = new URL(`${FACEBOOK_BASE_URL}/${path}`);
     url.searchParams.append('access_token', this.config.pageAccessToken);
 
@@ -49,8 +63,18 @@ class FacebookPageService {
 
     const data = await response.json();
     if (!response.ok) {
+      const errorMsg = data.error?.message || response.statusText;
+      const errorCode = data.error?.code;
+
       this.logger.error(`Facebook API error: ${JSON.stringify(data)}`);
-      throw new Error(`Facebook API error: ${data.error?.message || response.statusText}`);
+
+      if (errorCode === 200 && errorMsg.includes('publish_actions')) {
+        throw new Error(
+          `Facebook Permission Error: The token used lacks permission to post. This usually happens when using a **User Access Token** instead of a **Page Access Token**. Please verify your configuration in SKILL.md.`,
+        );
+      }
+
+      throw new Error(`Facebook API error: ${errorMsg} (Code: ${errorCode})`);
     }
     return data;
   }
@@ -95,6 +119,26 @@ class FacebookPageService {
       method: 'POST',
       body: JSON.stringify({ message }),
     });
+  }
+
+  async getDebugInfo() {
+    try {
+      const me = await this.request('me?fields=id,name,category');
+      const isPage = !!me.category;
+      const isMatch = me.id === this.config.pageId;
+
+      return `Facebook Token Debug Info:
+- Token Owner Name: ${me.name}
+- Token Owner ID: ${me.id}
+- Configured Page ID: ${this.config.pageId}
+- Token Type: ${isPage ? 'PAGE' : 'USER (Warning: User tokens cannot post to pages)'}
+- ID Match: ${isMatch ? 'YES' : 'NO (Check if configured Page ID matches Token Owner ID)'}
+
+${!isPage ? '⚠️ ERROR: You are using a User Access Token. Please follow SKILL.md to generate a Page Access Token.' : ''}
+${isPage && !isMatch ? '⚠️ WARNING: The token is for a Page, but the ID does not match your configuration.' : ''}`;
+    } catch (e: any) {
+      return `Failed to get debug info: ${e.message}`;
+    }
   }
 }
 
@@ -177,6 +221,15 @@ const facebookPagePlugin = {
       execute: async ({ postId, message }: { postId: string; message: string }) => {
         const result = await service.postComment(postId, message);
         return `Successfully added comment. Comment ID: ${result.id}`;
+      },
+    });
+
+    api.registerTool({
+      name: 'facebook_debug_info',
+      description: 'Check the status and type of the configured Facebook Access Token.',
+      parameters: z.object({}),
+      execute: async () => {
+        return await service.getDebugInfo();
       },
     });
   },
