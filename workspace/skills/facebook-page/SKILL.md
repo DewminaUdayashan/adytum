@@ -22,8 +22,9 @@ To use this skill, you need a **Facebook Page Access Token** and your **Page ID*
 2. Create a new App (type: **Business** or **Other**).
 3. Add **Facebook Login for Business** to your app.
 4. Use the [Graph API Explorer](https://developers.facebook.com/tools/explorer/) to generate a token:
-   - Select your App.
-   - **CRITICAL**: In the **User or Page** dropdown, select your **Facebook Page** (not yourself).
+   - Select your App in the first dropdown.
+   - **CRITICAL**: In the **User or Page** dropdown, you will see your name by default (this is a **User Access Token**).
+   - **YOU MUST CLICK THE DROPDOWN AND SELECT YOUR FACEBOOK PAGE**. This will switch the token type to a **Page Access Token**.
    - Add permissions: `pages_manage_posts`, `pages_read_engagement`, `pages_manage_engagement`, `pages_show_list`.
    - Click **Generate Token**.
 5. Exchange this short-lived token for a **Long-lived Page Access Token** in the [Access Token Tool](https://developers.facebook.com/tools/accesstoken/).

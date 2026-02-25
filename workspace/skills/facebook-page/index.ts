@@ -123,8 +123,19 @@ class FacebookPageService {
 
   async getDebugInfo() {
     try {
-      const me = await this.request('me?fields=id,name,category');
-      const isPage = !!me.category;
+      // Step 1: Get basic identity
+      const me = await this.request('me?fields=id,name');
+
+      // Step 2: Check if it's a Page (category field only exists on Pages)
+      let isPage = false;
+      try {
+        const pageCheck = await this.request('me?fields=category');
+        isPage = !!pageCheck.category;
+      } catch (e) {
+        // Code 100 means field doesn't exist, which confirms it's a User
+        isPage = false;
+      }
+
       const isMatch = me.id === this.config.pageId;
 
       return `Facebook Token Debug Info:
